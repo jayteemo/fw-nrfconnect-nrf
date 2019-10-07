@@ -491,7 +491,7 @@ static int cc_connection_handler(const struct nct_evt *nct_evt)
 	 * If status the connection, request state synchronization.
 	 */
 	static const struct nct_cc_data get_request = {
-		.opcode = NCT_CC_OPCODE_GET_REQ,
+			.opcode = NCT_CC_OPCODE_GET_REQ,//.opcode = NCT_CC_OPCODE_GET_REQ,
 		.id = CLOUD_STATE_REQ_ID,
 	};
 

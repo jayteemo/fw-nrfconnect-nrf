@@ -322,7 +322,7 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	cJSON *state_obj;
 	cJSON *desired_obj;
 	cJSON *pairing_obj;
-	cJSON *pairing_state_obj;
+	cJSON *pairing_state_obj = NULL;
 	cJSON *topic_prefix_obj;
 
 	root_obj = cJSON_Parse(input->ptr);
@@ -332,22 +332,37 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 		return -ENOENT;
 	}
 
-	state_obj = json_object_decode(root_obj, "state");
-	desired_obj = json_object_decode(state_obj, "desired");
-	if (desired_obj == NULL) {
-		desired_obj = state_obj;
+	printk("%s\n", cJSON_Print(root_obj) );
+
+	//state_obj = json_object_decode(root_obj, "state");
+	//desired_obj = json_object_decode(state_obj, "desired");
+	desired_obj = json_object_decode(root_obj, "reported");
+	//if (desired_obj == NULL) {
+//		desired_obj = state_obj;
+//	}
+
+	if ( desired_obj == NULL )
+	{
+		printk("no reported state, checking for desired\n");
+		desired_obj = json_object_decode(root_obj, "desired");
 	}
 
-	topic_prefix_obj = json_object_decode(desired_obj,
-					      "nrfcloud_mqtt_topic_prefix");
-	if (topic_prefix_obj != NULL) {
-		(*requested_state) = STATE_UA_PIN_COMPLETE;
-		cJSON_Delete(root_obj);
-		return 0;
-	}
+	if ( desired_obj )
+	{
+		topic_prefix_obj = json_object_decode(desired_obj,
+								      "nrfcloud_mqtt_topic_prefix");
 
-	pairing_obj = json_object_decode(desired_obj, "pairing");
-	pairing_state_obj = json_object_decode(pairing_obj, "state");
+		if (topic_prefix_obj != NULL) {
+			printk("prefix found, pairing complete\n");
+			(*requested_state) = STATE_UA_PIN_COMPLETE;
+			cJSON_Delete(root_obj);
+			return 0;
+		}
+
+		printk("%s\n", cJSON_Print(desired_obj) );
+		pairing_obj = json_object_decode(desired_obj, "pairing");
+		pairing_state_obj = json_object_decode(pairing_obj, "state");
+	}
 
 	if (!pairing_state_obj || pairing_state_obj->type != cJSON_String) {
 		LOG_DBG("No valid state found!");
@@ -566,12 +581,13 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 		return -ENOENT;
 	}
 
-	state_obj = json_object_decode(root_obj, "state");
-	parent_obj = json_object_decode(state_obj, "desired");
+	//state_obj = json_object_decode(root_obj, "state");
+	//parent_obj = json_object_decode(state_obj, "desired");
+	parent_obj = json_object_decode(root_obj, "reported");
 
-	if (parent_obj == NULL) {
-		parent_obj = state_obj;
-	}
+	//if (parent_obj == NULL) {
+//		parent_obj = state_obj;
+//	}
 
 	if (m_endpoint != NULL) {
 		m_endpoint_obj = json_object_decode(parent_obj,

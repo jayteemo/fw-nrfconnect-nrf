@@ -46,8 +46,13 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define NCT_SHADOW_BASE_TOPIC AWS "%s/shadow"
 #define NCT_SHADOW_BASE_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 7)
 
-#define NCT_ACCEPTED_TOPIC AWS "%s/shadow/get/accepted"
-#define NCT_ACCEPTED_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
+//#define NCT_ACCEPTED_TOPIC AWS "%s/shadow/get/accepted"
+//#define NCT_ACCEPTED_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
+#define NCT_ACCEPTED_TOPIC "%s/shadow/get/accepted"
+#define NCT_ACCEPTED_TOPIC_LEN (NRF_CLOUD_CLIENT_ID_LEN + 20)
+
+#define NCT_ACCEPTED_TRIMMED_TOPIC "%s/shadow/get/accepted"
+#define NCT_ACCEPTED_TRIMMED_TOPIC_LEN (NRF_CLOUD_CLIENT_ID_LEN + 20)
 
 #define NCT_REJECTED_TOPIC AWS "%s/shadow/get/rejected"
 #define NCT_REJECTED_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
@@ -61,15 +66,20 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define NCT_SHADOW_GET AWS "%s/shadow/get"
 #define NCT_SHADOW_GET_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 11)
 
+#define NCT_SHADOW_TRIMMED_GET "%s/shadow/get"
+#define NCT_SHADOW_TRIMMED_GET_LEN (NRF_CLOUD_CLIENT_ID_LEN + 11)
+
 /* Buffer for keeping the client_id + \0 */
 static char client_id_buf[NRF_CLOUD_CLIENT_ID_LEN + 1];
 /* Buffers for keeping the topics for nrf_cloud */
 static char shadow_base_topic[NCT_SHADOW_BASE_TOPIC_LEN + 1];
 static char accepted_topic[NCT_ACCEPTED_TOPIC_LEN + 1];
+static char accepted_trimmed_topic[NCT_ACCEPTED_TRIMMED_TOPIC_LEN + 1];
 static char rejected_topic[NCT_REJECTED_TOPIC_LEN + 1];
 static char update_delta_topic[NCT_UPDATE_DELTA_TOPIC_LEN + 1];
 static char update_topic[NCT_UPDATE_TOPIC_LEN + 1];
 static char shadow_get_topic[NCT_SHADOW_GET_LEN + 1];
+static char shadow_trimmed_get_topic[NCT_SHADOW_TRIMMED_GET_LEN + 1];
 
 #define NCT_CC_SUBSCRIBE_ID 1234
 #define NCT_DC_SUBSCRIBE_ID 8765
@@ -113,7 +123,14 @@ static const struct mqtt_topic nct_cc_rx_list[] = {
 			.size = NCT_UPDATE_DELTA_TOPIC_LEN
 		},
 		.qos = MQTT_QOS_1_AT_LEAST_ONCE
-	}
+	}/*,
+	{
+		.topic = {
+			.utf8 = accepted_trimmed_topic,
+			.size = NCT_ACCEPTED_TRIMMED_TOPIC_LEN
+		},
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE
+	}*/
 };
 
 static const struct mqtt_topic nct_cc_tx_list[] = {
@@ -130,13 +147,22 @@ static const struct mqtt_topic nct_cc_tx_list[] = {
 			.size = NCT_UPDATE_TOPIC_LEN
 		},
 		.qos = MQTT_QOS_1_AT_LEAST_ONCE
+	},
+	{
+		.topic = {
+			.utf8 = shadow_trimmed_get_topic,
+			.size = NCT_SHADOW_TRIMMED_GET_LEN
+		},
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE
 	}
+
 };
 
 static u32_t const nct_cc_rx_opcode_map[] = {
 	NCT_CC_OPCODE_UPDATE_REQ,
 	NCT_CC_OPCODE_UPDATE_REJECT_RSP,
-	NCT_CC_OPCODE_UPDATE_ACCEPT_RSP
+	NCT_CC_OPCODE_UPDATE_ACCEPT_RSP,
+	NCT_CC_OPCODE_GET_TRIMMED_RSP
 };
 
 /* Internal routine to reset data endpoint information. */
@@ -302,6 +328,13 @@ static int nct_topics_populate(void)
 		return -ENOMEM;
 	}
 	LOG_DBG("accepted_topic: %s", log_strdup(accepted_topic));
+
+	ret = snprintf(accepted_trimmed_topic, sizeof(accepted_trimmed_topic),
+			   NCT_ACCEPTED_TRIMMED_TOPIC, client_id_buf);
+	if (ret != NCT_ACCEPTED_TRIMMED_TOPIC_LEN) {
+		return -ENOMEM;
+	}
+	LOG_DBG("accepted_trimmed_topic: %s", log_strdup(accepted_trimmed_topic));
 
 	ret = snprintf(rejected_topic, sizeof(rejected_topic),
 		       NCT_REJECTED_TOPIC, client_id_buf);
@@ -479,7 +512,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &_mqtt_evt->param.publish;
 
-		LOG_DBG("MQTT_EVT_PUBLISH: id=%d len=%d ",
+		printk("MQTT_EVT_PUBLISH: id=%d len=%d ",
 			p->message_id,
 			p->message.payload.len);
 
