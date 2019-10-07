@@ -25,3 +25,7 @@ doc/nrf/_doxygen/
 doc/nrf/_samples/
 doc/*_warnings.txt
 doc/*_doc.log
+*/.DS_Store
+*.DS_Store
+_build_asset_tracker_DK/*
+applications/asset_tracker/build_nrf9160_pca10090ns/*
