@@ -8,6 +8,7 @@
 #include <misc/util.h>
 #include <gps.h>
 #include <lte_lc.h>
+#include <service_info.h>
 
 #include "ui.h"
 #include "gps_controller.h"
@@ -218,6 +219,7 @@ int gps_control_init(gps_trigger_handler_t handler)
 		return -ENODEV;
 	}
 
+	service_info_sensor_cap_add( SERVICE_INFO_SENSOR_GPS );
 
 	err = gps_trigger_set(gps_dev, &gps_trig, handler);
 	if (err) {

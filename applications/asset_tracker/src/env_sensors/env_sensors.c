@@ -9,7 +9,9 @@
 #include <string.h>
 #include <sensor.h>
 #include <spinlock.h>
+#include <service_info.h>
 #include "env_sensors.h"
+
 
 struct env_sensor {
 	env_sensor_data_t sensor;
@@ -102,6 +104,12 @@ int env_sensors_init_and_start(void)
 			device_get_binding(env_sensors[i]->dev_name);
 		__ASSERT(env_sensors[i]->dev, "Could not get device %s\n",
 			env_sensors[i]->dev_name);
+		int ret = service_info_sensor_cap_add_by_ch(env_sensors[i]->channel);
+		if ( ret )
+		{
+			printk("Failed to add sensor capability for sensor_channel %d, error: %d\n",
+					env_sensors[i]->channel, ret);
+		}
 	}
 
 	k_delayed_work_init(&env_sensors_poller, env_sensors_poll_fn);
