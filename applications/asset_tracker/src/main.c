@@ -21,6 +21,7 @@
 #include <net/cloud.h>
 #include <net/socket.h>
 #include <nrf_cloud.h>
+#include <service_info.h>
 
 #include "cloud_codec.h"
 #include "env_sensors.h"
@@ -89,11 +90,12 @@ static struct gps_data gps_data;
 static struct cloud_channel_data flip_cloud_data;
 static struct cloud_channel_data gps_cloud_data;
 static struct cloud_channel_data button_cloud_data;
-
+static struct cloud_channel_data device_cloud_data = {
+									.type = CLOUD_CHANNEL_DEVICE_INFO,
+									.tag = 0x1 };
 #if CONFIG_MODEM_INFO
 static struct modem_param_info modem_param;
 static struct cloud_channel_data signal_strength_cloud_data;
-static struct cloud_channel_data device_cloud_data;
 #endif /* CONFIG_MODEM_INFO */
 static atomic_val_t send_data_enable;
 
@@ -108,8 +110,8 @@ static struct k_work send_flip_data_work;
 static struct k_delayed_work send_env_data_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
-#if CONFIG_MODEM_INFO
 static struct k_work device_status_work;
+#if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
 #endif /* CONFIG_MODEM_INFO */
 
@@ -128,9 +130,7 @@ static void env_data_send(void);
 static void sensors_init(void);
 static void work_init(void);
 static void sensor_data_send(struct cloud_channel_data *data);
-#if CONFIG_MODEM_INFO
 static void device_status_send(struct k_work *work);
-#endif
 
 /**@brief nRF Cloud error handler. */
 void error_handler(enum error_type err_type, int err_code)
@@ -411,11 +411,12 @@ static void modem_rsrp_data_send(struct k_work *work)
 	sensor_data_send(&signal_strength_cloud_data);
 	timestamp_prev = k_uptime_get_32();
 }
+#endif /* CONFIG_MODEM_INFO */
 
 /**@brief Poll device info and send data to the cloud. */
 static void device_status_send(struct k_work *work)
 {
-	int len;
+	int len = 0;
 	int ret;
 
 	cJSON *root_obj = cJSON_CreateObject();
@@ -429,6 +430,7 @@ static void device_status_send(struct k_work *work)
 		return;
 	}
 
+#ifdef CONFIG_MODEM_INFO
 	ret = modem_info_params_get(&modem_param);
 
 	if (ret < 0) {
@@ -437,6 +439,12 @@ static void device_status_send(struct k_work *work)
 	}
 
 	len = modem_info_json_object_encode(&modem_param, root_obj);
+#endif
+
+	if ( service_info_json_object_get(root_obj) == 0 )
+	{
+		++len;
+	}
 
 	if (len < 0) {
 		return;
@@ -453,7 +461,6 @@ static void device_status_send(struct k_work *work)
 	/* Transmits the data to the cloud. Frees the JSON object. */
 	sensor_data_send(&device_cloud_data);
 }
-#endif /* CONFIG_MODEM_INFO */
 
 /**@brief Get environment data from sensors and send to cloud. */
 static void env_data_send(void)
@@ -792,8 +799,8 @@ static void work_init(void)
 	k_delayed_work_init(&send_env_data_work, send_env_data_work_fn);
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
-#if CONFIG_MODEM_INFO
 	k_work_init(&device_status_work, device_status_send);
+#if CONFIG_MODEM_INFO
 	k_work_init(&rsrp_work, modem_rsrp_data_send);
 #endif /* CONFIG_MODEM_INFO */
 }
@@ -843,6 +850,8 @@ static void accelerometer_init(void)
 			return;
 		}
 
+		service_info_sensor_cap_add( SERVICE_INFO_SENSOR_ACCEL );
+
 		struct sensor_trigger sensor_trig = {
 			.type = SENSOR_TRIG_THRESHOLD,
 		};
@@ -891,6 +900,8 @@ static void button_sensor_init(void)
 {
 	button_cloud_data.type = CLOUD_CHANNEL_BUTTON;
 	button_cloud_data.tag = 0x1;
+
+	service_info_sensor_cap_add( SERVICE_INFO_SENSOR_BUTTON );
 }
 
 #if CONFIG_MODEM_INFO
@@ -909,11 +920,6 @@ static void modem_data_init(void)
 	signal_strength_cloud_data.type = CLOUD_CHANNEL_LTE_LINK_RSRP;
 	signal_strength_cloud_data.tag = 0x1;
 
-	device_cloud_data.type = CLOUD_CHANNEL_DEVICE_INFO;
-	device_cloud_data.tag = 0x1;
-
-	k_work_submit(&device_status_work);
-
 	modem_info_rsrp_register(modem_rsrp_handler);
 }
 #endif /* CONFIG_MODEM_INFO */
@@ -925,9 +931,6 @@ static void sensors_init(void)
 	flip_detection_init();
 	env_sensors_init_and_start();
 
-#if CONFIG_MODEM_INFO
-	modem_data_init();
-#endif /* CONFIG_MODEM_INFO */
 	if (IS_ENABLED(CONFIG_CLOUD_BUTTON)) {
 		button_sensor_init();
 	}
@@ -935,6 +938,18 @@ static void sensors_init(void)
 	gps_control_init(gps_trigger_handler);
 
 	flip_cloud_data.type = CLOUD_CHANNEL_FLIP;
+
+	/* TODO: when FOTA is available
+	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_BOOTLOADER);
+	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_MODEM);
+	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_APP);
+	 */
+
+	#if CONFIG_MODEM_INFO
+		modem_data_init();
+	#endif /* CONFIG_MODEM_INFO */
+
+	k_work_submit(&device_status_work);
 
 	/* Send sensor data after initialization, as it may be a long time until
 	 * next time if the application is in power optimized mode.
