@@ -13,41 +13,37 @@
 
 LOG_MODULE_REGISTER(service_info);
 
-#define SUPPORTED_FOTA_VERSIONS		(1)
 #define SERVICE_INFO_JSON_NAME		"serviceInfo"
 #define FOTA_CAPS_JSON_NAME			"fota_v%u"
 #define FOTA_CAPS_JSON_NAME_SIZE	(sizeof(FOTA_CAPS_JSON_NAME))
 #define SENSOR_CAPS_JSON_NAME		"sensors"
 
-#define CAP_SET		0x01
-#define CAP_NOT_SET	0x00
+static const char * _sensor_caps[SERVICE_INFO_SENSOR__SIZE];
+static const char * _fota_caps[SERVICE_INFO_FOTA_VER__SIZE][SERVICE_INFO_FOTA__SIZE];
 
-static uint8_t _sensor_caps[SERVICE_INFO_SENSOR__SIZE];
-static uint8_t _fota_caps[SUPPORTED_FOTA_VERSIONS][SERVICE_INFO_FOTA__SIZE];
-
-static const char * const _sensor_cap_string[] = {
-	[SERVICE_INFO_SENSOR_ACCEL]		= "accel",
-	[SERVICE_INFO_SENSOR_HUMID]		= "humid",
-	[SERVICE_INFO_SENSOR_TEMP]		= "temp",
-	[SERVICE_INFO_SENSOR_COLOR]		= "color",
-	[SERVICE_INFO_SENSOR_AIR_PRESS]	= "airPress",
-	[SERVICE_INFO_SENSOR_AIR_QUAL]	= "airQual",
+static const char * const _sensor_string[] = {
+	[SERVICE_INFO_SENSOR_ACCEL]		= "FLIP",
+	[SERVICE_INFO_SENSOR_HUMID]		= "HUMID",
+	[SERVICE_INFO_SENSOR_TEMP]		= "TEMP",
+	[SERVICE_INFO_SENSOR_COLOR]		= "COLOR",
+	[SERVICE_INFO_SENSOR_AIR_PRESS]	= "AIR_PRESS",
+	[SERVICE_INFO_SENSOR_AIR_QUAL]	= "AIR_QUAL",
 	[SERVICE_INFO_SENSOR_GPS]		= "GPS",
-	[SERVICE_INFO_SENSOR_BUTTON]	= "button"
+	[SERVICE_INFO_SENSOR_BUTTON]	= "BUTTON"
 };
-BUILD_ASSERT(ARRAY_SIZE(_sensor_cap_string) == SERVICE_INFO_SENSOR__SIZE);
+BUILD_ASSERT(ARRAY_SIZE(_sensor_string) == SERVICE_INFO_SENSOR__SIZE);
 
 
-static const char * const _fota_cap_string[] = {
-	[SERVICE_INFO_FOTA_BOOTLOADER]	= "boot",
-	[SERVICE_INFO_FOTA_MODEM]		= "modem",
-	[SERVICE_INFO_FOTA_APP]			= "app"
+static const char * const _fota_string[] = {
+	[SERVICE_INFO_FOTA_BOOTLOADER]	= "BOOT",
+	[SERVICE_INFO_FOTA_MODEM]		= "MODEM",
+	[SERVICE_INFO_FOTA_APP]			= "APP"
 };
-BUILD_ASSERT(ARRAY_SIZE(_fota_cap_string) == SERVICE_INFO_FOTA__SIZE);
+BUILD_ASSERT(ARRAY_SIZE(_fota_string) == SERVICE_INFO_FOTA__SIZE);
 
-static service_info_sensor_cap get_cap_from_ch( const enum sensor_channel channel )
+static service_info_sensor get_from_ch( const enum sensor_channel channel )
 {
-	service_info_sensor_cap ret = SERVICE_INFO_SENSOR__SIZE;
+	service_info_sensor ret = SERVICE_INFO_SENSOR__SIZE;
 
 	switch (channel)
 	{
@@ -85,7 +81,6 @@ static service_info_sensor_cap get_cap_from_ch( const enum sensor_channel channe
 		case SENSOR_CHAN_BLUE:
 			ret = SERVICE_INFO_SENSOR_COLOR;
 			break;
-		case SENSOR_CHAN_ALTITUDE:
 		case SENSOR_CHAN_PM_1_0:
 		case SENSOR_CHAN_PM_2_5:
 		case SENSOR_CHAN_PM_10:
@@ -93,6 +88,7 @@ static service_info_sensor_cap get_cap_from_ch( const enum sensor_channel channe
 		case SENSOR_CHAN_VOC:
 			ret = SERVICE_INFO_SENSOR_AIR_QUAL;
 			break;
+		case SENSOR_CHAN_ALTITUDE:
 		case SENSOR_CHAN_IR:
 		case SENSOR_CHAN_DISTANCE:
 		case SENSOR_CHAN_PROX:
@@ -107,66 +103,71 @@ static service_info_sensor_cap get_cap_from_ch( const enum sensor_channel channe
 	return ret;
 }
 
-int service_info_sensor_cap_add_by_ch(const enum sensor_channel channel)
+int service_info_sensor_add_by_ch(const enum sensor_channel channel)
 {
-	return service_info_sensor_cap_add( get_cap_from_ch(channel) );
+	return service_info_sensor_add( get_from_ch(channel) );
 }
 
-int service_info_sensor_cap_remove_by_ch(const enum sensor_channel channel)
+int service_info_sensor_remove_by_ch(const enum sensor_channel channel)
 {
-	return service_info_sensor_cap_remove( get_cap_from_ch(channel) );
+	return service_info_sensor_remove( get_from_ch(channel) );
 }
 
-int service_info_sensor_cap_add( const service_info_sensor_cap sensor_cap )
+int service_info_sensor_add( const service_info_sensor sensor )
 {
-	if ( sensor_cap >= SERVICE_INFO_SENSOR__SIZE )
+	if ( sensor < SERVICE_INFO_SENSOR__FIRST ||
+		 sensor >= SERVICE_INFO_SENSOR__SIZE )
 	{
 		return -EINVAL;
 	}
 
-	_sensor_caps[sensor_cap] = CAP_SET;
+	_sensor_caps[sensor] = _sensor_string[sensor];
 
-	LOG_DBG("Added cap %s", _sensor_cap_string[sensor_cap] );
+	LOG_DBG("Added cap %s", _sensor_string[sensor] );
 	return 0;
 }
 
-int service_info_sensor_cap_remove( const service_info_sensor_cap sensor_cap )
+int service_info_sensor_remove( const service_info_sensor sensor )
 {
-	if ( sensor_cap >= SERVICE_INFO_SENSOR__SIZE )
+	if ( sensor < SERVICE_INFO_SENSOR__FIRST ||
+		 sensor >= SERVICE_INFO_SENSOR__SIZE )
 	{
 		return -EINVAL;
 	}
 
-	_sensor_caps[sensor_cap] = CAP_NOT_SET;
+	_sensor_caps[sensor] = NULL;
 	return 0;
 }
 
-int service_info_fota_cap_add( const uint32_t version, const service_info_fota_cap fota_cap )
+int service_info_fota_add( const service_info_fota_ver version, const service_info_fota fota )
 {
-	if ( version > SUPPORTED_FOTA_VERSIONS || fota_cap >= SERVICE_INFO_FOTA__SIZE )
+	if ( version < SERVICE_INFO_FOTA_VER__FIRST ||
+		 version >= SERVICE_INFO_FOTA_VER__SIZE ||
+		 fota < SERVICE_INFO_FOTA__FIRST ||
+		 fota >= SERVICE_INFO_FOTA__SIZE )
 	{
 		return -EINVAL;
 	}
 
-	_fota_caps[version-1][fota_cap] = CAP_SET;
+	_fota_caps[version][fota] = _fota_string[fota];
 
-	LOG_DBG("Added cap %s", _fota_cap_string[fota_cap] );
+	LOG_DBG("Added cap %s", _fota_string[fota] );
 	return 0;
 }
 
-int service_info_fota_cap_remove( const uint32_t version, const service_info_fota_cap fota_cap )
+int service_info_fota_remove( const service_info_fota_ver version, const service_info_fota fota )
 {
-	if ( version > SUPPORTED_FOTA_VERSIONS || fota_cap >= SERVICE_INFO_FOTA__SIZE )
+	if ( version < SERVICE_INFO_FOTA_VER__FIRST ||
+		 version >= SERVICE_INFO_FOTA_VER__SIZE ||
+		 fota < SERVICE_INFO_FOTA__FIRST ||
+		 fota >= SERVICE_INFO_FOTA__SIZE )
 	{
 		return -EINVAL;
 	}
 
-	_fota_caps[version-1][fota_cap] = CAP_NOT_SET;
+	_fota_caps[version][fota] = NULL;
 	return 0;
 }
-
-
-#ifdef CONFIG_CJSON_LIB
 
 static int add_sensor_caps_json( cJSON *root_obj_out )
 {
@@ -174,24 +175,24 @@ static int add_sensor_caps_json( cJSON *root_obj_out )
 		return -EINVAL;
 	}
 
-	cJSON * sens_caps = cJSON_CreateArray();
+	cJSON * sensors = cJSON_CreateArray();
 
-	if (!sens_caps)
+	if (!sensors)
 	{
 		return -ENOMEM;
 	}
 
-	for ( service_info_sensor_cap cap = SERVICE_INFO_SENSOR__FIRST;
+	for ( service_info_sensor cap = SERVICE_INFO_SENSOR__FIRST;
 		  cap < SERVICE_INFO_SENSOR__SIZE;
 		  ++cap )
 	{
-		if ( _sensor_caps[cap] == CAP_SET )
+		if ( _sensor_caps[cap] )
 		{
-			cJSON_AddItemToArray( sens_caps, cJSON_CreateString(_sensor_cap_string[cap]) );
+			cJSON_AddItemToArray( sensors, cJSON_CreateString(_sensor_caps[cap]) );
 		}
 	}
 
-	cJSON_AddItemToObject(root_obj_out, SENSOR_CAPS_JSON_NAME, sens_caps );
+	cJSON_AddItemToObject(root_obj_out, SENSOR_CAPS_JSON_NAME, sensors );
 
 	return 0;
 }
@@ -202,23 +203,23 @@ static int add_fota_caps_json( cJSON *root_obj_out )
 		return -EINVAL;
 	}
 
-	for ( uint32_t ver = 0; ver < SUPPORTED_FOTA_VERSIONS; ++ver )
+	for ( uint32_t ver = 0; ver < SERVICE_INFO_FOTA_VER__SIZE; ++ver )
 	{
 		char fota_name[FOTA_CAPS_JSON_NAME_SIZE];
-		cJSON * fota_caps = cJSON_CreateArray();
+		cJSON * fotas = cJSON_CreateArray();
 
-		if (!fota_caps)
+		if (!fotas)
 		{
 			return -ENOMEM;
 		}
 
-		for ( service_info_fota_cap cap = SERVICE_INFO_FOTA__FIRST;
+		for ( service_info_fota cap = SERVICE_INFO_FOTA__FIRST;
 			  cap < SERVICE_INFO_FOTA__SIZE;
 			  ++cap )
 		{
-			if ( _fota_caps[ver][cap] == CAP_SET )
+			if ( _fota_caps[ver][cap] )
 			{
-				cJSON_AddItemToArray( fota_caps, cJSON_CreateString(_fota_cap_string[cap]) );
+				cJSON_AddItemToArray( fotas, cJSON_CreateString(_fota_caps[ver][cap]) );
 			}
 		}
 
@@ -226,12 +227,12 @@ static int add_fota_caps_json( cJSON *root_obj_out )
 
 		if ( ret > 0 && ret < FOTA_CAPS_JSON_NAME_SIZE )
 		{
-			cJSON_AddItemToObject(root_obj_out, fota_name, fota_caps );
+			cJSON_AddItemToObject(root_obj_out, fota_name, fotas );
 		}
 		else
 		{
-			LOG_ERR("FOTA capabilites not added for version %u", ver);
-			cJSON_Delete(fota_caps);
+			LOG_ERR("FOTA capabilities not added for version %u", ver);
+			cJSON_Delete(fotas);
 		}
 
 	}
@@ -275,5 +276,3 @@ int service_info_json_object_get(cJSON *root_obj_out)
 
 	return ret;
 }
-
-#endif /* CONFIG_CJSON_LIB */

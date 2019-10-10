@@ -20,6 +20,4 @@ rsource "modem_info/Kconfig"
 
 rsource "pdn_management/Kconfig"
 
-rsource "service_info/Kconfig"
-
 endmenu

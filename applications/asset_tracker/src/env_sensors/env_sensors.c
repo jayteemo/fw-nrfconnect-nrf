@@ -104,7 +104,7 @@ int env_sensors_init_and_start(void)
 			device_get_binding(env_sensors[i]->dev_name);
 		__ASSERT(env_sensors[i]->dev, "Could not get device %s\n",
 			env_sensors[i]->dev_name);
-		int ret = service_info_sensor_cap_add_by_ch(env_sensors[i]->channel);
+		int ret = service_info_sensor_add_by_ch(env_sensors[i]->channel);
 		if ( ret )
 		{
 			printk("Failed to add sensor capability for sensor_channel %d, error: %d\n",

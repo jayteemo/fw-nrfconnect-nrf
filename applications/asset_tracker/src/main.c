@@ -417,7 +417,10 @@ static void modem_rsrp_data_send(struct k_work *work)
 static void device_status_send(struct k_work *work)
 {
 	int len = 0;
-	int ret;
+
+	if (!atomic_get(&send_data_enable)) {
+		return;
+	}
 
 	cJSON *root_obj = cJSON_CreateObject();
 
@@ -426,27 +429,28 @@ static void device_status_send(struct k_work *work)
 		return;
 	}
 
-	if (!atomic_get(&send_data_enable)) {
-		return;
-	}
-
 #ifdef CONFIG_MODEM_INFO
-	ret = modem_info_params_get(&modem_param);
+	int ret = modem_info_params_get(&modem_param);
 
 	if (ret < 0) {
 		printk("Unable to obtain modem parameters: %d\n", ret);
-		return;
 	}
-
-	len = modem_info_json_object_encode(&modem_param, root_obj);
+	else
+	{
+		printk("Getting modem info JSON\n");
+		len = modem_info_json_object_encode(&modem_param, root_obj);
+	}
 #endif
 
+	printk("Getting service info JSON\n");
 	if ( service_info_json_object_get(root_obj) == 0 )
 	{
 		++len;
+		//printk("%s\n", cJSON_Print(root_obj));
 	}
 
 	if (len < 0) {
+		cJSON_Delete(root_obj);
 		return;
 	}
 
@@ -850,8 +854,6 @@ static void accelerometer_init(void)
 			return;
 		}
 
-		service_info_sensor_cap_add( SERVICE_INFO_SENSOR_ACCEL );
-
 		struct sensor_trigger sensor_trig = {
 			.type = SENSOR_TRIG_THRESHOLD,
 		};
@@ -865,6 +867,12 @@ static void accelerometer_init(void)
 		if (err) {
 			printk("Unable to set trigger\n");
 		}
+	}
+
+	if ( IS_ENABLED(CONFIG_ACCEL_USE_SIM) ||
+		 IS_ENABLED(CONFIG_ACCEL_USE_EXTERNAL) )
+	{
+		service_info_sensor_add( SERVICE_INFO_SENSOR_ACCEL );
 	}
 }
 
@@ -901,7 +909,7 @@ static void button_sensor_init(void)
 	button_cloud_data.type = CLOUD_CHANNEL_BUTTON;
 	button_cloud_data.tag = 0x1;
 
-	service_info_sensor_cap_add( SERVICE_INFO_SENSOR_BUTTON );
+	service_info_sensor_add( SERVICE_INFO_SENSOR_BUTTON );
 }
 
 #if CONFIG_MODEM_INFO
@@ -940,10 +948,13 @@ static void sensors_init(void)
 	flip_cloud_data.type = CLOUD_CHANNEL_FLIP;
 
 	/* TODO: when FOTA is available
-	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_BOOTLOADER);
-	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_MODEM);
-	 * service_info_fota_cap_add(SERVICE_INFO_FOTA_APP);
+	 * service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_BOOTLOADER);
+	 * service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_MODEM);
+	 * service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_APP);
 	 */
+	service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_APP);
+	service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_BOOTLOADER);
+	service_info_fota_add(SERVICE_INFO_FOTA_VER_1, SERVICE_INFO_FOTA_MODEM);
 
 	#if CONFIG_MODEM_INFO
 		modem_data_init();

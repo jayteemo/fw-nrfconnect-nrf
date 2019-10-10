@@ -7,11 +7,8 @@
 #ifndef ZEPHYR_INCLUDE_SERVICE_INFO_H_
 #define ZEPHYR_INCLUDE_SERVICE_INFO_H_
 
-#ifdef CONFIG_CJSON_LIB
-#include <cJSON.h>
-#endif
-
 #include <sensor.h>
+#include <cJSON.h>
 
 /**
  * @file service_info.h
@@ -22,8 +19,8 @@
  */
 
 /**@brief Supported sensor capabilities */
-typedef enum service_info_sensor_cap_e {
-	SERVICE_INFO_SENSOR__FIRST,
+typedef enum service_info_sensor_e {
+	SERVICE_INFO_SENSOR__FIRST = 0,
 
 	SERVICE_INFO_SENSOR_ACCEL = SERVICE_INFO_SENSOR__FIRST,
 	SERVICE_INFO_SENSOR_HUMID,
@@ -35,31 +32,42 @@ typedef enum service_info_sensor_cap_e {
 	SERVICE_INFO_SENSOR_BUTTON,
 
 	SERVICE_INFO_SENSOR__SIZE
-} service_info_sensor_cap;
+} service_info_sensor;
 
+/**@brief Supported fota versions */
+typedef enum service_info_fota_ver_e {
+	SERVICE_INFO_FOTA_VER__FIRST = 0,
+
+	SERVICE_INFO_FOTA_VER_1 = SERVICE_INFO_FOTA_VER__FIRST,
+
+	SERVICE_INFO_FOTA_VER__SIZE,
+} service_info_fota_ver;
 
 /**@brief Supported fota capabilities */
-typedef enum service_info_fota_cap_e {
-	SERVICE_INFO_FOTA__FIRST,
+typedef enum service_info_fota_e {
+	SERVICE_INFO_FOTA__FIRST = 0,
 
 	SERVICE_INFO_FOTA_BOOTLOADER = SERVICE_INFO_FOTA__FIRST,
 	SERVICE_INFO_FOTA_MODEM,
 	SERVICE_INFO_FOTA_APP,
 
 	SERVICE_INFO_FOTA__SIZE,
-} service_info_fota_cap;
+} service_info_fota;
 
-int service_info_sensor_cap_add_by_ch		(const enum sensor_channel channel);
-int service_info_sensor_cap_remove_by_ch	(const enum sensor_channel channel);
+int service_info_sensor_add_by_ch		(const enum sensor_channel channel);
 
-int service_info_sensor_cap_add		(const service_info_sensor_cap sensor_cap);
-int service_info_sensor_cap_remove	(const service_info_sensor_cap sensor_cap);
+int service_info_sensor_remove_by_ch	(const enum sensor_channel channel);
 
-int service_info_fota_cap_add		(const uint32_t version, const service_info_fota_cap fota_cap);
-int service_info_fota_cap_remove	(const uint32_t version, const service_info_fota_cap fota_cap);
+int service_info_sensor_add		(const service_info_sensor sensor);
 
-#ifdef CONFIG_CJSON_LIB
+int service_info_sensor_remove	(const service_info_sensor sensor);
+
+int service_info_fota_add		(const service_info_fota_ver version, 
+								 const service_info_fota fota);
+
+int service_info_fota_remove	(const service_info_fota_ver version, 
+								 const service_info_fota fota);
+
 int service_info_json_object_get(cJSON *obj_out);
-#endif /* CONFIG_CJSON_LIB */
 
 #endif /* ZEPHYR_INCLUDE_SERVICE_INFO_H_ */

@@ -10,5 +10,6 @@ zephyr_library_sources(
 	src/nrf_cloud_fsm.c
 	src/nrf_cloud_transport.c
 	src/nrf_cloud_sanity.c
+	src/service_info.c
 )
 zephyr_include_directories(./include)
