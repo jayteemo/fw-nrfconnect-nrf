@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
 
-
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
@@ -197,6 +196,7 @@ static const char *const channel_type_str[] = {
 	 * to have lowercase keys.
 	 */
 	[CLOUD_CHANNEL_DEVICE_INFO] = "device",
+	[CLOUD_CHANNEL_LIGHT_SENSOR] = "LIGHT"
 };
 
 static cloud_cmd_cb_t cloud_command_cb;
@@ -460,3 +460,28 @@ int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
 
 	return cloud_encode_data(&cloud_sensor, output);
 }
+
+#if CONFIG_BH1749
+/* 4 32-bit ints, 3 spaces, NULL */
+#define LIGHT_SENSOR_DATA_STRING_MAX_LEN ((4 * 11) + 3 + 1)
+int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
+				   struct cloud_msg *output)
+{
+	char buf[LIGHT_SENSOR_DATA_STRING_MAX_LEN];
+	u8_t len;
+	struct cloud_channel_data cloud_sensor;
+
+	if ((sensor_data == NULL) || (output == NULL)) {
+		return -EINVAL;
+	}
+
+	len = snprintf(buf, sizeof(buf), "%d %d %d %d", sensor_data->red,
+		       sensor_data->green, sensor_data->blue, sensor_data->ir);
+
+	cloud_sensor.data.buf = buf;
+	cloud_sensor.data.len = len;
+	cloud_sensor.type = CLOUD_CHANNEL_LIGHT_SENSOR;
+
+	return cloud_encode_data(&cloud_sensor, output);
+}
+#endif /* CONFIG_BH1749 */

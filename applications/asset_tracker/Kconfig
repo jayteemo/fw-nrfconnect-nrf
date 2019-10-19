@@ -323,6 +323,29 @@ endif
 
 endmenu # Environment sensors
 
+menu "Light Sensor"
+
+config BH1749
+	bool "Enable BH1749 light sensor"
+	default n if BOARD_NRF9160_PCA10090NS
+	default y if BOARD_NRF9160_PCA20035NS
+
+if BH1749
+config BH1749_TRIGGER
+	bool
+	default n
+
+config LIGHT_SENSOR_DATA_SEND_INTERVAL
+	int "Interval in seconds for sending light sensor data"
+	default 1000
+	help
+	  Interval between each sampling and sending of light sensor data.
+	  If the GPS is active, sensor data will not be sent before it is
+	  stopped. The unit is seconds.
+endif # BH1749
+
+endmenu # Light Sensor
+
 config USE_AT_HOST
 	bool "Enable AT commands"
 	default y
