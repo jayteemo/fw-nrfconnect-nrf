@@ -68,25 +68,21 @@ static CMD_NEW_GROUP(group_set, CLOUD_CMD_GROUP_SET, CMD_ARRAY(
 	CMD_NEW_RECIPIENT(environment, CLOUD_RCPT_ENVIRONMENT, CMD_ARRAY(
 		CMD_NEW_CHAN(humidity, CLOUD_CHANNEL_HUMID, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		),
 		CMD_NEW_CHAN(pressure, CLOUD_CHANNEL_AIR_PRESS, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		),
 		CMD_NEW_CHAN(temperature, CLOUD_CHANNEL_TEMP, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		),
 		CMD_NEW_CHAN(air_quality, CLOUD_CHANNEL_AIR_QUAL, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		))
@@ -94,13 +90,11 @@ static CMD_NEW_GROUP(group_set, CLOUD_CMD_GROUP_SET, CMD_ARRAY(
 	CMD_NEW_RECIPIENT(motion, CLOUD_RCPT_MOTION, CMD_ARRAY(
 		CMD_NEW_CHAN(flip, CLOUD_CHANNEL_FLIP, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		),
 		CMD_NEW_CHAN(impact, CLOUD_CHANNEL_IMPACT, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		))
@@ -108,7 +102,6 @@ static CMD_NEW_GROUP(group_set, CLOUD_CMD_GROUP_SET, CMD_ARRAY(
 	CMD_NEW_RECIPIENT(ui, CLOUD_RCPT_UI, CMD_ARRAY(
 		CMD_NEW_CHAN(pin, CLOUD_CHANNEL_PIN, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(pwm, CLOUD_CMD_PWM))
 		),
 		CMD_NEW_CHAN(led, CLOUD_CHANNEL_RGB_LED, CMD_ARRAY(
@@ -120,9 +113,30 @@ static CMD_NEW_GROUP(group_set, CLOUD_CMD_GROUP_SET, CMD_ARRAY(
 		),
 		CMD_NEW_CHAN(buzzer, CLOUD_CHANNEL_BUZZER, CMD_ARRAY(
 			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
-			CMD_NEW_TYPE(disable, CLOUD_CMD_DISABLE),
 			CMD_NEW_TYPE(play_melody, CLOUD_CMD_PLAY_MELODY),
 			CMD_NEW_TYPE(play_note, CLOUD_CMD_PLAY_NOTE))
+		))
+	),
+	CMD_NEW_RECIPIENT(light, CLOUD_RCPT_LIGHT, CMD_ARRAY(
+		CMD_NEW_CHAN(light_red, CLOUD_CHANNEL_LIGHT_RED, CMD_ARRAY(
+			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
+			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
+		),
+		CMD_NEW_CHAN(light_green, CLOUD_CHANNEL_LIGHT_GREEN, CMD_ARRAY(
+			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
+			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
+		),
+		CMD_NEW_CHAN(light_blue, CLOUD_CHANNEL_LIGHT_BLUE, CMD_ARRAY(
+			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
+			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
+		),
+		CMD_NEW_CHAN(light_ir, CLOUD_CHANNEL_LIGHT_IR, CMD_ARRAY(
+			CMD_NEW_TYPE(enable, CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(threshold_high, CLOUD_CMD_THRESHOLD_HIGH),
+			CMD_NEW_TYPE(threshold_low, CLOUD_CMD_THRESHOLD_LOW))
 		))
 	))
 );
@@ -368,6 +382,15 @@ static int cloud_search_cmd(cJSON *group_obj, enum cloud_cmd_group group)
 
 				cmd_parsed.type = typ.type;
 
+				cmd_parsed.value = type_obj->valuedouble;
+
+				if ( cJSON_IsBool(type_obj) ) {
+					cmd_parsed.state = CLOUD_CMD_STATE_UNDEFINED;
+				}
+				else {
+					cmd_parsed.state = cJSON_IsTrue(type_obj) ? CLOUD_CMD_STATE_TRUE:CLOUD_CMD_STATE_FALSE;
+				}
+
 				cloud_command_cb(&cmd_parsed);
 			}
 		}
@@ -378,9 +401,10 @@ static int cloud_search_cmd(cJSON *group_obj, enum cloud_cmd_group group)
 
 int cloud_decode_command(char const *input)
 {
-	int ret;
-	cJSON *root_obj		= NULL;
-	cJSON *group_obj	= NULL;
+	int ret = 0;
+	cJSON *root_obj = NULL;
+	cJSON *get_obj = NULL;
+	cJSON *set_obj = NULL;
 
 	if (input == NULL) {
 		return -EINVAL;
@@ -391,25 +415,26 @@ int cloud_decode_command(char const *input)
 		return -ENOENT;
 	}
 
-	group_obj = json_object_decode(root_obj, "get");
-	if (group_obj != NULL) {
+	get_obj = json_object_decode(root_obj, "get");
+	set_obj = json_object_decode(root_obj, "set");
+
+	if (get_obj != NULL) {
 		cmd_parsed.group = group_get.group;
-		ret = cloud_search_cmd(group_obj, cmd_parsed.group);
-		if (ret) {
-			return ret;
-		}
+		(void)cloud_search_cmd(get_obj, cmd_parsed.group);
 	}
 
-	group_obj = json_object_decode(root_obj, "set");
-	if (group_obj != NULL) {
+	if (set_obj != NULL) {
 		cmd_parsed.group = group_set.group;
-		ret = cloud_search_cmd(group_obj, cmd_parsed.group);
-		if (ret) {
-			return ret;
-		}
+		(void)cloud_search_cmd(set_obj, cmd_parsed.group);
 	}
 
-	return 0;
+	if ((get_obj == NULL) && (set_obj == NULL)) {
+		ret = -ENOTSUP;
+	}
+
+	cJSON_Delete(root_obj);
+
+	return ret;
 }
 
 int cloud_decode_init(cloud_cmd_cb_t cb)
@@ -417,6 +442,31 @@ int cloud_decode_init(cloud_cmd_cb_t cb)
 	cloud_command_cb = cb;
 
 	return 0;
+}
+
+int cloud_get_env_sensor_type_from_ch(const enum cloud_channel ch,
+		env_sensor_t * const type)
+{
+	if (type == NULL) {
+		return -EINVAL;
+	}
+
+	switch (ch) {
+	case CLOUD_CHANNEL_TEMP:
+		*type = ENV_SENSOR_TEMPERATURE;
+		return 0;
+	case CLOUD_CHANNEL_HUMID:
+		*type = ENV_SENSOR_HUMIDITY;
+		return 0;
+	case CLOUD_CHANNEL_AIR_PRESS:
+		*type = ENV_SENSOR_AIR_PRESSURE;
+		return 0;
+	case CLOUD_CHANNEL_AIR_QUAL:
+		*type = ENV_SENSOR_AIR_QUALITY;
+		return 0;
+	default:
+		return -ENOTSUP;
+	}
 }
 
 int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,

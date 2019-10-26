@@ -495,7 +495,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &_mqtt_evt->param.publish;
 
-		LOG_DBG("MQTT_EVT_PUBLISH: id=%d len=%d ",
+		LOG_DBG("MQTT_EVT_PUBLISH: id=%d len=%d",
 			p->message_id,
 			p->message.payload.len);
 
@@ -522,10 +522,11 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			evt.type = NCT_EVT_CC_RX_DATA;
 			evt.param.cc = &cc;
 			event_notify = true;
+
 		} else {
 			/* Try to match it with one of the data topics. */
 			dc.id = p->message_id;
-			dc.data.ptr = p->message.payload.data;
+			dc.data.ptr = nct.payload_buf;
 			dc.data.len = p->message.payload.len;
 
 			evt.type = NCT_EVT_DC_RX_DATA;

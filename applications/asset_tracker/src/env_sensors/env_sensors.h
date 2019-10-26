@@ -25,7 +25,7 @@ extern "C" {
  */
 
 #include <zephyr/types.h>
-
+#include "sensor_channel_config.h"
 
 /** @brief Environmental sensor types supported */
 typedef enum {
@@ -89,6 +89,12 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int env_sensors_init_and_start(void);
+
+int env_sensors_set_ch_cfg_item(const env_sensor_t sensor,
+		const enum sensor_ch_cfg_item_type type, const s32_t value);
+
+int env_sensors_get_ch_cfg(const env_sensor_t sensor,
+		struct sensor_ch_cfg * const cfg);
 
 #ifdef __cplusplus
 }

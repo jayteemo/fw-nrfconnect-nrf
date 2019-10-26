@@ -357,16 +357,96 @@ static void flip_send(struct k_work *work)
 	}
 }
 
+static void cloud_cmd_handle_sensor_set_ch_cfg(struct cloud_command const *const cmd)
+{
+	int err;
+	enum sensor_ch_cfg_item_type cfg_type;
+	s32_t cfg_value;
+
+	if ((cmd == NULL) || (cmd->group != CLOUD_CMD_GROUP_SET))
+	{
+		return;
+	}
+
+	cfg_value = cmd->value;
+
+	switch (cmd->type)
+	{
+		case CLOUD_CMD_ENABLE:
+			cfg_type = SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE;
+			break;
+		case CLOUD_CMD_THRESHOLD_HIGH:
+			if (cmd->state == CLOUD_CMD_STATE_UNDEFINED)
+			{
+				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_VALUE;
+			}
+			else
+			{
+				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE;
+				cfg_value = (cmd->state == CLOUD_CMD_STATE_TRUE);
+			}
+			break;
+		case CLOUD_CMD_THRESHOLD_LOW:
+		{
+			if (cmd->state == CLOUD_CMD_STATE_UNDEFINED)
+			{
+				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_VALUE;
+			}
+			else
+			{
+				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_ENABLE;
+				cfg_value = (cmd->state == CLOUD_CMD_STATE_TRUE);
+			}
+			break;
+		}
+		default:
+		{
+			return;
+		}
+	}
+
+	if (cmd->recipient == CLOUD_RCPT_ENVIRONMENT)
+	{
+		env_sensor_t sensor;
+		err = cloud_get_env_sensor_type_from_ch(cmd->channel, &sensor);
+		if (err == -ENOTSUP)
+		{
+			printk("Invalid cloud channel %d for recipient %d\n",
+					cmd->channel, cmd->recipient);
+			return;
+		}
+		env_sensors_set_ch_cfg_item(sensor,cfg_type, cfg_value);
+
+	}
+	else if (cmd->recipient == CLOUD_RCPT_LIGHT)
+	{
+
+	}
+
+}
+
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
+	if ( cmd == NULL )
+	{
+		printk("NULL cloud cmd received\n");
+		return;
+	}
+
+	printk("cloud_cmd_handler() - recipient %d, type %d, val %d, state %u\n",
+			cmd->recipient, cmd->type, (int)cmd->value, cmd->state );
+
 	/* Command handling goes here. */
+	cloud_cmd_handle_sensor_set_ch_cfg(cmd);
+
 	if (cmd->recipient == CLOUD_RCPT_MODEM_INFO) {
 #if CONFIG_MODEM_INFO
 		if (cmd->type == CLOUD_CMD_READ) {
 			device_status_send(NULL);
 		}
 #endif
-	} else if (cmd->recipient == CLOUD_RCPT_UI) {
+	}
+	else if (cmd->recipient == CLOUD_RCPT_UI) {
 		if (cmd->type == CLOUD_CMD_LED_RED) {
 			ui_led_set_color(127, 0, 0);
 		} else if (cmd->type == CLOUD_CMD_LED_GREEN) {

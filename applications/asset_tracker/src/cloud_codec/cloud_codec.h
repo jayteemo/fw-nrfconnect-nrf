@@ -51,6 +51,14 @@ enum cloud_channel {
 	CLOUD_CHANNEL_DEVICE_INFO,
 	/** The RBG IR light levels on the device. */
 	CLOUD_CHANNEL_LIGHT_SENSOR,
+	/** The red light level on the device. */
+	CLOUD_CHANNEL_LIGHT_RED,
+	/** The green light level on the device. */
+	CLOUD_CHANNEL_LIGHT_GREEN,
+	/** The blue light level on the device. */
+	CLOUD_CHANNEL_LIGHT_BLUE,
+	/** The IR light level on the device. */
+	CLOUD_CHANNEL_LIGHT_IR,
 };
 
 #define CLOUD_CHANNEL_STR_GPS "GPS"
@@ -94,11 +102,11 @@ enum cloud_cmd_recipient {
 	CLOUD_RCPT_MOTION,
 	CLOUD_RCPT_UI,
 	CLOUD_RCPT_MODEM_INFO,
+	CLOUD_RCPT_LIGHT,
 };
 
 enum cloud_cmd_type {
 	CLOUD_CMD_ENABLE,
-	CLOUD_CMD_DISABLE,
 	CLOUD_CMD_THRESHOLD_HIGH,
 	CLOUD_CMD_THRESHOLD_LOW,
 	CLOUD_CMD_READ,
@@ -113,13 +121,19 @@ enum cloud_cmd_type {
 	CLOUD_CMD_PLAY_NOTE,
 };
 
+enum cloud_cmd_state {
+	CLOUD_CMD_STATE_FALSE,
+	CLOUD_CMD_STATE_TRUE,
+	CLOUD_CMD_STATE_UNDEFINED,
+};
+
 struct cloud_command {
 	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
 	enum cloud_cmd_recipient recipient; /* The command's recipient module. */
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
 	double value; /* The value to be written to the recipient/channel. */
-	bool state; /* The truth value to be written to the recipient/channel. */
+	enum cloud_cmd_state state; /* The truth value to be written to the recipient/channel. */
 };
 
 typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
@@ -186,6 +200,8 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 				   struct cloud_msg *output);
 #endif /* CONFIG_LIGHT_SENSOR */
 
+int cloud_get_env_sensor_type_from_ch(const enum cloud_channel ch,
+		      env_sensor_t * const type);
 /**
  * @}
  */
