@@ -122,9 +122,21 @@ enum cloud_cmd_type {
 };
 
 enum cloud_cmd_state {
-	CLOUD_CMD_STATE_FALSE,
+	CLOUD_CMD_STATE_UNDEFINED = -1,
+	CLOUD_CMD_STATE_FALSE = 0,
 	CLOUD_CMD_STATE_TRUE,
-	CLOUD_CMD_STATE_UNDEFINED,
+};
+
+enum sensor_ch_cfg_item_type {
+	SENSOR_CH_CFG_ITEM_TYPE__BEGIN,
+
+	SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE = SENSOR_CH_CFG_ITEM_TYPE__BEGIN,
+	SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_VALUE,
+	SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_ENABLE,
+	SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_VALUE,
+	SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE,
+
+	SENSOR_CH_CFG_ITEM_TYPE__END
 };
 
 struct cloud_command {
@@ -202,6 +214,12 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 
 int cloud_get_env_sensor_type_from_ch(const enum cloud_channel ch,
 		      env_sensor_t * const type);
+
+int cloud_set_ch_cfg_item(const enum cloud_channel channel,
+		const enum sensor_ch_cfg_item_type type, const double value);
+
+bool cloud_is_send_allowed(const enum cloud_channel channel, const double value);
+
 /**
  * @}
  */

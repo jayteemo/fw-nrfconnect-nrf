@@ -17,7 +17,6 @@ struct env_sensor {
 	u8_t *dev_name;
 	struct device *dev;
 	struct k_spinlock lock;
-	struct sensor_channel_config cfg;
 };
 
 static struct env_sensor temp_sensor = {
@@ -27,9 +26,6 @@ static struct env_sensor temp_sensor = {
 	},
 	.channel = SENSOR_CHAN_AMBIENT_TEMP,
 	.dev_name = CONFIG_TEMP_DEV_NAME,
-	.cfg =  {
-		.value = {[SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE] = true}
-	}
 };
 
 static struct env_sensor humid_sensor = {
@@ -39,9 +35,6 @@ static struct env_sensor humid_sensor = {
 	},
 	.channel = SENSOR_CHAN_HUMIDITY,
 	.dev_name = CONFIG_TEMP_DEV_NAME,
-	.cfg =  {
-		.value = {[SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE] = true}
-	}
 };
 
 static struct env_sensor pressure_sensor = {
@@ -51,9 +44,6 @@ static struct env_sensor pressure_sensor = {
 	},
 	.channel = SENSOR_CHAN_PRESS,
 	.dev_name = CONFIG_TEMP_DEV_NAME,
-	.cfg =  {
-		.value = {[SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE] = true}
-	}
 };
 
 /* Array containg environment sensors available on the board. */
@@ -161,39 +151,4 @@ int env_sensors_get_pressure(env_sensor_data_t *sensor_data)
 int env_sensors_get_air_quality(env_sensor_data_t *sensor_data)
 {
 	return -1;
-}
-
-int env_sensors_set_ch_cfg_item(const env_sensor_t sensor,
-		const enum sensor_ch_cfg_item_type type, const s32_t value)
-{
-	if (cfg == NULL) {
-			return -EINVAL;
-	}
-
-	for (int i = 0; i < ARRAY_SIZE(env_sensors); i++) {
-		if ( env_sensors[i]->sensor.type == sensor )
-		{
-			return sensor_ch_config_set_item(&env_sensors[i]->cfg, type, value);
-		}
-	}
-
-	return -ENOTSUP;
-}
-
-int env_sensors_get_ch_cfg(const env_sensor_t sensor,
-		struct sensor_ch_cfg * const cfg)
-{
-	if (cfg == NULL) {
-		return -EINVAL;
-	}
-
-	for (int i = 0; i < ARRAY_SIZE(env_sensors); i++) {
-		if ( env_sensors[i]->sensor.type == sensor )
-		{
-			*cfg = env_sensors[i]->cfg;
-			return 0;
-		}
-	}
-
-	return -ENOTSUP;
 }

@@ -357,74 +357,6 @@ static void flip_send(struct k_work *work)
 	}
 }
 
-static void cloud_cmd_handle_sensor_set_ch_cfg(struct cloud_command const *const cmd)
-{
-	int err;
-	enum sensor_ch_cfg_item_type cfg_type;
-	s32_t cfg_value;
-
-	if ((cmd == NULL) || (cmd->group != CLOUD_CMD_GROUP_SET))
-	{
-		return;
-	}
-
-	cfg_value = cmd->value;
-
-	switch (cmd->type)
-	{
-		case CLOUD_CMD_ENABLE:
-			cfg_type = SENSOR_CH_CFG_ITEM_TYPE_SEND_ENABLE;
-			break;
-		case CLOUD_CMD_THRESHOLD_HIGH:
-			if (cmd->state == CLOUD_CMD_STATE_UNDEFINED)
-			{
-				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_VALUE;
-			}
-			else
-			{
-				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE;
-				cfg_value = (cmd->state == CLOUD_CMD_STATE_TRUE);
-			}
-			break;
-		case CLOUD_CMD_THRESHOLD_LOW:
-		{
-			if (cmd->state == CLOUD_CMD_STATE_UNDEFINED)
-			{
-				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_VALUE;
-			}
-			else
-			{
-				cfg_type = SENSOR_CH_CFG_ITEM_TYPE_THRESH_LOW_ENABLE;
-				cfg_value = (cmd->state == CLOUD_CMD_STATE_TRUE);
-			}
-			break;
-		}
-		default:
-		{
-			return;
-		}
-	}
-
-	if (cmd->recipient == CLOUD_RCPT_ENVIRONMENT)
-	{
-		env_sensor_t sensor;
-		err = cloud_get_env_sensor_type_from_ch(cmd->channel, &sensor);
-		if (err == -ENOTSUP)
-		{
-			printk("Invalid cloud channel %d for recipient %d\n",
-					cmd->channel, cmd->recipient);
-			return;
-		}
-		env_sensors_set_ch_cfg_item(sensor,cfg_type, cfg_value);
-
-	}
-	else if (cmd->recipient == CLOUD_RCPT_LIGHT)
-	{
-
-	}
-
-}
-
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
 	if ( cmd == NULL )
@@ -433,12 +365,7 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 		return;
 	}
 
-	printk("cloud_cmd_handler() - recipient %d, type %d, val %d, state %u\n",
-			cmd->recipient, cmd->type, (int)cmd->value, cmd->state );
-
 	/* Command handling goes here. */
-	cloud_cmd_handle_sensor_set_ch_cfg(cmd);
-
 	if (cmd->recipient == CLOUD_RCPT_MODEM_INFO) {
 #if CONFIG_MODEM_INFO
 		if (cmd->type == CLOUD_CMD_READ) {
@@ -591,7 +518,8 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_temperature(&env_data) == 0) {
-		if (cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_TEMP,env_data.value) &&
+			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -601,7 +529,8 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_humidity(&env_data) == 0) {
-		if (cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_HUMID,env_data.value) &&
+			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -611,7 +540,8 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_pressure(&env_data) == 0) {
-		if (cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_PRESS,env_data.value) &&
+			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -621,7 +551,8 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_air_quality(&env_data) == 0) {
-		if (cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_QUAL,env_data.value) &&
+			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -654,6 +585,15 @@ void light_sensor_data_send(void)
 	err = light_sensor_get_data(&light_data);
 	if (err) {
 		printk("Failed to get light sensor data, error %d\n", err);
+		return;
+	}
+
+	if (!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_RED,light_data.red) &&
+		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_GREEN,light_data.green) &&
+		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_BLUE,light_data.blue) &&
+		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_IR,light_data.ir) )
+	{
+		printk("Light values not sent due to config settings\n");
 		return;
 	}
 
