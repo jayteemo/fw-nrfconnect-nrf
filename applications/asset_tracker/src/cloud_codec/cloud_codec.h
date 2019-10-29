@@ -140,12 +140,14 @@ enum sensor_ch_cfg_item_type {
 };
 
 struct cloud_command {
-	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
+	enum cloud_cmd_group
+		group; /* The group the decoded command belongs to. */
 	enum cloud_cmd_recipient recipient; /* The command's recipient module. */
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
 	double value; /* The value to be written to the recipient/channel. */
-	enum cloud_cmd_state state; /* The truth value to be written to the recipient/channel. */
+	enum cloud_cmd_state
+		state; /* The truth value to be written to the recipient/channel. */
 };
 
 typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
@@ -190,7 +192,7 @@ int cloud_decode_init(cloud_cmd_cb_t cb);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				 struct cloud_msg *output);
+				   struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
@@ -213,12 +215,14 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 #endif /* CONFIG_LIGHT_SENSOR */
 
 int cloud_get_env_sensor_type_from_ch(const enum cloud_channel ch,
-		      env_sensor_t * const type);
+				      env_sensor_t *const type);
 
 int cloud_set_ch_cfg_item(const enum cloud_channel channel,
-		const enum sensor_ch_cfg_item_type type, const double value);
+			  const enum sensor_ch_cfg_item_type type,
+			  const double value);
 
-bool cloud_is_send_allowed(const enum cloud_channel channel, const double value);
+bool cloud_is_send_allowed(const enum cloud_channel channel,
+			   const double value);
 
 /**
  * @}

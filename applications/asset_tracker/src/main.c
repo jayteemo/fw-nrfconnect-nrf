@@ -29,30 +29,29 @@
 #include "gps_controller.h"
 #include "service_info.h"
 
-#define CALIBRATION_PRESS_DURATION 	K_SECONDS(5)
-#define CLOUD_CONNACK_WAIT_DURATION	K_SECONDS(CONFIG_CLOUD_WAIT_DURATION)
+#define CALIBRATION_PRESS_DURATION K_SECONDS(5)
+#define CLOUD_CONNACK_WAIT_DURATION K_SECONDS(CONFIG_CLOUD_WAIT_DURATION)
 
 #ifdef CONFIG_ACCEL_USE_SIM
-#define FLIP_INPUT			CONFIG_FLIP_INPUT
-#define CALIBRATION_INPUT		-1
+#define FLIP_INPUT CONFIG_FLIP_INPUT
+#define CALIBRATION_INPUT -1
 #else
-#define FLIP_INPUT			-1
+#define FLIP_INPUT -1
 #ifdef CONFIG_ACCEL_CALIBRATE
-#define CALIBRATION_INPUT		CONFIG_CALIBRATION_INPUT
+#define CALIBRATION_INPUT CONFIG_CALIBRATION_INPUT
 #else
-#define CALIBRATION_INPUT		-1
+#define CALIBRATION_INPUT -1
 #endif /* CONFIG_ACCEL_CALIBRATE */
 #endif /* CONFIG_ACCEL_USE_SIM */
 
-#if defined(CONFIG_BSD_LIBRARY) && \
-!defined(CONFIG_LTE_LINK_CONTROL)
-#error "Missing CONFIG_LTE_LINK_CONTROL"
+#if defined(CONFIG_BSD_LIBRARY) && !defined(CONFIG_LTE_LINK_CONTROL)
+#error  "Missing CONFIG_LTE_LINK_CONTROL"
 #endif
 
-#if defined(CONFIG_BSD_LIBRARY) && \
-defined(CONFIG_LTE_AUTO_INIT_AND_CONNECT) && \
-defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
-#error "PROVISION_CERTIFICATES \
+#if defined(CONFIG_BSD_LIBRARY) &&                                             \
+	defined(CONFIG_LTE_AUTO_INIT_AND_CONNECT) &&                           \
+	defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
+#error  "PROVISION_CERTIFICATES \
 	requires CONFIG_LTE_AUTO_INIT_AND_CONNECT to be disabled!"
 #endif
 
@@ -72,10 +71,9 @@ static struct rsrp_data rsrp = {
 };
 #endif /* CONFIG_MODEM_INFO */
 
-
 static struct cloud_backend *cloud_backend;
 
- /* Variables to keep track of nRF cloud user association. */
+/* Variables to keep track of nRF cloud user association. */
 #if defined(CONFIG_USE_UI_MODULE)
 static u8_t ua_pattern[6];
 #endif
@@ -170,29 +168,29 @@ void error_handler(enum error_type err_type, int err_code)
 		 */
 		ui_led_set_pattern(UI_LED_ERROR_CLOUD);
 		printk("Error of type ERROR_CLOUD: %d\n", err_code);
-	break;
+		break;
 	case ERROR_BSD_RECOVERABLE:
 		/* Blinking all LEDs ON/OFF in pairs (1 and 3, 2 and 4)
 		 * if there is a recoverable error.
 		 */
 		ui_led_set_pattern(UI_LED_ERROR_BSD_REC);
 		printk("Error of type ERROR_BSD_RECOVERABLE: %d\n", err_code);
-	break;
+		break;
 	case ERROR_BSD_IRRECOVERABLE:
 		/* Blinking all LEDs ON/OFF if there is an
 		 * irrecoverable error.
 		 */
 		ui_led_set_pattern(UI_LED_ERROR_BSD_IRREC);
 		printk("Error of type ERROR_BSD_IRRECOVERABLE: %d\n", err_code);
-	break;
+		break;
 	default:
 		/* Blinking all LEDs ON/OFF in pairs (1 and 2, 3 and 4)
 		 * undefined error.
 		 */
 		ui_led_set_pattern(UI_LED_ERROR_UNKNOWN);
-		printk("Unknown error type: %d, code: %d\n",
-			err_type, err_code);
-	break;
+		printk("Unknown error type: %d, code: %d\n", err_type,
+		       err_code);
+		break;
 	}
 
 	while (true) {
@@ -201,8 +199,7 @@ void error_handler(enum error_type err_type, int err_code)
 #endif /* CONFIG_DEBUG */
 }
 
-void k_sys_fatal_error_handler(unsigned int reason,
-			       const z_arch_esf_t *esf)
+void k_sys_fatal_error_handler(unsigned int reason, const z_arch_esf_t *esf)
 {
 	ARG_UNUSED(esf);
 
@@ -256,8 +253,8 @@ static void gps_trigger_handler(struct device *dev, struct gps_trigger *trigger)
 
 	ARG_UNUSED(trigger);
 
-	if (ui_button_is_active(UI_SWITCH_2)
-	   || !atomic_get(&send_data_enable)) {
+	if (ui_button_is_active(UI_SWITCH_2) ||
+	    !atomic_get(&send_data_enable)) {
 		return;
 	}
 
@@ -286,7 +283,7 @@ static void gps_trigger_handler(struct device *dev, struct gps_trigger *trigger)
 
 /**@brief Callback for sensor trigger events */
 static void sensor_trigger_handler(struct device *dev,
-			struct sensor_trigger *trigger)
+				   struct sensor_trigger *trigger)
 {
 	ARG_UNUSED(dev);
 	ARG_UNUSED(trigger);
@@ -359,8 +356,7 @@ static void flip_send(struct k_work *work)
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
-	if ( cmd == NULL )
-	{
+	if (cmd == NULL) {
 		printk("NULL cloud cmd received\n");
 		return;
 	}
@@ -372,8 +368,7 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 			device_status_send(NULL);
 		}
 #endif
-	}
-	else if (cmd->recipient == CLOUD_RCPT_UI) {
+	} else if (cmd->recipient == CLOUD_RCPT_UI) {
 		if (cmd->type == CLOUD_CMD_LED_RED) {
 			ui_led_set_color(127, 0, 0);
 		} else if (cmd->type == CLOUD_CMD_LED_GREEN) {
@@ -403,7 +398,7 @@ static void modem_rsrp_handler(char rsrp_value)
 /**@brief Publish RSRP data to the cloud. */
 static void modem_rsrp_data_send(struct k_work *work)
 {
-	char buf[CONFIG_MODEM_INFO_BUFFER_SIZE] = {0};
+	char buf[CONFIG_MODEM_INFO_BUFFER_SIZE] = { 0 };
 	static u32_t timestamp_prev;
 	size_t len;
 
@@ -416,8 +411,8 @@ static void modem_rsrp_data_send(struct k_work *work)
 		return;
 	}
 
-	len = snprintf(buf, CONFIG_MODEM_INFO_BUFFER_SIZE,
-			"%d", rsrp.value - rsrp.offset);
+	len = snprintf(buf, CONFIG_MODEM_INFO_BUFFER_SIZE, "%d",
+		       rsrp.value - rsrp.offset);
 
 	signal_strength_cloud_data.data.buf = buf;
 	signal_strength_cloud_data.data.len = len;
@@ -476,7 +471,8 @@ static void device_status_send(struct k_work *work)
 	};
 
 	if (service_info_json_object_encode(ui, ARRAY_SIZE(ui), NULL, 0,
-			SERVICE_INFO_FOTA_VER_CURRENT, root_obj) == 0) {
+					    SERVICE_INFO_FOTA_VER_CURRENT,
+					    root_obj) == 0) {
 		++item_cnt;
 	}
 
@@ -502,24 +498,23 @@ static void env_data_send(void)
 {
 	int err;
 	env_sensor_data_t env_data;
-	struct cloud_msg msg = {
-		.qos = CLOUD_QOS_AT_MOST_ONCE,
-		.endpoint.type = CLOUD_EP_TOPIC_MSG
-	};
+	struct cloud_msg msg = { .qos = CLOUD_QOS_AT_MOST_ONCE,
+				 .endpoint.type = CLOUD_EP_TOPIC_MSG };
 
 	if (!atomic_get(&send_data_enable)) {
 		return;
 	}
 
 	if (gps_control_is_active()) {
-		k_delayed_work_submit(&send_env_data_work,
+		k_delayed_work_submit(
+			&send_env_data_work,
 			K_SECONDS(CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME));
 		return;
 	}
 
 	if (env_sensors_get_temperature(&env_data) == 0) {
-		if (cloud_is_send_allowed(CLOUD_CHANNEL_TEMP,env_data.value) &&
-			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_TEMP, env_data.value) &&
+		    cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -529,8 +524,9 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_humidity(&env_data) == 0) {
-		if (cloud_is_send_allowed(CLOUD_CHANNEL_HUMID,env_data.value) &&
-			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_HUMID,
+					  env_data.value) &&
+		    cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -540,8 +536,9 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_pressure(&env_data) == 0) {
-		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_PRESS,env_data.value) &&
-			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_PRESS,
+					  env_data.value) &&
+		    cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -551,8 +548,9 @@ static void env_data_send(void)
 	}
 
 	if (env_sensors_get_air_quality(&env_data) == 0) {
-		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_QUAL,env_data.value) &&
-			cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
+		if (cloud_is_send_allowed(CLOUD_CHANNEL_AIR_QUAL,
+					  env_data.value) &&
+		    cloud_encode_env_sensors_data(&env_data, &msg) == 0) {
 			err = cloud_send(cloud_backend, &msg);
 			cloud_release_data(&msg);
 			if (err) {
@@ -562,7 +560,7 @@ static void env_data_send(void)
 	}
 
 	k_delayed_work_submit(&send_env_data_work,
-	K_SECONDS(CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL));
+			      K_SECONDS(CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL));
 
 	return;
 error:
@@ -588,11 +586,11 @@ void light_sensor_data_send(void)
 		return;
 	}
 
-	if (!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_RED,light_data.red) &&
-		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_GREEN,light_data.green) &&
-		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_BLUE,light_data.blue) &&
-		!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_IR,light_data.ir) )
-	{
+	if (!cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_RED, light_data.red) &&
+	    !cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_GREEN,
+				   light_data.green) &&
+	    !cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_BLUE, light_data.blue) &&
+	    !cloud_is_send_allowed(CLOUD_CHANNEL_LIGHT_IR, light_data.ir)) {
 		printk("Light values not sent due to config settings\n");
 		return;
 	}
@@ -618,10 +616,8 @@ void light_sensor_data_send(void)
 static void sensor_data_send(struct cloud_channel_data *data)
 {
 	int err = 0;
-	struct cloud_msg msg = {
-			.qos = CLOUD_QOS_AT_MOST_ONCE,
-			.endpoint.type = CLOUD_EP_TOPIC_MSG
-		};
+	struct cloud_msg msg = { .qos = CLOUD_QOS_AT_MOST_ONCE,
+				 .endpoint.type = CLOUD_EP_TOPIC_MSG };
 
 	if (data->type == CLOUD_CHANNEL_DEVICE_INFO) {
 		msg.endpoint.type = CLOUD_EP_TOPIC_STATE;
@@ -689,13 +685,9 @@ static void on_user_pairing_req(const struct cloud_event *evt)
 static void cloud_user_associate(void)
 {
 	int err;
-	struct cloud_msg msg = {
-		.buf = ua_pattern,
-		.len = buttons_to_capture,
-		.endpoint = {
-			.type = CLOUD_EP_TOPIC_PAIR
-		}
-	};
+	struct cloud_msg msg = { .buf = ua_pattern,
+				 .len = buttons_to_capture,
+				 .endpoint = { .type = CLOUD_EP_TOPIC_PAIR } };
 
 	atomic_set(&pattern_recording, 0);
 
@@ -762,8 +754,7 @@ void on_pairing_done(void)
 }
 
 void cloud_event_handler(const struct cloud_backend *const backend,
-			 const struct cloud_event *const evt,
-			 void *user_data)
+			 const struct cloud_event *const evt, void *user_data)
 {
 	ARG_UNUSED(user_data);
 
@@ -834,7 +825,7 @@ static void pairing_button_register(struct ui_evt *evt)
 				NRF_CLOUD_UA_BUTTON_INPUT_3;
 			printk("Button 1\n");
 		} else if (evt->button == UI_BUTTON_2 &&
-		    evt->type == UI_EVT_BUTTON_ACTIVE) {
+			   evt->type == UI_EVT_BUTTON_ACTIVE) {
 			ua_pattern[buttons_captured++] =
 				NRF_CLOUD_UA_BUTTON_INPUT_4;
 			printk("Button 2\n");
@@ -923,13 +914,12 @@ static void modem_configure(void)
 static void accelerometer_init(void)
 {
 	if (IS_ENABLED(CONFIG_ACCEL_USE_EXTERNAL)) {
-
 		struct device *accel_dev =
-		device_get_binding(CONFIG_ACCEL_DEV_NAME);
+			device_get_binding(CONFIG_ACCEL_DEV_NAME);
 
 		if (accel_dev == NULL) {
 			printk("Could not get %s device\n",
-				CONFIG_ACCEL_DEV_NAME);
+			       CONFIG_ACCEL_DEV_NAME);
 			return;
 		}
 
@@ -941,7 +931,7 @@ static void accelerometer_init(void)
 		int err = 0;
 
 		err = sensor_trigger_set(accel_dev, &sensor_trig,
-				sensor_trigger_handler);
+					 sensor_trigger_handler);
 
 		if (err) {
 			printk("Unable to set trigger\n");
@@ -955,8 +945,7 @@ static void accelerometer_init(void)
 static void flip_detection_init(void)
 {
 	int err;
-	struct device *accel_dev =
-		device_get_binding(CONFIG_ACCEL_DEV_NAME);
+	struct device *accel_dev = device_get_binding(CONFIG_ACCEL_DEV_NAME);
 
 	if (accel_dev == NULL) {
 		printk("Could not get %s device\n", CONFIG_ACCEL_DEV_NAME);
@@ -974,8 +963,6 @@ static void flip_detection_init(void)
 		printk("Could not calibrate accelerometer device: %d\n", err);
 	}
 }
-
-
 
 static void button_sensor_init(void)
 {
@@ -1050,20 +1037,20 @@ static void ui_evt_handler(struct ui_evt evt)
 	}
 
 	if (IS_ENABLED(CONFIG_CLOUD_BUTTON) &&
-	   (evt.button == CONFIG_CLOUD_BUTTON_INPUT)) {
+	    (evt.button == CONFIG_CLOUD_BUTTON_INPUT)) {
 		button_send(evt.type == UI_EVT_BUTTON_ACTIVE ? 1 : 0);
 	}
 
-	if (IS_ENABLED(CONFIG_ACCEL_USE_SIM) && (evt.button == FLIP_INPUT)
-	   && atomic_get(&send_data_enable)) {
+	if (IS_ENABLED(CONFIG_ACCEL_USE_SIM) && (evt.button == FLIP_INPUT) &&
+	    atomic_get(&send_data_enable)) {
 		flip_send(NULL);
 	}
 
 	if (IS_ENABLED(CONFIG_GPS_CONTROL_ON_LONG_PRESS) &&
-	   (evt.button == UI_BUTTON_1)) {
+	    (evt.button == UI_BUTTON_1)) {
 		if (evt.type == UI_EVT_BUTTON_ACTIVE) {
 			k_delayed_work_submit(&long_press_button_work,
-			K_SECONDS(5));
+					      K_SECONDS(5));
 		} else {
 			k_delayed_work_cancel(&long_press_button_work);
 		}
@@ -1109,7 +1096,7 @@ void main(void)
 	ret = cloud_init(cloud_backend, cloud_event_handler);
 	if (ret) {
 		printk("Cloud backend could not be initialized, error: %d\n",
-			ret);
+		       ret);
 		cloud_error_handler(ret);
 	}
 
@@ -1119,7 +1106,8 @@ void main(void)
 
 	ret = cloud_decode_init(cloud_cmd_handler);
 	if (ret) {
-		printk("Cloud command decoder could not be initialized, error: %d\n", ret);
+		printk("Cloud command decoder could not be initialized, error: %d\n",
+		       ret);
 		cloud_error_handler(ret);
 	}
 
@@ -1135,16 +1123,12 @@ connect:
 				      CLOUD_CONNACK_WAIT_DURATION);
 	}
 
-	struct pollfd fds[] = {
-		{
-			.fd = cloud_backend->config->socket,
-			.events = POLLIN
-		}
-	};
+	struct pollfd fds[] = { { .fd = cloud_backend->config->socket,
+				  .events = POLLIN } };
 
 	while (true) {
 		ret = poll(fds, ARRAY_SIZE(fds),
-			K_SECONDS(CONFIG_MQTT_KEEPALIVE));
+			   K_SECONDS(CONFIG_MQTT_KEEPALIVE));
 
 		if (ret < 0) {
 			printk("poll() returned an error: %d\n", ret);
