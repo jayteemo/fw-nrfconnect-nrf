@@ -59,19 +59,6 @@ enum cloud_endpoint {
 	CLOUD_EP_COUNT
 };
 
-/**@brief Cloud pairing type. */
-enum cloud_pair_type {
-	CLOUD_PAIR_SEQUENCE,
-	CLOUD_PAIR_PIN,
-};
-
-/**@brief Cloud pairing data. */
-struct cloud_pair_data {
-	enum cloud_pair_type type;
-	u8_t *buf;
-	size_t len;
-};
-
 /** @brief Forward declaration of cloud backend type. */
 struct cloud_backend;
 
@@ -93,7 +80,6 @@ struct cloud_event {
 	union {
 		struct cloud_msg msg;
 		int err;
-		struct cloud_pair_data pair_info;
 	} data;
 };
 

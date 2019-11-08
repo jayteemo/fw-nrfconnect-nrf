@@ -80,13 +80,6 @@ static struct rsrp_data rsrp = {
 
 static struct cloud_backend *cloud_backend;
 
- /* Variables to keep track of nRF cloud user association. */
-#if defined(CONFIG_USE_UI_MODULE)
-static u8_t ua_pattern[6];
-#endif
-static int buttons_to_capture;
-static int buttons_captured;
-static atomic_t pattern_recording;
 static bool recently_associated;
 static bool association_with_pin;
 
@@ -631,50 +624,15 @@ void sensors_start(void)
 /**@brief nRF Cloud specific callback for cloud association event. */
 static void on_user_pairing_req(const struct cloud_event *evt)
 {
-	if (evt->data.pair_info.type == CLOUD_PAIR_SEQUENCE) {
-		if (!atomic_get(&pattern_recording)) {
-			ui_led_set_pattern(UI_CLOUD_PAIRING);
-			atomic_set(&pattern_recording, 1);
-			buttons_captured = 0;
-			buttons_to_capture = *evt->data.pair_info.buf;
-
-			printk("Please enter the user association pattern ");
-			printk("using the buttons and switches\n");
-		}
-	} else if (evt->data.pair_info.type == CLOUD_PAIR_PIN) {
-		association_with_pin = true;
-		ui_led_set_pattern(UI_CLOUD_PAIRING);
-		printk("Waiting for cloud association with PIN\n");
-	}
+	association_with_pin = true;
+	ui_led_set_pattern(UI_CLOUD_PAIRING);
+	printk("Waiting for cloud association with PIN\n");
 }
-
-#if defined(CONFIG_USE_UI_MODULE)
-/**@brief Send user association information to nRF Cloud. */
-static void cloud_user_associate(void)
-{
-	int err;
-	struct cloud_msg msg = {
-		.buf = ua_pattern,
-		.len = buttons_to_capture,
-		.endpoint = {
-			.type = CLOUD_EP_TOPIC_PAIR
-		}
-	};
-
-	atomic_set(&pattern_recording, 0);
-
-	err = cloud_send(cloud_backend, &msg);
-	if (err) {
-		printk("Could not send association message, error: %d\n", err);
-		cloud_error_handler(err);
-	}
-}
-#endif
 
 /** @brief Handle procedures after successful association with nRF Cloud. */
 void on_pairing_done(void)
 {
-	if (association_with_pin || (buttons_captured > 0)) {
+	if (association_with_pin) {
 		recently_associated = true;
 
 		printk("Successful user association.\n");
@@ -684,8 +642,7 @@ void on_pairing_done(void)
 		printk("to nRF Cloud is not established within ");
 		printk("20 - 30 seconds.\n");
 	}
-
-	if (!association_with_pin) {
+	else {
 		return;
 	}
 
@@ -793,41 +750,6 @@ static void app_connect(struct k_work *work)
 		cloud_error_handler(err);
 	}
 }
-
-#if defined(CONFIG_USE_UI_MODULE)
-/**@brief Function to keep track of user association input when using
- *	  buttons and switches to register the association pattern.
- *	  nRF Cloud specific.
- */
-static void pairing_button_register(struct ui_evt *evt)
-{
-	if (buttons_captured < buttons_to_capture) {
-		if (evt->button == UI_BUTTON_1 &&
-		    evt->type == UI_EVT_BUTTON_ACTIVE) {
-			ua_pattern[buttons_captured++] =
-				NRF_CLOUD_UA_BUTTON_INPUT_3;
-			printk("Button 1\n");
-		} else if (evt->button == UI_BUTTON_2 &&
-		    evt->type == UI_EVT_BUTTON_ACTIVE) {
-			ua_pattern[buttons_captured++] =
-				NRF_CLOUD_UA_BUTTON_INPUT_4;
-			printk("Button 2\n");
-		} else if (evt->button == UI_SWITCH_1) {
-			ua_pattern[buttons_captured++] =
-				NRF_CLOUD_UA_BUTTON_INPUT_1;
-			printk("Switch 1\n");
-		} else if (evt->button == UI_SWITCH_2) {
-			ua_pattern[buttons_captured++] =
-				NRF_CLOUD_UA_BUTTON_INPUT_2;
-			printk("Switch 2\n");
-		}
-	}
-
-	if (buttons_captured == buttons_to_capture) {
-		cloud_user_associate();
-	}
-}
-#endif
 
 static void long_press_handler(struct k_work *work)
 {
@@ -958,11 +880,6 @@ static void sensors_init(void)
 /**@brief User interface event handler. */
 static void ui_evt_handler(struct ui_evt evt)
 {
-	if (pattern_recording) {
-		pairing_button_register(&evt);
-		return;
-	}
-
 	if (IS_ENABLED(CONFIG_CLOUD_BUTTON) &&
 	   (evt.button == CONFIG_CLOUD_BUTTON_INPUT)) {
 		button_send(evt.type == UI_EVT_BUTTON_ACTIVE ? 1 : 0);
