@@ -51,127 +51,51 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt);
 static int dc_tx_cnf_handler(const struct nct_evt *nct_evt);
 static int dc_disconnection_handler(const struct nct_evt *nct_evt);
 
-static const fsm_transition not_implemented_fsm_transition[] = {
-	/* Drop all the events. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_CC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DISCONNECTED]		= drop_event_handler,
-};
-BUILD_ASSERT(ARRAY_SIZE(not_implemented_fsm_transition) == NCT_EVT_TOTAL);
+/* Drop all the events. */
+static const fsm_transition not_implemented_fsm_transition[NCT_EVT_TOTAL];
 
-static const fsm_transition initialized_fsm_transition[] = {
-	[NCT_EVT_CONNECTED]		= connection_handler,
-	/* Drop all the rest/ */
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_CC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DISCONNECTED]		= drop_event_handler,
+static const fsm_transition initialized_fsm_transition[NCT_EVT_TOTAL] = {
+	[NCT_EVT_CONNECTED]			= connection_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(initialized_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition connected_fsm_transition[] = {
+static const fsm_transition connected_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_CC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(connected_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition cc_connecting_fsm_transition[] = {
+static const fsm_transition cc_connecting_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_CONNECTED]		= cc_connection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_CC_DISCONNECTED]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(cc_connecting_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition cc_connected_fsm_transition[] = {
+static const fsm_transition cc_connected_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_n_complete_request_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(cc_connected_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition cloud_requested_fsm_transition[] = {
+static const fsm_transition cloud_requested_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_n_complete_request_handler,
 	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_in_state_requested_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]			= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(cloud_requested_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition ua_complete_fsm_transition[] = {
+static const fsm_transition ua_complete_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_handler,
 	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(ua_complete_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition dc_connecting_fsm_transition[] = {
+static const fsm_transition dc_connecting_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_DC_CONNECTED]		= dc_connection_handler,
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_in_dc_conn_handler,
 	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_RX_DATA]		= drop_event_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= drop_event_handler,
-	[NCT_EVT_DC_DISCONNECTED]	= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(dc_connecting_fsm_transition) == NCT_EVT_TOTAL);
 
-static const fsm_transition dc_connected_fsm_transition[] = {
+static const fsm_transition dc_connected_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_in_dc_conn_handler,
 	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
 	[NCT_EVT_DC_RX_DATA]		= dc_rx_data_handler,
@@ -179,12 +103,7 @@ static const fsm_transition dc_connected_fsm_transition[] = {
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DC_DISCONNECTED]	= dc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
-	/* Drop all the rest. */
-	[NCT_EVT_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_CC_CONNECTED]		= drop_event_handler,
-	[NCT_EVT_DC_CONNECTED]		= drop_event_handler,
 };
-BUILD_ASSERT(ARRAY_SIZE(dc_connected_fsm_transition) == NCT_EVT_TOTAL);
 
 static const fsm_transition *state_event_handlers[] = {
 	[STATE_IDLE]			= not_implemented_fsm_transition,
@@ -212,19 +131,30 @@ int nfsm_init(void)
 int nfsm_handle_incoming_event(const struct nct_evt *nct_evt,
 			       enum nfsm_state state)
 {
-	if (state < STATE_TOTAL) {
-		int err = state_event_handlers[state][nct_evt->type](nct_evt);
+	int err;
+
+	if ((nct_evt == NULL) || (nct_evt->type >= NCT_EVT_TOTAL) ||
+		(state >= STATE_TOTAL))
+	{
+		__ASSERT_NO_MSG(false);
+		return -EINVAL;
+	}
+
+	if ( state_event_handlers[state][nct_evt->type] != NULL ) {
+
+		err = state_event_handlers[state][nct_evt->type](nct_evt);
 
 		if (err) {
 			LOG_ERR("Handler failed! state: %d, type: %d",
 				state, nct_evt->type);
 		}
-		return err;
+	}
+	else
+	{
+		err = drop_event_handler(nct_evt);
 	}
 
-	__ASSERT_NO_MSG(false);
-
-	return -EINVAL;
+	return err;
 }
 
 static int state_ua_pin_wait(void)
@@ -381,7 +311,6 @@ static int cc_connection_handler(const struct nct_evt *nct_evt)
  * @details This handler allows transition to one of the following states.
  *          a. STATE_UA_PIN_WAIT.
  *          c. STATE_UA_PIN_COMPLETE.
- *          STATE_PATTERN_MISMATCH and STATE_PATTERN_TIMEOUT are not handled.
  */
 static int initiate_n_complete_request_handler(const struct nct_evt *nct_evt)
 {

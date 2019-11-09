@@ -214,8 +214,6 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 		return -ENOENT;
 	}
 
-	printk("%s\n", cJSON_Print(root_obj));
-
 	state_obj = json_object_decode(root_obj, "state");
 	if (state_obj == NULL) {
 		desired_obj = json_object_decode(root_obj, "desired");
@@ -250,6 +248,8 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 		LOG_ERR("Deprecated state. Delete device "
 				"from nrfCloud and "
 				"update device with JITP certificates.");
+		cJSON_Delete(root_obj);
+		return -ENOTSUP;
 	}
 
 	cJSON_Delete(root_obj);
