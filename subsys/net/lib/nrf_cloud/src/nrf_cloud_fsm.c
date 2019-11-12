@@ -18,11 +18,6 @@ LOG_MODULE_REGISTER(nrf_cloud_fsm, CONFIG_NRF_CLOUD_LOG_LEVEL);
  */
 #define CLOUD_STATE_REQ_ID 5678
 
-/**@brief Identifier for message sent to report status in UA_INITIATE state.
- * Can be any unique unsigned 16-bit integer value except zero.
- */
-#define INITIATE_STATUS_REPORT_ID 6789
-
 /**@brief Identifier for message sent to report status in UA_COMPLETE state.
  * Can be any unique unsigned 16-bit integer value except zero.
  */
