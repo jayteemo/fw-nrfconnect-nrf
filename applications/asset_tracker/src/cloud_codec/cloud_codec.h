@@ -60,6 +60,8 @@ enum cloud_channel {
 	CLOUD_CHANNEL_LIGHT_BLUE,
 	/** The IR light level on the device. */
 	CLOUD_CHANNEL_LIGHT_IR,
+	/** The assisted GPS channel. */
+	CLOUD_CHANNEL_ASSISTED_GPS,
 };
 
 #define CLOUD_CHANNEL_STR_GPS "GPS"
@@ -75,6 +77,11 @@ enum cloud_channel {
  */
 #define CLOUD_CHANNEL_STR_DEVICE_INFO "device"
 #define CLOUD_CHANNEL_STR_LIGHT_SENSOR "LIGHT"
+#define CLOUD_CHANNEL_STR_LIGHT_RED "LIGHT_RED"
+#define CLOUD_CHANNEL_STR_LIGHT_GREEN "LIGHT_GREEN"
+#define CLOUD_CHANNEL_STR_LIGHT_BLUE "LIGHT_BLUE"
+#define CLOUD_CHANNEL_STR_LIGHT_IR "LIGHT_IR"
+#define CLOUD_CHANNEL_STR_ASSISTED_GPS "AGPS"
 
 struct cloud_data {
 	char *buf;
@@ -94,17 +101,28 @@ struct cloud_channel_data {
 };
 
 enum cloud_cmd_group {
-	CLOUD_CMD_GROUP_SET,
+	CLOUD_CMD_GROUP_HELLO,
+	CLOUD_CMD_GROUP_START,
+	CLOUD_CMD_GROUP_STOP,
+	CLOUD_CMD_GROUP_INIT,
 	CLOUD_CMD_GROUP_GET,
+	CLOUD_CMD_GROUP_STATUS,
+	CLOUD_CMD_GROUP_DATA,
+	CLOUD_CMD_GROUP_OK,
+	CLOUD_CMD_GROUP_CFG_SET,
+	CLOUD_CMD_GROUP_CFG_GET,
 };
 
-enum cloud_cmd_recipient {
-	CLOUD_RCPT_ENVIRONMENT,
-	CLOUD_RCPT_MOTION,
-	CLOUD_RCPT_UI,
-	CLOUD_RCPT_MODEM_INFO,
-	CLOUD_RCPT_LIGHT,
-};
+#define CLOUD_CMD_GROUP_STR_HELLO	"HELLO"
+#define CLOUD_CMD_GROUP_STR_START	"START"
+#define CLOUD_CMD_GROUP_STR_STOP	"STOP"
+#define CLOUD_CMD_GROUP_STR_INIT	"INIT"
+#define CLOUD_CMD_GROUP_STR_GET		"GET"
+#define CLOUD_CMD_GROUP_STR_STATUS	"STATUS"
+#define CLOUD_CMD_GROUP_STR_DATA	"DATA"
+#define CLOUD_CMD_GROUP_STR_OK		"OK"
+#define CLOUD_CMD_GROUP_STR_CFG_SET	"CFG_SET"
+#define CLOUD_CMD_GROUP_STR_CFG_GET	"CFG_GET"
 
 enum cloud_cmd_type {
 	CLOUD_CMD_ENABLE,
@@ -130,7 +148,6 @@ enum cloud_cmd_state {
 
 struct cloud_command {
 	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
-	enum cloud_cmd_recipient recipient; /* The command's recipient module. */
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
 	double value; /* The value to be written to the recipient/channel. */
