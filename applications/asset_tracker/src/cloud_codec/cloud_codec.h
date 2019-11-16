@@ -62,6 +62,8 @@ enum cloud_channel {
 	CLOUD_CHANNEL_LIGHT_IR,
 	/** The assisted GPS channel. */
 	CLOUD_CHANNEL_ASSISTED_GPS,
+
+	CLOUD_CHANNEL__TOTAL
 };
 
 #define CLOUD_CHANNEL_STR_GPS "GPS"
@@ -82,6 +84,7 @@ enum cloud_channel {
 #define CLOUD_CHANNEL_STR_LIGHT_BLUE "LIGHT_BLUE"
 #define CLOUD_CHANNEL_STR_LIGHT_IR "LIGHT_IR"
 #define CLOUD_CHANNEL_STR_ASSISTED_GPS "AGPS"
+#define CLOUD_CHANNEL_STR_RGB_LED "LED"
 
 struct cloud_data {
 	char *buf;
@@ -111,6 +114,8 @@ enum cloud_cmd_group {
 	CLOUD_CMD_GROUP_OK,
 	CLOUD_CMD_GROUP_CFG_SET,
 	CLOUD_CMD_GROUP_CFG_GET,
+
+	CLOUD_CMD_GROUP__TOTAL
 };
 
 #define CLOUD_CMD_GROUP_STR_HELLO	"HELLO"
@@ -128,16 +133,10 @@ enum cloud_cmd_type {
 	CLOUD_CMD_ENABLE,
 	CLOUD_CMD_THRESHOLD_HIGH,
 	CLOUD_CMD_THRESHOLD_LOW,
-	CLOUD_CMD_READ,
-	CLOUD_CMD_READ_NEW,
-	CLOUD_CMD_PWM,
-	CLOUD_CMD_LED_RED,
-	CLOUD_CMD_LED_GREEN,
-	CLOUD_CMD_LED_BLUE,
-	CLOUD_CMD_LED_PULSE_LENGTH,
-	CLOUD_CMD_LED_PAUSE_LENGTH,
-	CLOUD_CMD_PLAY_MELODY,
-	CLOUD_CMD_PLAY_NOTE,
+	CLOUD_CMD_INTERVAL,
+	CLOUD_CMD_COLOR,
+
+	CLOUD_CMD__TOTAL
 };
 
 enum cloud_cmd_state {
@@ -145,6 +144,12 @@ enum cloud_cmd_state {
 	CLOUD_CMD_STATE_FALSE = 0,
 	CLOUD_CMD_STATE_TRUE,
 };
+
+#define CLOUD_CMD_TYPE_STR_ENABLE		"enable"
+#define CLOUD_CMD_TYPE_STR_THRESH_LO	"thresh_lo"
+#define CLOUD_CMD_TYPE_STR_THRESH_HI	"thresh_hi"
+#define CLOUD_CMD_TYPE_STR_INTERVAL		"interval"
+#define CLOUD_CMD_TYPE_STR_COLOR		"color"
 
 struct cloud_command {
 	enum cloud_cmd_group group; /* The group the decoded command belongs to. */

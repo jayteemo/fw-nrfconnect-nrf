@@ -337,6 +337,14 @@ static void motion_handler(motion_data_t  motion_data)
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
+
+	if ( (cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
+		 (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
+		 (cmd->type == CLOUD_CMD_COLOR) )
+	{
+		ui_led_set_color(127, 0, 0);
+	}
+#if 0
 	/* Command handling goes here. */
 	if (cmd->recipient == CLOUD_RCPT_MODEM_INFO) {
 #if CONFIG_MODEM_INFO
@@ -353,6 +361,7 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 			ui_led_set_color(0, 0, 127);
 		}
 	}
+#endif
 }
 
 #if CONFIG_MODEM_INFO
@@ -736,7 +745,8 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		printk("CLOUD_EVT_DATA_SENT\n");
 		break;
 	case CLOUD_EVT_DATA_RECEIVED:
-		printk("CLOUD_EVT_DATA_RECEIVED\n");
+		evt->data.msg.buf[evt->data.msg.len] =  0;
+		printk("CLOUD_EVT_DATA_RECEIVED: %s\n", evt->data.msg.buf);
 		cloud_decode_command(evt->data.msg.buf);
 		break;
 	case CLOUD_EVT_PAIR_REQUEST:

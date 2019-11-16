@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <zephyr.h>
 #include <zephyr/types.h>
 #include <net/cloud.h>
@@ -18,9 +19,14 @@
 #include <logging/log.h>
 #include "env_sensors.h"
 
+LOG_MODULE_REGISTER(cloud_codec, CONFIG_NRF_CLOUD_LOG_LEVEL);
+
+#define CMD_GROUP_KEY_STR		"messageType"
+#define CMD_CHAN_KEY_STR		"appId"
+#define CMD_DATA_TYPE_KEY_STR	"data"
+
 struct cmd {
-	char *name;
-	char *payload_key;
+	const char *const key;
 	union {
 		enum cloud_cmd_group group;
 		enum cloud_channel channel;
@@ -52,74 +58,31 @@ struct cloud_sensor_chan_cfg {
 	struct sensor_chan_cfg cfg;
 };
 
-static const char *const channel_type_str[] = {
-	[CLOUD_CHANNEL_GPS] = CLOUD_CHANNEL_STR_GPS,
-	[CLOUD_CHANNEL_FLIP] = CLOUD_CHANNEL_STR_FLIP,
-	[CLOUD_CHANNEL_BUTTON] = CLOUD_CHANNEL_STR_BUTTON,
-	[CLOUD_CHANNEL_TEMP] = CLOUD_CHANNEL_STR_TEMP,
-	[CLOUD_CHANNEL_HUMID] = CLOUD_CHANNEL_STR_HUMID,
-	[CLOUD_CHANNEL_AIR_PRESS] = CLOUD_CHANNEL_STR_AIR_PRESS,
-	[CLOUD_CHANNEL_AIR_QUAL] = CLOUD_CHANNEL_STR_AIR_QUAL,
-	[CLOUD_CHANNEL_LTE_LINK_RSRP] = CLOUD_CHANNEL_STR_LTE_LINK_RSRP,
-	[CLOUD_CHANNEL_DEVICE_INFO] = CLOUD_CHANNEL_STR_DEVICE_INFO,
-	[CLOUD_CHANNEL_LIGHT_SENSOR] = CLOUD_CHANNEL_STR_LIGHT_SENSOR,
-	[CLOUD_CHANNEL_LIGHT_RED] = CLOUD_CHANNEL_STR_LIGHT_RED,
-	[CLOUD_CHANNEL_LIGHT_GREEN] = CLOUD_CHANNEL_STR_LIGHT_GREEN,
-	[CLOUD_CHANNEL_LIGHT_BLUE] = CLOUD_CHANNEL_STR_LIGHT_BLUE,
-	[CLOUD_CHANNEL_LIGHT_IR] = CLOUD_CHANNEL_STR_LIGHT_IR,
-};
-
-static const char *const cmd_group_str[] = {
-	[CLOUD_CMD_GROUP_HELLO] = CLOUD_CMD_GROUP_STR_HELLO,
-	[CLOUD_CMD_GROUP_START] = CLOUD_CMD_GROUP_STR_START,
-	[CLOUD_CMD_GROUP_STOP] = CLOUD_CMD_GROUP_STR_STOP,
-	[CLOUD_CMD_GROUP_INIT] = CLOUD_CMD_GROUP_STR_INIT,
-	[CLOUD_CMD_GROUP_GET] = CLOUD_CMD_GROUP_STR_GET,
-	[CLOUD_CMD_GROUP_STATUS] = CLOUD_CMD_GROUP_STR_STATUS,
-	[CLOUD_CMD_GROUP_DATA] = CLOUD_CMD_GROUP_STR_DATA,
-	[CLOUD_CMD_GROUP_OK] = CLOUD_CMD_GROUP_STR_OK,
-	[CLOUD_CMD_GROUP_CFG_SET] = CLOUD_CMD_GROUP_STR_CFG_SET,
-	[CLOUD_CMD_GROUP_CFG_GET] = CLOUD_CMD_GROUP_STR_CFG_GET,
-};
-
-#define PAYLOAD_KEY_STR_CFG		"cfg"
-#define PAYLOAD_KEY_STR_DATA	"data"
-
 #define CMD_ARRAY(...) ((struct cmd[]) {__VA_ARGS__})
 
 #define CMD_NEW_TYPE(_type)			\
 	{ 						\
-		.name = STRINGIFY(_name),		\
-		.name = STRINGIFY(_name),		\
+		.key = CMD_DATA_TYPE_KEY_STR,	\
 		.type = _type, 				\
 	}
 
 #define CMD_NEW_CHAN(_chan, _children)		\
 	{						\
-		.name = channel_type_str(_chan),		\
+		.key = CMD_CHAN_KEY_STR,	\
 		.channel = _chan,			\
 		.children = _children,			\
 		.num_children = ARRAY_SIZE(_children),	\
 	}
 
-#define CMD_NEW_RECIPIENT(_name, _recipient, _children)	\
-	{						\
-		.name = STRINGIFY(_name),		\
-		.recipient = _recipient,		\
-		.children = _children,			\
-		.num_children = ARRAY_SIZE(_children),	\
-	}
-
-#define CMD_NEW_GROUP(_var_name, _group, _payload_key, _children)		\
+#define CMD_NEW_GROUP(_var_name, _group, _children)		\
 	struct cmd _var_name = {				\
-		.name = cmd_group_str[_group],		\
-		.payload_key = _payload_key, \
+		.key = CMD_GROUP_KEY_STR,	\
 		.group = _group,			\
 		.children = _children,			\
 		.num_children = ARRAY_SIZE(_children),	\
 	};
 
-static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, PAYLOAD_KEY_STR_CFG, CMD_ARRAY(
+static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, CMD_ARRAY(
 		CMD_NEW_CHAN(CLOUD_CHANNEL_HUMID, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_HIGH),
@@ -146,6 +109,7 @@ static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, PAYLOAD_KEY_STR_CFG
 		),
 		CMD_NEW_CHAN(CLOUD_CHANNEL_GPS, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(CLOUD_CMD_INTERVAL)
 			)
 		),
 		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_SENSOR, CMD_ARRAY(
@@ -158,26 +122,85 @@ static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, PAYLOAD_KEY_STR_CFG
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_LOW)
 			)
 		),
-		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_RED, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_GREEN, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_LOW)
 			)
 		),
-		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_RED, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_BLUE, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_LOW)
 			)
 		),
-		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_RED, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_IR, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_HIGH),
 			CMD_NEW_TYPE(CLOUD_CMD_THRESHOLD_LOW)
+			)
+		),
+		CMD_NEW_CHAN(CLOUD_CHANNEL_RGB_LED, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_COLOR),
+			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
 			)
 		),
 	)
 );
+
+struct cmd * cmd_groups[] = {&group_cfg_set};
+static cloud_cmd_cb_t cloud_command_cb;
+struct cloud_command cmd_parsed;
+
+static const char *const channel_type_str[] = {
+	[CLOUD_CHANNEL_GPS] = CLOUD_CHANNEL_STR_GPS,
+	[CLOUD_CHANNEL_FLIP] = CLOUD_CHANNEL_STR_FLIP,
+	[CLOUD_CHANNEL_IMPACT] = "",
+	[CLOUD_CHANNEL_BUTTON] = CLOUD_CHANNEL_STR_BUTTON,
+	[CLOUD_CHANNEL_PIN] = "",
+	[CLOUD_CHANNEL_RGB_LED] = CLOUD_CHANNEL_STR_RGB_LED,
+	[CLOUD_CHANNEL_BUZZER] = "",
+	[CLOUD_CHANNEL_TEMP] = CLOUD_CHANNEL_STR_TEMP,
+	[CLOUD_CHANNEL_HUMID] = CLOUD_CHANNEL_STR_HUMID,
+	[CLOUD_CHANNEL_AIR_PRESS] = CLOUD_CHANNEL_STR_AIR_PRESS,
+	[CLOUD_CHANNEL_AIR_QUAL] = CLOUD_CHANNEL_STR_AIR_QUAL,
+	[CLOUD_CHANNEL_LTE_LINK_RSRP] = CLOUD_CHANNEL_STR_LTE_LINK_RSRP,
+	[CLOUD_CHANNEL_DEVICE_INFO] = CLOUD_CHANNEL_STR_DEVICE_INFO,
+	[CLOUD_CHANNEL_LIGHT_SENSOR] = CLOUD_CHANNEL_STR_LIGHT_SENSOR,
+	[CLOUD_CHANNEL_LIGHT_RED] = CLOUD_CHANNEL_STR_LIGHT_RED,
+	[CLOUD_CHANNEL_LIGHT_GREEN] = CLOUD_CHANNEL_STR_LIGHT_GREEN,
+	[CLOUD_CHANNEL_LIGHT_BLUE] = CLOUD_CHANNEL_STR_LIGHT_BLUE,
+	[CLOUD_CHANNEL_LIGHT_IR] = CLOUD_CHANNEL_STR_LIGHT_IR,
+	[CLOUD_CHANNEL_ASSISTED_GPS] = CLOUD_CHANNEL_STR_ASSISTED_GPS,
+
+};
+BUILD_ASSERT(ARRAY_SIZE(channel_type_str) == CLOUD_CHANNEL__TOTAL);
+
+static const char *const cmd_group_str[] = {
+	[CLOUD_CMD_GROUP_HELLO] = CLOUD_CMD_GROUP_STR_HELLO,
+	[CLOUD_CMD_GROUP_START] = CLOUD_CMD_GROUP_STR_START,
+	[CLOUD_CMD_GROUP_STOP] = CLOUD_CMD_GROUP_STR_STOP,
+	[CLOUD_CMD_GROUP_INIT] = CLOUD_CMD_GROUP_STR_INIT,
+	[CLOUD_CMD_GROUP_GET] = CLOUD_CMD_GROUP_STR_GET,
+	[CLOUD_CMD_GROUP_STATUS] = CLOUD_CMD_GROUP_STR_STATUS,
+	[CLOUD_CMD_GROUP_DATA] = CLOUD_CMD_GROUP_STR_DATA,
+	[CLOUD_CMD_GROUP_OK] = CLOUD_CMD_GROUP_STR_OK,
+	[CLOUD_CMD_GROUP_CFG_SET] = CLOUD_CMD_GROUP_STR_CFG_SET,
+	[CLOUD_CMD_GROUP_CFG_GET] = CLOUD_CMD_GROUP_STR_CFG_GET,
+};
+BUILD_ASSERT(ARRAY_SIZE(cmd_group_str) == CLOUD_CMD_GROUP__TOTAL);
+
+static const char *const cmd_type_str[] = {
+	[CLOUD_CMD_ENABLE] = CLOUD_CMD_TYPE_STR_ENABLE,
+	[CLOUD_CMD_THRESHOLD_HIGH] = CLOUD_CMD_TYPE_STR_THRESH_LO,
+	[CLOUD_CMD_THRESHOLD_LOW] = CLOUD_CMD_TYPE_STR_THRESH_HI,
+	[CLOUD_CMD_INTERVAL] = CLOUD_CMD_TYPE_STR_INTERVAL,
+	[CLOUD_CMD_COLOR] = CLOUD_CMD_TYPE_STR_COLOR,
+};
+BUILD_ASSERT(ARRAY_SIZE(cmd_type_str) == CLOUD_CMD__TOTAL);
+
+static cloud_cmd_cb_t cloud_command_cb;
+struct cloud_command cmd_parsed;
 
 static struct cloud_sensor_chan_cfg sensor_cfg[] = {
 	{ .chan = CLOUD_CHANNEL_TEMP,
@@ -197,9 +220,6 @@ static struct cloud_sensor_chan_cfg sensor_cfg[] = {
 	{ .chan = CLOUD_CHANNEL_LIGHT_IR,
 	  .cfg = { .value = { [SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE] = true } } }
 };
-
-static cloud_cmd_cb_t cloud_command_cb;
-struct cloud_command cmd_parsed;
 
 static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *const cmd);
 
@@ -231,6 +251,16 @@ static cJSON *json_object_decode(cJSON *obj, const char *str)
 	return obj ? cJSON_GetObjectItem(obj, str) : NULL;
 }
 
+static bool json_value_string_compare(cJSON *obj, const char *const str)
+{
+	char * json_str = cJSON_GetStringValue(obj);
+	if ((json_str == NULL) || (str == NULL)) {
+		return false;
+	}
+
+	return (strncmp(json_str,str,strlen(str)) == 0);
+}
+
 int cloud_encode_data(const struct cloud_channel_data *channel,
 		      struct cloud_msg *output)
 {
@@ -247,9 +277,9 @@ int cloud_encode_data(const struct cloud_channel_data *channel,
 		return -ENOMEM;
 	}
 
-	ret = json_add_str(root_obj, "appId", channel_type_str[channel->type]);
-	ret += json_add_str(root_obj, "data", channel->data.buf);
-	ret += json_add_str(root_obj, "messageType", "DATA");
+	ret = json_add_str(root_obj, CMD_CHAN_KEY_STR, channel_type_str[channel->type]);
+	ret += json_add_str(root_obj, CMD_DATA_TYPE_KEY_STR, channel->data.buf);
+	ret += json_add_str(root_obj, CMD_GROUP_KEY_STR, CLOUD_CMD_GROUP_STR_DATA);
 	if (ret != 0) {
 		cJSON_Delete(root_obj);
 		return -ENOMEM;
@@ -327,17 +357,161 @@ int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
 	return 0;
 }
 
-static int cloud_search_cmd(cJSON *group_obj, enum cloud_cmd_group group)
+static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_obj,
+		struct cloud_command * const parsed_cmd)
 {
-	struct cmd *cmd_group;
-	cJSON *recipient_obj = NULL;
-	cJSON *channel_obj = NULL;
-	cJSON *type_obj = NULL;
+	cJSON * decoded_obj = NULL;
 
-	if (group_obj == NULL) {
+	if ((type_obj == NULL) || (parsed_cmd == NULL))
+	{
 		return -EINVAL;
 	}
 
+	if (!cJSON_IsObject(type_obj))
+	{
+		return -ENOTSUP;
+	}
+
+	decoded_obj = json_object_decode(type_obj,cmd_type_str[type_cmd->type]);
+
+	if (!decoded_obj)
+	{
+		return -ENOENT;
+	}
+
+	switch (type_cmd->type)
+	{
+		case CLOUD_CMD_ENABLE:
+		{
+			if ( !cJSON_IsBool(decoded_obj) )
+			{
+				return -ESRCH;
+			}
+
+			parsed_cmd->state = (decoded_obj->valueint != 0);
+			break;
+		}
+		case CLOUD_CMD_THRESHOLD_LOW:
+		case CLOUD_CMD_THRESHOLD_HIGH:
+		case CLOUD_CMD_INTERVAL:
+		{
+			if ( !cJSON_IsNumber(decoded_obj) )
+			{
+				return -ESRCH;
+			}
+
+			parsed_cmd->value = decoded_obj->valuedouble;
+			break;
+		}
+		case CLOUD_CMD_COLOR:
+		{
+			if ( !cJSON_IsString(decoded_obj) )
+			{
+				return -ESRCH;
+			}
+
+			parsed_cmd->value = (double)strtol(
+					cJSON_GetStringValue(decoded_obj), NULL, 16);
+			break;
+		}
+		default:
+		{
+			return -ENOTSUP;
+		}
+	}
+
+	parsed_cmd->type = type_cmd->type;
+
+	return 0;
+}
+
+static int cloud_search_cmd(cJSON *root_obj)
+{
+	struct cmd * group = NULL;
+	struct cmd * chan = NULL;
+	struct cmd * type = NULL;
+
+	cJSON *group_obj	= NULL;
+	cJSON *channel_obj	= NULL;
+	cJSON *type_obj		= NULL;
+
+	if (root_obj == NULL) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(cmd_groups); ++i) {
+
+		group_obj = json_object_decode(root_obj, cmd_groups[i]->key);
+
+		if ( group_obj != NULL) {
+			if (json_value_string_compare(group_obj, cmd_group_str[cmd_groups[i]->group])) {
+				group = cmd_groups[i];
+				break;
+			}
+		}
+	}
+
+	if (group == NULL) {
+		return -ENOTSUP;
+	}
+
+	cmd_parsed.group = group->group;
+
+	for (size_t j = 0; j < group->num_children; ++j) {
+
+		channel_obj = json_object_decode(root_obj, group->children[j].key);
+
+		if ( channel_obj != NULL) {
+			if (json_value_string_compare(channel_obj,
+					channel_type_str[group->children[j].channel])) {
+				chan = &group->children[j];
+				break;
+			}
+		}
+	}
+
+	if (chan == NULL) {
+		return -ENOTSUP;
+	}
+
+	cmd_parsed.channel = chan->channel;
+
+	for (size_t k = 0; k < chan->num_children; ++k) {
+
+		type = &chan->children[k];
+		type_obj = json_object_decode(root_obj, type->key);
+
+		if ( type_obj != NULL) {
+
+			if (cloud_cmd_parse_type(type, type_obj, &cmd_parsed) != 0)
+			{
+				LOG_ERR("Unhandled cloud cmd format for %s %s",
+						cmd_group_str[group->group],
+						channel_type_str[chan->channel]);
+				continue;
+			}
+
+			cloud_command_cb(&cmd_parsed);
+		}
+	}
+#if 0
+	payload_obj = json_object_decode(root_obj, PAYLOAD_KEY_STR_DATA);
+
+	for (size_t k = 0; k < chan->num_children; ++k) {
+		struct cmd *type = &chan->children[k];
+
+		if ( cloud_cmd_parse_type(payload_obj, &cmd_parsed) != 0 )
+		{
+			NRF_LOG_ERR("Invalid cloud cmd format for %s %s %s",
+					group->value, group->name, type->name);
+			continue;
+		}
+
+		cloud_command_cb(&cmd_parsed);
+	}
+#endif
+
+#if 0
 	if (group == CLOUD_CMD_GROUP_SET) {
 		cmd_group = &group_cfg_set;
 	} else if (group == CLOUD_CMD_GROUP_GET) {
@@ -404,15 +578,15 @@ static int cloud_search_cmd(cJSON *group_obj, enum cloud_cmd_group group)
 			}
 		}
 	}
+#endif
 
 	return 0;
 }
 
 int cloud_decode_command(char const *input)
 {
-	cJSON *root_obj = NULL;
-	cJSON *get_obj = NULL;
-	cJSON *set_obj = NULL;
+	//int ret;
+	cJSON *root_obj		= NULL;
 
 	if (input == NULL) {
 		return -EINVAL;
@@ -420,27 +594,11 @@ int cloud_decode_command(char const *input)
 
 	root_obj = cJSON_Parse(input);
 	if (root_obj == NULL) {
+		LOG_ERR("cloud_decode_command: unable to parse input");
 		return -ENOENT;
 	}
 
-	get_obj = json_object_decode(root_obj, "get");
-	set_obj = json_object_decode(root_obj, "set");
-
-	if ((get_obj == NULL) && (set_obj == NULL)) {
-		return -ENOTSUP;
-	}
-
-	if (get_obj != NULL) {
-		cmd_parsed.group = group_get.group;
-		(void)cloud_search_cmd(get_obj, cmd_parsed.group);
-	}
-
-	if (set_obj != NULL) {
-		cmd_parsed.group = group_set.group;
-		(void)cloud_search_cmd(set_obj, cmd_parsed.group);
-	}
-
-	cJSON_Delete(root_obj);
+	cloud_search_cmd(root_obj);
 
 	return 0;
 }
