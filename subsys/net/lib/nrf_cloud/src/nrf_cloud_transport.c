@@ -617,7 +617,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			_mqtt_evt->param.puback.message_id,
 			_mqtt_evt->result);
 
-		evt.type = NCT_EVT_CC_TX_DATA_CNF;
+		evt.type = NCT_EVT_CC_TX_DATA_ACK;
 		evt.param.data_id = _mqtt_evt->param.puback.message_id;
 		event_notify = true;
 		break;

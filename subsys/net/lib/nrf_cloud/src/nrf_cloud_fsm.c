@@ -38,12 +38,12 @@ static int cc_connection_handler(const struct nct_evt *nct_evt);
 static int initiate_n_complete_request_handler(const struct nct_evt *nct_evt);
 static int initiate_cmd_handler(const struct nct_evt *nct_evt);
 static int initiate_cmd_in_dc_conn_handler(const struct nct_evt *nct_evt);
-static int cc_tx_cnf_handler(const struct nct_evt *nct_evt);
-static int cc_tx_cnf_in_state_requested_handler(const struct nct_evt *nct_evt);
+static int cc_tx_ack_handler(const struct nct_evt *nct_evt);
+static int cc_tx_ack_in_state_requested_handler(const struct nct_evt *nct_evt);
 static int cc_disconnection_handler(const struct nct_evt *nct_evt);
 static int dc_connection_handler(const struct nct_evt *nct_evt);
 static int dc_rx_data_handler(const struct nct_evt *nct_evt);
-static int dc_tx_cnf_handler(const struct nct_evt *nct_evt);
+static int dc_tx_ack_handler(const struct nct_evt *nct_evt);
 static int dc_disconnection_handler(const struct nct_evt *nct_evt);
 
 /* Drop all the events. */
@@ -70,14 +70,14 @@ static const fsm_transition cc_connected_fsm_transition[NCT_EVT_TOTAL] = {
 
 static const fsm_transition cloud_requested_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_n_complete_request_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_in_state_requested_handler,
+	[NCT_EVT_CC_TX_DATA_ACK]	= cc_tx_ack_in_state_requested_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
 };
 
 static const fsm_transition ua_complete_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
+	[NCT_EVT_CC_TX_DATA_ACK]	= cc_tx_ack_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
 };
@@ -85,16 +85,16 @@ static const fsm_transition ua_complete_fsm_transition[NCT_EVT_TOTAL] = {
 static const fsm_transition dc_connecting_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_DC_CONNECTED]		= dc_connection_handler,
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_in_dc_conn_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
+	[NCT_EVT_CC_TX_DATA_ACK]	= cc_tx_ack_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
 };
 
 static const fsm_transition dc_connected_fsm_transition[NCT_EVT_TOTAL] = {
 	[NCT_EVT_CC_RX_DATA]		= initiate_cmd_in_dc_conn_handler,
-	[NCT_EVT_CC_TX_DATA_CNF]	= cc_tx_cnf_handler,
+	[NCT_EVT_CC_TX_DATA_ACK]	= cc_tx_ack_handler,
 	[NCT_EVT_DC_RX_DATA]		= dc_rx_data_handler,
-	[NCT_EVT_DC_TX_DATA_CNF]	= dc_tx_cnf_handler,
+	[NCT_EVT_DC_TX_DATA_ACK]	= dc_tx_ack_handler,
 	[NCT_EVT_CC_DISCONNECTED]	= cc_disconnection_handler,
 	[NCT_EVT_DC_DISCONNECTED]	= dc_disconnection_handler,
 	[NCT_EVT_DISCONNECTED]		= disconnection_handler,
@@ -392,7 +392,7 @@ static int initiate_cmd_in_dc_conn_handler(const struct nct_evt *nct_evt)
 	return 0;
 }
 
-static int cc_tx_cnf_handler(const struct nct_evt *nct_evt)
+static int cc_tx_ack_handler(const struct nct_evt *nct_evt)
 {
 	int err;
 
@@ -414,7 +414,7 @@ static int cc_tx_cnf_handler(const struct nct_evt *nct_evt)
 	return 0;
 }
 
-static int cc_tx_cnf_in_state_requested_handler(const struct nct_evt *nct_evt)
+static int cc_tx_ack_in_state_requested_handler(const struct nct_evt *nct_evt)
 {
 	if (nct_evt->param.data_id == CLOUD_STATE_REQ_ID) {
 		nfsm_set_current_state_and_notify(STATE_CLOUD_STATE_REQUESTED,
@@ -453,7 +453,7 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 	return 0;
 }
 
-static int dc_tx_cnf_handler(const struct nct_evt *nct_evt)
+static int dc_tx_ack_handler(const struct nct_evt *nct_evt)
 {
 	return 0; /* Nothing to do */
 }
