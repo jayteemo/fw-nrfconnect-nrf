@@ -65,6 +65,11 @@ defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
 #define CLOUD_LED_OFF_STR "{\"led\":\"off\"}"
 #define CLOUD_LED_MSK UI_LED_1
 
+/* Interval in milliseconds which the device will retry cloud connection
+ * after an association request.
+ */
+#define ASSOCIATION_REQ_RETRY_MS	30000
+
 struct rsrp_data {
 	u16_t value;
 	u16_t offset;
@@ -79,9 +84,6 @@ static struct rsrp_data rsrp = {
 
 
 static struct cloud_backend *cloud_backend;
-
-static bool recently_associated;
-static bool association_with_pin;
 
 /* Sensor data */
 static struct gps_data gps_data;
@@ -101,6 +103,9 @@ static atomic_val_t send_data_enable;
 /* Flag used for flip detection */
 static bool flip_mode_enabled = true;
 
+/* Variable to keep track of nRF cloud user association request. */
+static atomic_val_t association_requested;
+
 /* Structures for work */
 static struct k_work connect_work;
 static struct k_work send_gps_data_work;
@@ -108,6 +113,7 @@ static struct k_work send_button_data_work;
 static struct k_delayed_work send_env_data_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
+static struct k_delayed_work association_retry_work;
 static struct k_work device_status_work;
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
@@ -624,62 +630,30 @@ void sensors_start(void)
 /**@brief nRF Cloud specific callback for cloud association event. */
 static void on_user_pairing_req(const struct cloud_event *evt)
 {
-	association_with_pin = true;
-	ui_led_set_pattern(UI_CLOUD_PAIRING);
-	printk("Waiting for cloud association with PIN\n");
+	if (atomic_get(&association_requested) == 0)
+	{
+		atomic_set(&association_requested, 1);
+
+		ui_led_set_pattern(UI_CLOUD_PAIRING);
+		printk("Add device to cloud account.\n");
+
+		if (k_delayed_work_submit(&association_retry_work,
+				ASSOCIATION_REQ_RETRY_MS)) {
+			printk("A manual reboot may be required after "
+					"device is added to cloud account.\n");
+		}
+		else {
+			printk("Waiting for cloud association, retrying in %d seconds...\n",
+					ASSOCIATION_REQ_RETRY_MS/1000);
+		}
+	}
 }
 
 /** @brief Handle procedures after successful association with nRF Cloud. */
 void on_pairing_done(void)
 {
-	if (association_with_pin) {
-		recently_associated = true;
-
-		printk("Successful user association.\n");
-		printk("The device will attempt to reconnect to ");
-		printk("nRF Cloud. It may reset in the process.\n");
-		printk("Manual reset may be required if connection ");
-		printk("to nRF Cloud is not established within ");
-		printk("20 - 30 seconds.\n");
-	}
-	else {
-		return;
-	}
-
-	int err;
-
-	printk("Disconnecting from nRF cloud...\n");
-
-	err = cloud_disconnect(cloud_backend);
-	if (err == 0) {
-		printk("Reconnecting to cloud...\n");
-		err = cloud_connect(cloud_backend);
-		if (err == 0) {
-			return;
-		}
-		printk("Could not reconnect\n");
-	} else {
-		printk("Disconnection failed\n");
-	}
-
-	printk("Fallback to controlled reboot\n");
-	printk("Shutting down LTE link...\n");
-
-#if defined(CONFIG_BSD_LIBRARY)
-	err = lte_lc_power_off();
-	if (err) {
-		printk("Could not shut down link\n");
-	} else {
-		printk("LTE link disconnected\n");
-	}
-#endif
-
-#ifdef CONFIG_REBOOT
-	printk("Rebooting...\n");
-	LOG_PANIC();
-	sys_reboot(SYS_REBOOT_COLD);
-#endif
-	printk("**** Manual reboot required ***\n");
+	atomic_set(&association_requested, 0);
+	(void)k_delayed_work_cancel(&association_retry_work);
 }
 
 void cloud_event_handler(const struct cloud_backend *const backend,
@@ -768,6 +742,47 @@ static void long_press_handler(struct k_work *work)
 	}
 }
 
+static void association_retry(struct k_work *work)
+{
+	int err;
+
+	if (atomic_get(&association_requested)) {
+		atomic_set(&association_requested, 0);
+
+		printk("Disconnecting from cloud...\n");
+		err = cloud_disconnect(cloud_backend);
+		if (err == 0) {
+			printk("Reconnecting to cloud...\n");
+			err = cloud_connect(cloud_backend);
+			if (err == 0) {
+				return;
+			}
+			printk("Could not reconnect\n");
+		} else {
+			printk("Disconnection failed\n");
+		}
+
+		printk("Fallback to controlled reboot\n");
+		printk("Shutting down LTE link...\n");
+
+	#if defined(CONFIG_BSD_LIBRARY)
+		err = lte_lc_power_off();
+		if (err) {
+			printk("Could not shut down link\n");
+		} else {
+			printk("LTE link disconnected\n");
+		}
+	#endif
+
+	#ifdef CONFIG_REBOOT
+		printk("Rebooting...\n");
+		LOG_PANIC();
+		sys_reboot(SYS_REBOOT_COLD);
+	#endif
+		printk("**** Manual reboot required ***\n");
+	}
+}
+
 /**@brief Initializes and submits delayed work. */
 static void work_init(void)
 {
@@ -778,6 +793,7 @@ static void work_init(void)
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
 	k_work_init(&device_status_work, device_status_send);
+	k_delayed_work_init(&association_retry_work, association_retry);
 #if CONFIG_MODEM_INFO
 	k_work_init(&rsrp_work, modem_rsrp_data_send);
 #endif /* CONFIG_MODEM_INFO */
