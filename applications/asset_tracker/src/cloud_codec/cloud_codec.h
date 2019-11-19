@@ -130,6 +130,7 @@ enum cloud_cmd_group {
 #define CLOUD_CMD_GROUP_STR_CFG_GET	"CFG_GET"
 
 enum cloud_cmd_type {
+	CLOUD_CMD_EMPTY,
 	CLOUD_CMD_ENABLE,
 	CLOUD_CMD_THRESHOLD_HIGH,
 	CLOUD_CMD_THRESHOLD_LOW,

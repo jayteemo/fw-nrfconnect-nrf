@@ -148,7 +148,15 @@ static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, CMD_ARRAY(
 	)
 );
 
-struct cmd * cmd_groups[] = {&group_cfg_set};
+static CMD_NEW_GROUP(group_get, CLOUD_CMD_GROUP_GET, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_LTE_LINK_RSRP, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
+			)
+		),
+	)
+);
+
+struct cmd * cmd_groups[] = {&group_cfg_set, &group_get};
 static cloud_cmd_cb_t cloud_command_cb;
 struct cloud_command cmd_parsed;
 
@@ -362,8 +370,18 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 {
 	cJSON * decoded_obj = NULL;
 
-	if ((type_obj == NULL) || (parsed_cmd == NULL))
+	if ((type_cmd == NULL) || (parsed_cmd == NULL))
 	{
+		return -EINVAL;
+	}
+
+	if (type_obj == NULL) {
+		/* an "empty" cmd type will have no data */
+		if (type_cmd->type == CLOUD_CMD_EMPTY) {
+			parsed_cmd->type = type_cmd->type;
+			return 0;
+		}
+
 		return -EINVAL;
 	}
 
@@ -479,106 +497,24 @@ static int cloud_search_cmd(cJSON *root_obj)
 	for (size_t k = 0; k < chan->num_children; ++k) {
 
 		type = &chan->children[k];
+
 		type_obj = json_object_decode(root_obj, type->key);
 
-		if ( type_obj != NULL) {
 
-			if (cloud_cmd_parse_type(type, type_obj, &cmd_parsed) != 0)
-			{
-				LOG_ERR("Unhandled cloud cmd format for %s %s",
-						cmd_group_str[group->group],
-						channel_type_str[chan->channel]);
-				continue;
-			}
+		if (cloud_cmd_parse_type(type, type_obj, &cmd_parsed) != 0)	{
+			LOG_ERR("Unhandled cloud cmd format for %s %s",
+					cmd_group_str[group->group],
+					channel_type_str[chan->channel]);
+			continue;
+		}
 
+		// TODO: handle internal (e.g. threshold cmds)
+
+		// pass commands to user
+		if (cloud_command_cb) {
 			cloud_command_cb(&cmd_parsed);
 		}
 	}
-#if 0
-	payload_obj = json_object_decode(root_obj, PAYLOAD_KEY_STR_DATA);
-
-	for (size_t k = 0; k < chan->num_children; ++k) {
-		struct cmd *type = &chan->children[k];
-
-		if ( cloud_cmd_parse_type(payload_obj, &cmd_parsed) != 0 )
-		{
-			NRF_LOG_ERR("Invalid cloud cmd format for %s %s %s",
-					group->value, group->name, type->name);
-			continue;
-		}
-
-		cloud_command_cb(&cmd_parsed);
-	}
-#endif
-
-#if 0
-	if (group == CLOUD_CMD_GROUP_SET) {
-		cmd_group = &group_cfg_set;
-	} else if (group == CLOUD_CMD_GROUP_GET) {
-		cmd_group = &group_get;
-	} else {
-		return -EINVAL;
-	}
-
-	for (size_t i = 0; i < cmd_group->num_children; i++) {
-		struct cmd rcpt = cmd_group->children[i];
-		recipient_obj = json_object_decode(group_obj, rcpt.name);
-		if (recipient_obj == NULL) {
-			continue;
-		}
-
-		cmd_parsed.recipient = rcpt.recipient;
-
-		for (size_t j = 0; j < rcpt.num_children; j++) {
-			struct cmd chan = rcpt.children[j];
-			channel_obj =
-				json_object_decode(recipient_obj, chan.name);
-			if (channel_obj == NULL) {
-				continue;
-			}
-
-			cmd_parsed.channel = chan.channel;
-
-			for (size_t k = 0; k < chan.num_children; k++) {
-				struct cmd typ = chan.children[k];
-				type_obj = json_object_decode(channel_obj,
-							      typ.name);
-				if (type_obj == NULL) {
-					continue;
-				}
-
-				cmd_parsed.type = typ.type;
-				cmd_parsed.state = CLOUD_CMD_STATE_UNDEFINED;
-				cmd_parsed.value = 0;
-
-				if (cJSON_IsNull(type_obj)) {
-					cmd_parsed.state =
-						CLOUD_CMD_STATE_FALSE;
-				} else if (cJSON_IsBool(type_obj)) {
-					cmd_parsed.state =
-						cJSON_IsTrue(type_obj) ?
-							CLOUD_CMD_STATE_TRUE :
-							CLOUD_CMD_STATE_FALSE;
-				} else if (cJSON_IsNumber(type_obj)) {
-					cmd_parsed.value =
-						type_obj->valuedouble;
-				} else {
-					continue;
-				}
-
-				if ((group == CLOUD_CMD_GROUP_SET) &&
-				    (cloud_cmd_handle_sensor_set_chan_cfg(
-					     &cmd_parsed) == 0)) {
-					/* no need to pass to cb if */
-					/* cmd was successfully handled */
-					continue;
-				}
-
-				cloud_command_cb(&cmd_parsed);
-			}
-		}
-	}
-#endif
 
 	return 0;
 }

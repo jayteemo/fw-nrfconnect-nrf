@@ -337,29 +337,20 @@ static void motion_handler(motion_data_t  motion_data)
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
-
-	if ( (cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
-		 (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
-		 (cmd->type == CLOUD_CMD_COLOR) )
-	{
-		ui_led_set_color(127, 0, 0);
-	}
-#if 0
 	/* Command handling goes here. */
-	if (cmd->recipient == CLOUD_RCPT_MODEM_INFO) {
+	if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
+		(cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
+		(cmd->type == CLOUD_CMD_COLOR))	{
+		ui_led_set_color( ((u32_t)cmd->value>>16) & 0xFF,
+						  ((u32_t)cmd->value>>8) & 0xFF,
+						  ((u32_t)cmd->value) & 0xFF);
+	}
 #if CONFIG_MODEM_INFO
-		if (cmd->type == CLOUD_CMD_READ) {
-			device_status_send(NULL);
-		}
-#endif
-	} else if (cmd->recipient == CLOUD_RCPT_UI) {
-		if (cmd->type == CLOUD_CMD_LED_RED) {
-			ui_led_set_color(127, 0, 0);
-		} else if (cmd->type == CLOUD_CMD_LED_GREEN) {
-			ui_led_set_color(0, 127, 0);
-		} else if (cmd->type == CLOUD_CMD_LED_BLUE) {
-			ui_led_set_color(0, 0, 127);
-		}
+	else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
+			 (cmd->group == CLOUD_CMD_GROUP_GET) &&
+			 (cmd->type == CLOUD_CMD_EMPTY)) {
+
+		device_status_send(NULL);
 	}
 #endif
 }
