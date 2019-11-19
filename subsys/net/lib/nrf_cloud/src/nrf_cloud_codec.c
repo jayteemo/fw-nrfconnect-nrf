@@ -41,18 +41,6 @@ static int json_add_obj(cJSON *parent, const char *str, cJSON *item)
 	return 0;
 }
 
-static int json_add_num(cJSON *parent, const char *str, double num)
-{
-	cJSON *json_num;
-
-	json_num = cJSON_CreateNumber(num);
-	if (json_num == NULL) {
-		return -ENOMEM;
-	}
-
-	return json_add_obj(parent, str, json_num);
-}
-
 static int json_add_str(cJSON *parent, const char *str, const char *item)
 {
 	cJSON *json_str;
