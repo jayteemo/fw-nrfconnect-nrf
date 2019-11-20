@@ -39,10 +39,10 @@
 #define LED_GET_ON(x)			((x) & 0xFF)
 #define LED_GET_BLINK(x)		(((x) >> 8) & 0xFF)
 
-/* Interval in milliseconds which the device will retry cloud connection
- * after an association request.
+/* Interval in milliseconds after the device will retry cloud connection
+ * if the event NRF_CLOUD_EVT_TRANSPORT_CONNECTED is not received.
  */
-#define ASSOCIATION_REQ_RETRY_MS	30000
+#define RETRY_CONNECT_WAIT_MS	90000
 
 enum {
 	LEDS_INITIALIZING     = LED_ON(0),
@@ -69,8 +69,8 @@ static atomic_val_t send_data_enable;
 
 /* Structures for work */
 static struct k_delayed_work leds_update_work;
+static struct k_delayed_work retry_connect_work;
 static struct k_work connect_work;
-static struct k_delayed_work association_retry_work;
 
 enum error_type {
 	ERROR_NRF_CLOUD,
@@ -233,6 +233,40 @@ void sensor_data_send(struct nrf_cloud_sensor_data *data)
 	}
 }
 
+static void on_cloud_evt_user_association_request(void)
+{
+	if (atomic_get(&association_requested) == 0) {
+		atomic_set(&association_requested, 1);
+		printk("Add device to cloud account.\n");
+		printk("Waiting for cloud association...\n");
+	}
+}
+
+static void on_cloud_evt_user_associated(void)
+{
+	int err;
+
+	if (atomic_get(&association_requested)) {
+		atomic_set(&association_requested, 0);
+
+		/* after successful association, the device must
+		 * reconnect to aws.
+		 */
+		printk("Device associated with cloud.\n");
+		printk("Reconnecting for settings to take effect.\n");
+		printk("Disconnecting from cloud...\n");
+
+		err = nrf_cloud_disconnect();
+
+		if (err == 0) {
+			return;
+		} else {
+			printk("Disconnect failed, rebooting...\n");
+			nrf_cloud_error_handler(err);
+		}
+	}
+}
+
 /**@brief Callback for nRF Cloud events. */
 static void cloud_event_handler(const struct nrf_cloud_evt *evt)
 {
@@ -241,24 +275,15 @@ static void cloud_event_handler(const struct nrf_cloud_evt *evt)
 	switch (evt->type) {
 	case NRF_CLOUD_EVT_TRANSPORT_CONNECTED:
 		printk("NRF_CLOUD_EVT_TRANSPORT_CONNECTED\n");
+		k_delayed_work_cancel(&retry_connect_work);
 		break;
 	case NRF_CLOUD_EVT_USER_ASSOCIATION_REQUEST:
 		printk("NRF_CLOUD_EVT_USER_ASSOCIATION_REQUEST\n");
-		if (atomic_get(&association_requested) == 0)
-		{
-			atomic_set(&association_requested, 1);
-
-			printk("Add device to cloud account.\n");
-			printk("Press Button 1 when complete or wait for "
-				   "device to retry.\n");
-			(void)k_delayed_work_submit(&association_retry_work,
-					ASSOCIATION_REQ_RETRY_MS);
-		}
+		on_cloud_evt_user_association_request();
 		break;
 	case NRF_CLOUD_EVT_USER_ASSOCIATED:
 		printk("NRF_CLOUD_EVT_USER_ASSOCIATED\n");
-		atomic_set(&association_requested, 0);
-		(void)k_delayed_work_cancel(&association_retry_work);
+		on_cloud_evt_user_associated();
 		break;
 	case NRF_CLOUD_EVT_READY:
 		printk("NRF_CLOUD_EVT_READY\n");
@@ -351,15 +376,9 @@ static void cloud_connect(struct k_work *work)
 		printk("nrf_cloud_connect failed: %d\n", err);
 		nrf_cloud_error_handler(err);
 	}
-}
 
-static void association_retry(struct k_work *work)
-{
-	if (atomic_get(&association_requested)) {
-		printk("disconnecting from nrf cloud...\n");
-		atomic_set(&association_requested, 0);
-		nrf_cloud_disconnect();
-	}
+	k_delayed_work_submit(&retry_connect_work, RETRY_CONNECT_WAIT_MS);
+
 }
 
 /**@brief Callback for button events from the DK buttons and LEDs library. */
@@ -371,20 +390,14 @@ static void button_handler(u32_t buttons, u32_t has_changed)
 		   (bool)(buttons & BUTTON_2),
 		   (bool)(buttons & SWITCH_1),
 		   (bool)(buttons & SWITCH_2));
-
-	if (atomic_get(&association_requested)) {
-		if (buttons & BUTTON_1) {
-			(void)k_delayed_work_submit(&association_retry_work, 0);
-		}
-	}
 }
 
 /**@brief Initializes and submits delayed work. */
 static void work_init(void)
 {
 	k_delayed_work_init(&leds_update_work, leds_update);
+	k_delayed_work_init(&retry_connect_work, cloud_connect);
 	k_work_init(&connect_work, cloud_connect);
-	k_delayed_work_init(&association_retry_work, association_retry);
 	k_delayed_work_submit(&leds_update_work, LEDS_UPDATE_INTERVAL);
 }
 
