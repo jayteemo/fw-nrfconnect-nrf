@@ -65,10 +65,15 @@ defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
 #define CLOUD_LED_OFF_STR "{\"led\":\"off\"}"
 #define CLOUD_LED_MSK UI_LED_1
 
-/* Interval in milliseconds which the device will retry cloud connection
- * after an association request.
+/* Interval in milliseconds afer which the device will reboot
+ * following an association request that has not been fulfilled.
  */
-#define ASSOCIATION_REQ_RETRY_MS	30000
+#define REBOOT_FALLBACK_WAIT_MS	90000
+
+/* Interval in milliseconds after which the device will reboot
+ * if the disconnect event has not been handled.
+ */
+#define REBOOT_AFTER_DISCONNECT_WAIT_MS	15000
 
 struct rsrp_data {
 	u16_t value;
@@ -105,6 +110,7 @@ static bool flip_mode_enabled = true;
 
 /* Variable to keep track of nRF cloud user association request. */
 static atomic_val_t association_requested;
+static atomic_val_t reconnect_to_cloud;
 
 /* Structures for work */
 static struct k_work connect_work;
@@ -113,7 +119,6 @@ static struct k_work send_button_data_work;
 static struct k_delayed_work send_env_data_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
-static struct k_delayed_work association_retry_work;
 static struct k_work device_status_work;
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
@@ -633,27 +638,42 @@ static void on_user_pairing_req(const struct cloud_event *evt)
 	if (atomic_get(&association_requested) == 0)
 	{
 		atomic_set(&association_requested, 1);
-
 		ui_led_set_pattern(UI_CLOUD_PAIRING);
 		printk("Add device to cloud account.\n");
+		printk("Waiting for cloud association...\n");
 
-		if (k_delayed_work_submit(&association_retry_work,
-				ASSOCIATION_REQ_RETRY_MS)) {
-			printk("A manual reboot may be required after "
-					"device is added to cloud account.\n");
-		}
-		else {
-			printk("Waiting for cloud association, retrying in %d seconds...\n",
-					ASSOCIATION_REQ_RETRY_MS/1000);
-		}
+		k_delayed_work_submit(&cloud_reboot_work, REBOOT_FALLBACK_WAIT_MS);
 	}
 }
 
 /** @brief Handle procedures after successful association with nRF Cloud. */
 void on_pairing_done(void)
 {
-	atomic_set(&association_requested, 0);
-	(void)k_delayed_work_cancel(&association_retry_work);
+	int err;
+	s32_t work_delay_ms = REBOOT_AFTER_DISCONNECT_WAIT_MS;
+
+	if (atomic_get(&association_requested)) {
+		atomic_set(&association_requested, 0);
+
+		/* after successful association, the device must
+		 * reconnect to aws.
+		 */
+		printk("Disconnecting from cloud...\n");
+		err = cloud_disconnect(cloud_backend);
+		if (err == 0) {
+			atomic_set(&reconnect_to_cloud, 1);
+			return;
+		} else {
+			printk("Disconnection failed\n");
+			work_delay_ms = 5000;
+			printk("Device will reboot in %d seconds\n", work_delay_ms/1000);
+		}
+
+		// reboot failsafe
+		k_delayed_work_submit(&cloud_reboot_work, work_delay_ms);
+
+	}
+
 }
 
 void cloud_event_handler(const struct cloud_backend *const backend,
@@ -742,47 +762,6 @@ static void long_press_handler(struct k_work *work)
 	}
 }
 
-static void association_retry(struct k_work *work)
-{
-	int err;
-
-	if (atomic_get(&association_requested)) {
-		atomic_set(&association_requested, 0);
-
-		printk("Disconnecting from cloud...\n");
-		err = cloud_disconnect(cloud_backend);
-		if (err == 0) {
-			printk("Reconnecting to cloud...\n");
-			err = cloud_connect(cloud_backend);
-			if (err == 0) {
-				return;
-			}
-			printk("Could not reconnect\n");
-		} else {
-			printk("Disconnection failed\n");
-		}
-
-		printk("Fallback to controlled reboot\n");
-		printk("Shutting down LTE link...\n");
-
-	#if defined(CONFIG_BSD_LIBRARY)
-		err = lte_lc_power_off();
-		if (err) {
-			printk("Could not shut down link\n");
-		} else {
-			printk("LTE link disconnected\n");
-		}
-	#endif
-
-	#ifdef CONFIG_REBOOT
-		printk("Rebooting...\n");
-		LOG_PANIC();
-		sys_reboot(SYS_REBOOT_COLD);
-	#endif
-		printk("**** Manual reboot required ***\n");
-	}
-}
-
 /**@brief Initializes and submits delayed work. */
 static void work_init(void)
 {
@@ -793,7 +772,6 @@ static void work_init(void)
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
 	k_work_init(&device_status_work, device_status_send);
-	k_delayed_work_init(&association_retry_work, association_retry);
 #if CONFIG_MODEM_INFO
 	k_work_init(&rsrp_work, modem_rsrp_data_send);
 #endif /* CONFIG_MODEM_INFO */
@@ -1007,6 +985,7 @@ connect:
 		printk("cloud_connect failed: %d\n", ret);
 		cloud_error_handler(ret);
 	} else {
+		atomic_set(&reconnect_to_cloud, 0);
 		k_delayed_work_submit(&cloud_reboot_work,
 				      CLOUD_CONNACK_WAIT_DURATION);
 	}
@@ -1044,6 +1023,12 @@ connect:
 		}
 
 		if ((fds[0].revents & POLLNVAL) == POLLNVAL) {
+			if (atomic_get(&reconnect_to_cloud))
+			{
+				k_delayed_work_cancel(&cloud_reboot_work);
+				printk("Attempting reconnect...\n");
+				goto connect;
+			}
 			printk("Socket error: POLLNVAL\n");
 			error_handler(ERROR_CLOUD, -EIO);
 			return;

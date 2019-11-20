@@ -196,21 +196,26 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	cJSON *topic_prefix_obj;
 
 	root_obj = cJSON_Parse(input->ptr);
+
 	if (root_obj == NULL) {
 		LOG_ERR("cJSON_Parse failed: %s",
 			log_strdup((char *)input->ptr));
 		return -ENOENT;
 	}
 
+	/* on initial pairing, there is no "desired" json key */
+	/* "state" is reported instead */
 	state_obj = json_object_decode(root_obj, "state");
+
 	if (state_obj == NULL) {
 		desired_obj = json_object_decode(root_obj, "desired");
 	} else {
-		desired_obj = json_object_decode(state_obj, "desired");
+		desired_obj = state_obj;
 	}
 
 	topic_prefix_obj = json_object_decode(desired_obj,
 					      "nrfcloud_mqtt_topic_prefix");
+
 	if (topic_prefix_obj != NULL) {
 		(*requested_state) = STATE_UA_PIN_COMPLETE;
 		cJSON_Delete(root_obj);
@@ -381,11 +386,13 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 		return -ENOENT;
 	}
 
+	/* on initial pairing, there is no "desired" json key */
+	/* "state" is reported instead */
 	state_obj = json_object_decode(root_obj, "state");
 	if (state_obj == NULL) {
 		parent_obj = json_object_decode(root_obj, "desired");
 	} else {
-		parent_obj = json_object_decode(state_obj, "desired");
+		parent_obj = state_obj;
 	}
 
 	if (m_endpoint != NULL) {
