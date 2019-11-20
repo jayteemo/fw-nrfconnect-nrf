@@ -1023,7 +1023,6 @@ connect:
 		}
 
 		if (ret == 0) {
-			printk("cloud ping...\n");
 			cloud_ping(cloud_backend);
 			continue;
 		}
@@ -1033,8 +1032,7 @@ connect:
 		}
 
 		if ((fds[0].revents & POLLNVAL) == POLLNVAL) {
-			if (atomic_get(&reconnect_to_cloud))
-			{
+			if (atomic_get(&reconnect_to_cloud)) {
 				k_delayed_work_cancel(&cloud_reboot_work);
 				printk("Attempting reconnect...\n");
 				goto connect;
