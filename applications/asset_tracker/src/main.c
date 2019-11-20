@@ -65,15 +65,11 @@ defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
 #define CLOUD_LED_OFF_STR "{\"led\":\"off\"}"
 #define CLOUD_LED_MSK UI_LED_1
 
-/* Interval in milliseconds afer which the device will reboot
- * following an association request that has not been fulfilled.
- */
-#define REBOOT_FALLBACK_WAIT_MS	90000
-
 /* Interval in milliseconds after which the device will reboot
  * if the disconnect event has not been handled.
  */
 #define REBOOT_AFTER_DISCONNECT_WAIT_MS	15000
+#define CONN_CYLCE_AFTER_ASSOCIATION_REQ_MS	(4*60*1000)
 
 struct rsrp_data {
 	u16_t value;
@@ -119,6 +115,7 @@ static struct k_work send_button_data_work;
 static struct k_delayed_work send_env_data_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
+static struct k_delayed_work cycle_cloud_connection_work;
 static struct k_work device_status_work;
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
@@ -142,6 +139,7 @@ static void sensors_init(void);
 static void work_init(void);
 static void sensor_data_send(struct cloud_channel_data *data);
 static void device_status_send(struct k_work *work);
+static void cycle_cloud_connection(struct k_work *work);
 
 /**@brief nRF Cloud error handler. */
 void error_handler(enum error_type err_type, int err_code)
@@ -642,38 +640,46 @@ static void on_user_pairing_req(const struct cloud_event *evt)
 		printk("Add device to cloud account.\n");
 		printk("Waiting for cloud association...\n");
 
-		k_delayed_work_submit(&cloud_reboot_work, REBOOT_FALLBACK_WAIT_MS);
+		/* if the association is not done soon enough (< 4 min?)
+		 * a connection cycle is needed... TBD why.*/
+		k_delayed_work_submit(&cycle_cloud_connection_work,
+				CONN_CYLCE_AFTER_ASSOCIATION_REQ_MS);
 	}
+}
+
+static void cycle_cloud_connection(struct k_work *work)
+{
+	int err;
+	s32_t reboot_wait_ms = REBOOT_AFTER_DISCONNECT_WAIT_MS;
+
+	printk("Disconnecting from cloud...\n");
+	err = cloud_disconnect(cloud_backend);
+	if (err == 0) {
+		atomic_set(&reconnect_to_cloud, 1);
+	} else {
+		printk("Disconnect failed\n");
+		reboot_wait_ms = 5000;
+		printk("Device will reboot in %d seconds\n", reboot_wait_ms/1000);
+	}
+
+	/* reboot fail-safe on disconnect */
+	k_delayed_work_submit(&cloud_reboot_work, reboot_wait_ms);
 }
 
 /** @brief Handle procedures after successful association with nRF Cloud. */
 void on_pairing_done(void)
 {
-	int err;
-	s32_t work_delay_ms = REBOOT_AFTER_DISCONNECT_WAIT_MS;
-
 	if (atomic_get(&association_requested)) {
 		atomic_set(&association_requested, 0);
+		k_delayed_work_cancel(&cycle_cloud_connection_work);
 
 		/* after successful association, the device must
-		 * reconnect to aws.
+		 * reconnect to the cloud.
 		 */
-		printk("Disconnecting from cloud...\n");
-		err = cloud_disconnect(cloud_backend);
-		if (err == 0) {
-			atomic_set(&reconnect_to_cloud, 1);
-			return;
-		} else {
-			printk("Disconnection failed\n");
-			work_delay_ms = 5000;
-			printk("Device will reboot in %d seconds\n", work_delay_ms/1000);
-		}
-
-		// reboot failsafe
-		k_delayed_work_submit(&cloud_reboot_work, work_delay_ms);
-
+		printk("Device associated with cloud.\n");
+		printk("Reconnecting for cloud policy to take effect.\n");
+		cycle_cloud_connection(NULL);
 	}
-
 }
 
 void cloud_event_handler(const struct cloud_backend *const backend,
@@ -702,6 +708,8 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 	case CLOUD_EVT_DISCONNECTED:
 		printk("CLOUD_EVT_DISCONNECTED\n");
 		ui_led_set_pattern(UI_LTE_DISCONNECTED);
+		/* Expect an error event (POLLNVAL) on the cloud socket poll */
+		/* Handle reconnect there if desired */
 		break;
 	case CLOUD_EVT_ERROR:
 		printk("CLOUD_EVT_ERROR\n");
@@ -771,6 +779,7 @@ static void work_init(void)
 	k_delayed_work_init(&send_env_data_work, send_env_data_work_fn);
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
+	k_delayed_work_init(&cycle_cloud_connection_work, cycle_cloud_connection);
 	k_work_init(&device_status_work, device_status_send);
 #if CONFIG_MODEM_INFO
 	k_work_init(&rsrp_work, modem_rsrp_data_send);
@@ -1014,6 +1023,7 @@ connect:
 		}
 
 		if (ret == 0) {
+			printk("cloud ping...\n");
 			cloud_ping(cloud_backend);
 			continue;
 		}
