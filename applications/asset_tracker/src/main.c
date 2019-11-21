@@ -69,7 +69,11 @@ defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
  * if the disconnect event has not been handled.
  */
 #define REBOOT_AFTER_DISCONNECT_WAIT_MS	15000
-#define CONN_CYLCE_AFTER_ASSOCIATION_REQ_MS	(4*60*1000)
+
+/* Interval in milliseconds after which the device will
+ * disconnect and reconnect if association was not completed.
+ */
+#define CONN_CYCLE_AFTER_ASSOCIATION_REQ_MS	(5*60*1000)
 
 struct rsrp_data {
 	u16_t value;
@@ -640,10 +644,10 @@ static void on_user_pairing_req(const struct cloud_event *evt)
 		printk("Add device to cloud account.\n");
 		printk("Waiting for cloud association...\n");
 
-		/* if the association is not done soon enough (< 4 min?)
+		/* if the association is not done soon enough (< ~5 min?)
 		 * a connection cycle is needed... TBD why.*/
 		k_delayed_work_submit(&cycle_cloud_connection_work,
-				CONN_CYLCE_AFTER_ASSOCIATION_REQ_MS);
+				CONN_CYCLE_AFTER_ASSOCIATION_REQ_MS);
 	}
 }
 

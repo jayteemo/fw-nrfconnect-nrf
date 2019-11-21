@@ -94,6 +94,22 @@ static bool compare(const char *s1, const char *s2)
 	return !strncmp(s1, s2, strlen(s2));
 }
 
+static void nrf_cloud_decode_desired_obj(cJSON *const root_obj, cJSON ** desired_obj)
+{
+	cJSON *state_obj;
+
+	if ((root_obj != NULL) && (desired_obj != NULL)) {
+		/* On initial pairing there is no "desired" JSON key, */
+		/* "state" is used instead */
+		state_obj = json_object_decode(root_obj, "state");
+		if (state_obj == NULL) {
+			*desired_obj = json_object_decode(root_obj, "desired");
+		} else {
+			*desired_obj = state_obj;
+		}
+	}
+}
+
 int nrf_codec_init(void)
 {
 	cJSON_Init();
@@ -189,33 +205,22 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	__ASSERT_NO_MSG(input->len != 0);
 
 	cJSON *root_obj;
-	cJSON *state_obj;
 	cJSON *desired_obj;
 	cJSON *pairing_obj;
 	cJSON *pairing_state_obj;
 	cJSON *topic_prefix_obj;
 
 	root_obj = cJSON_Parse(input->ptr);
-
 	if (root_obj == NULL) {
 		LOG_ERR("cJSON_Parse failed: %s",
 			log_strdup((char *)input->ptr));
 		return -ENOENT;
 	}
 
-	/* on initial pairing, there is no "desired" json key */
-	/* "state" is reported instead */
-	state_obj = json_object_decode(root_obj, "state");
-
-	if (state_obj == NULL) {
-		desired_obj = json_object_decode(root_obj, "desired");
-	} else {
-		desired_obj = state_obj;
-	}
+	nrf_cloud_decode_desired_obj(root_obj, &desired_obj);
 
 	topic_prefix_obj = json_object_decode(desired_obj,
 					      "nrfcloud_mqtt_topic_prefix");
-
 	if (topic_prefix_obj != NULL) {
 		(*requested_state) = STATE_UA_PIN_COMPLETE;
 		cJSON_Delete(root_obj);
@@ -378,29 +383,21 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 	int err;
 	cJSON *root_obj;
 	cJSON *m_endpoint_obj = NULL;
-	cJSON *state_obj;
-	cJSON *parent_obj;
+	cJSON *desired_obj = NULL;
 
 	root_obj = cJSON_Parse(input->ptr);
 	if (root_obj == NULL) {
 		return -ENOENT;
 	}
 
-	/* on initial pairing, there is no "desired" json key */
-	/* "state" is reported instead */
-	state_obj = json_object_decode(root_obj, "state");
-	if (state_obj == NULL) {
-		parent_obj = json_object_decode(root_obj, "desired");
-	} else {
-		parent_obj = state_obj;
-	}
+	nrf_cloud_decode_desired_obj(root_obj, &desired_obj);
 
 	if (m_endpoint != NULL) {
-		m_endpoint_obj = json_object_decode(parent_obj,
+		m_endpoint_obj = json_object_decode(desired_obj,
 						  "nrfcloud_mqtt_topic_prefix");
 	}
 
-	cJSON *pairing_obj = json_object_decode(parent_obj, "pairing");
+	cJSON *pairing_obj = json_object_decode(desired_obj, "pairing");
 	cJSON *pairing_state_obj = json_object_decode(pairing_obj, "state");
 	cJSON *topic_obj = json_object_decode(pairing_obj, "topics");
 
