@@ -341,9 +341,17 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 	if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
 		(cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 		(cmd->type == CLOUD_CMD_COLOR))	{
-		ui_led_set_color( ((u32_t)cmd->value>>16) & 0xFF,
-						  ((u32_t)cmd->value>>8) & 0xFF,
-						  ((u32_t)cmd->value) & 0xFF);
+		ui_led_set_color( ((u32_t)cmd->data.state_val.value>>16) & 0xFF,
+						  ((u32_t)cmd->data.state_val.value>>8) & 0xFF,
+						  ((u32_t)cmd->data.state_val.value) & 0xFF);
+	}
+	else if ((cmd->channel == CLOUD_CHANNEL_ASSISTED_GPS) &&
+			 (cmd->group == CLOUD_CMD_GROUP_DATA) &&
+			 (cmd->type == CLOUD_CMD_MODEM_PARAM)) {
+		/* TODO: handle modem params for AGPS */
+		printk("A-GPS modem params: \n  blob: %s\n  checksum: %s\n",
+				cmd->data.modem_params.blob,
+				cmd->data.modem_params.checksum);
 	}
 #if CONFIG_MODEM_INFO
 	else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
@@ -736,8 +744,7 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		printk("CLOUD_EVT_DATA_SENT\n");
 		break;
 	case CLOUD_EVT_DATA_RECEIVED:
-		evt->data.msg.buf[evt->data.msg.len] =  0;
-		printk("CLOUD_EVT_DATA_RECEIVED: %s\n", evt->data.msg.buf);
+		printk("CLOUD_EVT_DATA_RECEIVED\n");
 		cloud_decode_command(evt->data.msg.buf);
 		break;
 	case CLOUD_EVT_PAIR_REQUEST:

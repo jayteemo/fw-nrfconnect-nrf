@@ -156,7 +156,15 @@ static CMD_NEW_GROUP(group_get, CLOUD_CMD_GROUP_GET, CMD_ARRAY(
 	)
 );
 
-struct cmd * cmd_groups[] = {&group_cfg_set, &group_get};
+static CMD_NEW_GROUP(group_data, CLOUD_CMD_GROUP_DATA, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_ASSISTED_GPS, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_MODEM_PARAM)
+			)
+		),
+	)
+);
+
+struct cmd * cmd_groups[] = {&group_cfg_set, &group_get, &group_data};
 static cloud_cmd_cb_t cloud_command_cb;
 struct cloud_command cmd_parsed;
 
@@ -180,7 +188,6 @@ static const char *const channel_type_str[] = {
 	[CLOUD_CHANNEL_LIGHT_BLUE] = CLOUD_CHANNEL_STR_LIGHT_BLUE,
 	[CLOUD_CHANNEL_LIGHT_IR] = CLOUD_CHANNEL_STR_LIGHT_IR,
 	[CLOUD_CHANNEL_ASSISTED_GPS] = CLOUD_CHANNEL_STR_ASSISTED_GPS,
-
 };
 BUILD_ASSERT(ARRAY_SIZE(channel_type_str) == CLOUD_CHANNEL__TOTAL);
 
@@ -204,6 +211,7 @@ static const char *const cmd_type_str[] = {
 	[CLOUD_CMD_THRESHOLD_LOW] = CLOUD_CMD_TYPE_STR_THRESH_HI,
 	[CLOUD_CMD_INTERVAL] = CLOUD_CMD_TYPE_STR_INTERVAL,
 	[CLOUD_CMD_COLOR] = CLOUD_CMD_TYPE_STR_COLOR,
+	[CLOUD_CMD_MODEM_PARAM] = CLOUD_CMD_TYPE_STR_MODEM_PARAM,
 };
 BUILD_ASSERT(ARRAY_SIZE(cmd_type_str) == CLOUD_CMD__TOTAL);
 
@@ -365,9 +373,35 @@ int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
 	return 0;
 }
 
+static int cloud_decode_modem_params(cJSON *const data_obj,
+									 struct cloud_command_modem_params *const params)
+{
+	cJSON * blob;
+	cJSON * checksum;
+
+	if ((data_obj == NULL) || (params == NULL)) {
+		return -EINVAL;
+	}
+
+	if ( !cJSON_IsObject(data_obj) )
+	{
+		return -ESRCH;
+	}
+	params->checksum = NULL;
+
+	blob = json_object_decode(data_obj,MODEM_PARAM_BLOB_KEY_STR);
+	checksum = json_object_decode(data_obj,MODEM_PARAM_CHECKSUM_KEY_STR);
+
+	params->blob = cJSON_IsString(blob) ? blob->valuestring : NULL;
+	params->checksum = cJSON_IsString(checksum) ? checksum->valuestring : NULL;
+
+	return (((params->blob == NULL) || (params->checksum == NULL)) ? -ESRCH : 0);
+}
+
 static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_obj,
 		struct cloud_command * const parsed_cmd)
 {
+	int err;
 	cJSON * decoded_obj = NULL;
 
 	if ((type_cmd == NULL) || (parsed_cmd == NULL))
@@ -375,67 +409,69 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 		return -EINVAL;
 	}
 
-	if (type_obj == NULL) {
-		/* an "empty" cmd type will have no data */
-		if (type_cmd->type == CLOUD_CMD_EMPTY) {
-			parsed_cmd->type = type_cmd->type;
-			return 0;
+	if (type_obj != NULL) {
+
+		decoded_obj = json_object_decode(type_obj,cmd_type_str[type_cmd->type]);
+
+		if (!decoded_obj)
+		{
+			return -ENOENT;
 		}
 
+		switch (type_cmd->type)
+		{
+			case CLOUD_CMD_ENABLE:
+			{
+				if ( !cJSON_IsBool(decoded_obj) )
+				{
+					return -ESRCH;
+				}
+
+				parsed_cmd->data.state_val.state = (decoded_obj->valueint != 0);
+				break;
+			}
+			case CLOUD_CMD_THRESHOLD_LOW:
+			case CLOUD_CMD_THRESHOLD_HIGH:
+			case CLOUD_CMD_INTERVAL:
+			{
+				if ( !cJSON_IsNumber(decoded_obj) )
+				{
+					return -ESRCH;
+				}
+
+				parsed_cmd->data.state_val.value = decoded_obj->valuedouble;
+				break;
+			}
+			case CLOUD_CMD_COLOR:
+			{
+				if ( !cJSON_IsString(decoded_obj) )
+				{
+					return -ESRCH;
+				}
+
+				parsed_cmd->data.state_val.value = (double)strtol(
+						cJSON_GetStringValue(decoded_obj), NULL, 16);
+				break;
+			}
+			case CLOUD_CMD_MODEM_PARAM:
+			{
+				err = cloud_decode_modem_params(decoded_obj,&parsed_cmd->data.modem_params);
+				if (err) {
+					return err;
+				}
+
+				break;
+			}
+			case CLOUD_CMD_EMPTY:
+			default:
+			{
+				return -ENOTSUP;
+			}
+		}
+	}
+	else if (type_cmd->type != CLOUD_CMD_EMPTY) {
+		/* Only the empty cmd type can have no data. */
 		return -EINVAL;
-	}
-
-	if (!cJSON_IsObject(type_obj))
-	{
-		return -ENOTSUP;
-	}
-
-	decoded_obj = json_object_decode(type_obj,cmd_type_str[type_cmd->type]);
-
-	if (!decoded_obj)
-	{
-		return -ENOENT;
-	}
-
-	switch (type_cmd->type)
-	{
-		case CLOUD_CMD_ENABLE:
-		{
-			if ( !cJSON_IsBool(decoded_obj) )
-			{
-				return -ESRCH;
-			}
-
-			parsed_cmd->state = (decoded_obj->valueint != 0);
-			break;
-		}
-		case CLOUD_CMD_THRESHOLD_LOW:
-		case CLOUD_CMD_THRESHOLD_HIGH:
-		case CLOUD_CMD_INTERVAL:
-		{
-			if ( !cJSON_IsNumber(decoded_obj) )
-			{
-				return -ESRCH;
-			}
-
-			parsed_cmd->value = decoded_obj->valuedouble;
-			break;
-		}
-		case CLOUD_CMD_COLOR:
-		{
-			if ( !cJSON_IsString(decoded_obj) )
-			{
-				return -ESRCH;
-			}
-
-			parsed_cmd->value = (double)strtol(
-					cJSON_GetStringValue(decoded_obj), NULL, 16);
-			break;
-		}
-		default:
-		{
-			return -ENOTSUP;
-		}
 	}
 
 	parsed_cmd->type = type_cmd->type;
@@ -521,7 +557,6 @@ static int cloud_search_cmd(cJSON *root_obj)
 
 int cloud_decode_command(char const *input)
 {
-	//int ret;
 	cJSON *root_obj		= NULL;
 
 	if (input == NULL) {
@@ -535,6 +570,8 @@ int cloud_decode_command(char const *input)
 	}
 
 	cloud_search_cmd(root_obj);
+
+	cJSON_Delete(root_obj);
 
 	return 0;
 }

@@ -136,6 +136,7 @@ enum cloud_cmd_type {
 	CLOUD_CMD_THRESHOLD_LOW,
 	CLOUD_CMD_INTERVAL,
 	CLOUD_CMD_COLOR,
+	CLOUD_CMD_MODEM_PARAM,
 
 	CLOUD_CMD__TOTAL
 };
@@ -151,14 +152,32 @@ enum cloud_cmd_state {
 #define CLOUD_CMD_TYPE_STR_THRESH_HI	"thresh_hi"
 #define CLOUD_CMD_TYPE_STR_INTERVAL		"interval"
 #define CLOUD_CMD_TYPE_STR_COLOR		"color"
+#define CLOUD_CMD_TYPE_STR_MODEM_PARAM	"modemParams"
+
+#define MODEM_PARAM_BLOB_KEY_STR		"blob"
+#define MODEM_PARAM_CHECKSUM_KEY_STR	"checksum"
+
+struct cloud_command_state_value
+{
+	double value; /* The value to be written to the recipient/channel. */
+	/* The truth value to be written to the recipient/channel. */
+	enum cloud_cmd_state state;
+};
+
+struct cloud_command_modem_params
+{
+	char * blob; /* base64 encoded string? */
+	char * checksum; /* md5 or something simpler? */
+};
 
 struct cloud_command {
 	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
-	double value; /* The value to be written to the recipient/channel. */
-	/* The truth value to be written to the recipient/channel. */
-	enum cloud_cmd_state state;
+	union {
+		struct cloud_command_state_value state_val;
+		struct cloud_command_modem_params modem_params;
+	} data;
 };
 
 typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
