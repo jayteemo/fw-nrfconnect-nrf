@@ -546,7 +546,7 @@ static int cloud_search_cmd(cJSON *root_obj)
 
 		// TODO: handle internal (e.g. threshold cmds)
 
-		// pass commands to user
+		// pass command to user
 		if (cloud_command_cb) {
 			cloud_command_cb(&cmd_parsed);
 		}
