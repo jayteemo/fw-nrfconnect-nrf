@@ -1,6 +1,0 @@
-osource "/Users/justin/Github/FORKS/WIP_cloud_cmds_json_format/nrf/Kconfig.nrf"
-
-osource "/Users/justin/Github/FORKS/WIP_cloud_cmds_json_format/mcuboot/zephyr/Kconfig"
-
-osource "/Users/justin/Github/FORKS/WIP_cloud_cmds_json_format/nrfxlib/Kconfig.nrfxlib"
-
