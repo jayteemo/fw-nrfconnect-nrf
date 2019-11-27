@@ -25,6 +25,9 @@ LOG_MODULE_REGISTER(cloud_codec, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define CMD_CHAN_KEY_STR		"appId"
 #define CMD_DATA_TYPE_KEY_STR	"data"
 
+#define INTERVAL_VAL_DISABLE_SEND		0
+#define INTERVAL_VAL_MIN_SECONDS		5
+
 struct cmd {
 	const char *const key;
 	union {
@@ -423,10 +426,10 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 			case CLOUD_CMD_ENABLE:
 			{
 				if (cJSON_IsNull(decoded_obj)) {
-					parsed_cmd->data.state_val.state = CLOUD_CMD_STATE_FALSE;
+					parsed_cmd->data.sv.state = CLOUD_CMD_STATE_FALSE;
 				}
 				else if (cJSON_IsBool(decoded_obj)) {
-					parsed_cmd->data.state_val.state = cJSON_IsTrue(type_obj) ?
+					parsed_cmd->data.sv.state = cJSON_IsTrue(type_obj) ?
 							CLOUD_CMD_STATE_TRUE : CLOUD_CMD_STATE_FALSE;
 				}
 				else {
@@ -435,16 +438,16 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 
 				break;
 			}
+			case CLOUD_CMD_INTERVAL:
 			case CLOUD_CMD_THRESHOLD_LOW:
 			case CLOUD_CMD_THRESHOLD_HIGH:
-			case CLOUD_CMD_INTERVAL:
 			{
 				if (cJSON_IsNull(decoded_obj)) {
-					parsed_cmd->data.state_val.state = CLOUD_CMD_STATE_FALSE;
+					parsed_cmd->data.sv.state = CLOUD_CMD_STATE_FALSE;
 				}
 				else if (cJSON_IsNumber(decoded_obj)) {
-					parsed_cmd->data.state_val.state = CLOUD_CMD_STATE_UNDEFINED;
-					parsed_cmd->data.state_val.value = decoded_obj->valuedouble;
+					parsed_cmd->data.sv.state = CLOUD_CMD_STATE_UNDEFINED;
+					parsed_cmd->data.sv.value = decoded_obj->valuedouble;
 				}
 				else {
 					return -ESRCH;
@@ -457,13 +460,13 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 					return -ESRCH;
 				}
 
-				parsed_cmd->data.state_val.value = (double)strtol(
+				parsed_cmd->data.sv.value = (double)strtol(
 						cJSON_GetStringValue(decoded_obj), NULL, 16);
 				break;
 			}
 			case CLOUD_CMD_MODEM_PARAM:
 			{
-				err = cloud_decode_modem_params(decoded_obj,&parsed_cmd->data.modem_params);
+				err = cloud_decode_modem_params(decoded_obj,&parsed_cmd->data.mp);
 				if (err) {
 					return err;
 				}
@@ -480,6 +483,18 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd, cJSON * type_o
 	else if (type_cmd->type != CLOUD_CMD_EMPTY) {
 		/* Only the empty cmd type can have no data. */
 		return -EINVAL;
+	}
+
+	/* Validate interval value */
+	if ((type_cmd->type == CLOUD_CMD_INTERVAL) &&
+		(parsed_cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED)) {
+
+		if (parsed_cmd->data.sv.value == INTERVAL_VAL_DISABLE_SEND) {
+			parsed_cmd->data.sv.state = CLOUD_CMD_STATE_FALSE;
+		}
+		else if (parsed_cmd->data.sv.value < INTERVAL_VAL_MIN_SECONDS) {
+			parsed_cmd->data.sv.value = INTERVAL_VAL_MIN_SECONDS;
+		}
 	}
 
 	parsed_cmd->type = type_cmd->type;
@@ -778,17 +793,27 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 	}
 
 	switch (cmd->type) {
-	case CLOUD_CMD_ENABLE:
-		err = cloud_set_chan_cfg_item(
-			cmd->channel, SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-			(cmd->data.state_val.state == CLOUD_CMD_STATE_TRUE));
+	case CLOUD_CMD_INTERVAL:
+		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
+			/* undefined means a valid value was set, so enable */
+			cloud_set_chan_cfg_item(
+				cmd->channel,
+				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
+				true);
+
+		} else {
+			err = cloud_set_chan_cfg_item(
+				cmd->channel,
+				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
+				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
+		}
 		break;
 	case CLOUD_CMD_THRESHOLD_HIGH:
-		if (cmd->data.state_val.state == CLOUD_CMD_STATE_UNDEFINED) {
+		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_VALUE,
-				cmd->data.state_val.value);
+				cmd->data.sv.value);
 			cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE,
@@ -798,15 +823,15 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_HIGH_ENABLE,
-				(cmd->data.state_val.state == CLOUD_CMD_STATE_TRUE));
+				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
 		}
 		break;
 	case CLOUD_CMD_THRESHOLD_LOW:
-		if (cmd->data.state_val.state == CLOUD_CMD_STATE_UNDEFINED) {
+		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_VALUE,
-				cmd->data.state_val.value);
+				cmd->data.sv.value);
 			cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE,
@@ -816,7 +841,7 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 			err = cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_THRESH_LOW_ENABLE,
-				(cmd->data.state_val.state == CLOUD_CMD_STATE_TRUE));
+				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
 		}
 		break;
 	default:

@@ -175,8 +175,8 @@ struct cloud_command {
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
 	union {
-		struct cloud_command_state_value state_val;
-		struct cloud_command_modem_params modem_params;
+		struct cloud_command_state_value sv;
+		struct cloud_command_modem_params mp;
 	} data;
 };
 
