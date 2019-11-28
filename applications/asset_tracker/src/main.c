@@ -143,7 +143,7 @@ static void work_init(void);
 static void sensor_data_send(struct cloud_channel_data *data);
 static void device_status_send(struct k_work *work);
 static void cycle_cloud_connection(struct k_work *work);
-static void gps_enable_set(const bool enable);
+static void set_gps_enable(const bool enable);
 
 /**@brief nRF Cloud error handler. */
 void error_handler(enum error_type err_type, int err_code)
@@ -338,34 +338,34 @@ static void motion_handler(motion_data_t  motion_data)
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
-	/* Command handling goes here. */
 	if ((cmd->channel == CLOUD_CHANNEL_GPS) &&
-		(cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
-		(cmd->type == CLOUD_CMD_ENABLE)) {
-		gps_enable_set(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE);
-	}
-	else if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
-			 (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
-			 (cmd->type == CLOUD_CMD_COLOR))	{
-		ui_led_set_color( ((u32_t)cmd->data.sv.value>>16) & 0xFF,
-						  ((u32_t)cmd->data.sv.value>>8) & 0xFF,
-						  ((u32_t)cmd->data.sv.value) & 0xFF);
-	}
-	else if ((cmd->channel == CLOUD_CHANNEL_ASSISTED_GPS) &&
-			 (cmd->group == CLOUD_CMD_GROUP_DATA) &&
-			 (cmd->type == CLOUD_CMD_MODEM_PARAM)) {
-		printk("A-GPS modem params: \n  blob: %s\n  checksum: %s\n",
-				cmd->data.mp.blob,
-				cmd->data.mp.checksum);
-	}
-#if CONFIG_MODEM_INFO
-	else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
-			 (cmd->group == CLOUD_CMD_GROUP_GET) &&
-			 (cmd->type == CLOUD_CMD_EMPTY)) {
+	    (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
+	    (cmd->type == CLOUD_CMD_ENABLE)) {
 
-		device_status_send(NULL);
-	}
+		set_gps_enable(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE);
+
+	} else if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
+			   (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
+			   (cmd->type == CLOUD_CMD_COLOR)) {
+
+		ui_led_set_color(((u32_t)cmd->data.sv.value >> 16) & 0xFF,
+						 ((u32_t)cmd->data.sv.value >> 8) & 0xFF,
+						 ((u32_t)cmd->data.sv.value) & 0xFF);
+
+	} else if ((cmd->channel == CLOUD_CHANNEL_ASSISTED_GPS) &&
+			   (cmd->group == CLOUD_CMD_GROUP_DATA) &&
+			   (cmd->type == CLOUD_CMD_MODEM_PARAM)) {
+
+		printk("AGPS modem params: \n  blob: %s\n  checksum: %s\n",
+		       cmd->data.mp.blob, cmd->data.mp.checksum);
+
+	} else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
+			   (cmd->group == CLOUD_CMD_GROUP_GET) &&
+			   (cmd->type == CLOUD_CMD_EMPTY)) {
+#if CONFIG_MODEM_INFO
+		k_work_submit(&rsrp_work);
 #endif
+	}
 }
 
 #if CONFIG_MODEM_INFO
@@ -784,8 +784,12 @@ static void app_connect(struct k_work *work)
 	}
 }
 
-static void gps_enable_set(const bool enable)
+static void set_gps_enable(const bool enable)
 {
+	if (enable == gps_control_is_enabled()) {
+		return;
+	}
+
 	if (enable) {
 		printk("Starting GPS\n");
 		gps_control_enable();
@@ -805,7 +809,7 @@ static void long_press_handler(struct k_work *work)
 	}
 
 	/* Toggle GPS state */
-	gps_enable_set(!gps_control_is_enabled());
+	set_gps_enable(!gps_control_is_enabled());
 }
 
 /**@brief Initializes and submits delayed work. */

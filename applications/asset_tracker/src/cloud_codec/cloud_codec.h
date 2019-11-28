@@ -66,25 +66,25 @@ enum cloud_channel {
 	CLOUD_CHANNEL__TOTAL
 };
 
-#define CLOUD_CHANNEL_STR_GPS "GPS"
-#define CLOUD_CHANNEL_STR_FLIP "FLIP"
-#define CLOUD_CHANNEL_STR_BUTTON "BUTTON"
-#define CLOUD_CHANNEL_STR_TEMP "TEMP"
-#define CLOUD_CHANNEL_STR_HUMID "HUMID"
-#define CLOUD_CHANNEL_STR_AIR_PRESS "AIR_PRESS"
-#define CLOUD_CHANNEL_STR_AIR_QUAL "AIR_QUAL"
-#define CLOUD_CHANNEL_STR_LTE_LINK_RSRP "RSRP"
+#define CLOUD_CHANNEL_STR_GPS			"GPS"
+#define CLOUD_CHANNEL_STR_FLIP			"FLIP"
+#define CLOUD_CHANNEL_STR_BUTTON		"BUTTON"
+#define CLOUD_CHANNEL_STR_TEMP			"TEMP"
+#define CLOUD_CHANNEL_STR_HUMID			"HUMID"
+#define CLOUD_CHANNEL_STR_AIR_PRESS		"AIR_PRESS"
+#define CLOUD_CHANNEL_STR_AIR_QUAL		"AIR_QUAL"
+#define CLOUD_CHANNEL_STR_LTE_LINK_RSRP	"RSRP"
 /* The "device" is intended for the shadow, which expects its objects
  * to have lowercase keys.
  */
-#define CLOUD_CHANNEL_STR_DEVICE_INFO "device"
-#define CLOUD_CHANNEL_STR_LIGHT_SENSOR "LIGHT"
-#define CLOUD_CHANNEL_STR_LIGHT_RED "LIGHT_RED"
-#define CLOUD_CHANNEL_STR_LIGHT_GREEN "LIGHT_GREEN"
-#define CLOUD_CHANNEL_STR_LIGHT_BLUE "LIGHT_BLUE"
-#define CLOUD_CHANNEL_STR_LIGHT_IR "LIGHT_IR"
-#define CLOUD_CHANNEL_STR_ASSISTED_GPS "AGPS"
-#define CLOUD_CHANNEL_STR_RGB_LED "LED"
+#define CLOUD_CHANNEL_STR_DEVICE_INFO	"device"
+#define CLOUD_CHANNEL_STR_LIGHT_SENSOR	"LIGHT"
+#define CLOUD_CHANNEL_STR_LIGHT_RED		"LIGHT_RED"
+#define CLOUD_CHANNEL_STR_LIGHT_GREEN	"LIGHT_GREEN"
+#define CLOUD_CHANNEL_STR_LIGHT_BLUE	"LIGHT_BLUE"
+#define CLOUD_CHANNEL_STR_LIGHT_IR		"LIGHT_IR"
+#define CLOUD_CHANNEL_STR_ASSISTED_GPS	"AGPS"
+#define CLOUD_CHANNEL_STR_RGB_LED		"LED"
 
 struct cloud_data {
 	char *buf;
@@ -147,6 +147,7 @@ enum cloud_cmd_state {
 	CLOUD_CMD_STATE_TRUE,
 };
 
+#define CLOUD_CMD_TYPE_STR_EMPTY		"empty"
 #define CLOUD_CMD_TYPE_STR_ENABLE		"enable"
 #define CLOUD_CMD_TYPE_STR_THRESH_LO	"thresh_lo"
 #define CLOUD_CMD_TYPE_STR_THRESH_HI	"thresh_hi"
@@ -157,21 +158,20 @@ enum cloud_cmd_state {
 #define MODEM_PARAM_BLOB_KEY_STR		"blob"
 #define MODEM_PARAM_CHECKSUM_KEY_STR	"checksum"
 
-struct cloud_command_state_value
-{
+struct cloud_command_state_value {
 	double value; /* The value to be written to the recipient/channel. */
 	/* The truth value to be written to the recipient/channel. */
 	enum cloud_cmd_state state;
 };
 
-struct cloud_command_modem_params
-{
-	char * blob; /* base64 encoded string? */
-	char * checksum; /* md5 or something simpler? */
+struct cloud_command_modem_params {
+	/* TBD */
+	char *blob;
+	char *checksum;
 };
 
 struct cloud_command {
-	enum cloud_cmd_group group; /* The group the decoded command belongs to. */
+	enum cloud_cmd_group group; /* The decoded command's group. */
 	enum cloud_channel channel; /* The command's desired channel. */
 	enum cloud_cmd_type type; /* The command type, the desired action. */
 	union {
@@ -191,7 +191,7 @@ typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      struct cloud_msg *output);
+		      	  	  struct cloud_msg *output);
 
 /**
  * @brief Decode cloud data.
@@ -222,7 +222,7 @@ int cloud_decode_init(cloud_cmd_cb_t cb);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				 struct cloud_msg *output);
+				 	 	 	 	   struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
@@ -237,14 +237,14 @@ static inline void cloud_release_data(struct cloud_msg *data)
 }
 
 int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
-				  struct cloud_msg *output);
+								  struct cloud_msg *output);
 
 int cloud_encode_motion_data(const motion_data_t *motion_data,
-				  struct cloud_msg *output);
+							 struct cloud_msg *output);
 
 #if CONFIG_LIGHT_SENSOR
 int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
-				   struct cloud_msg *output);
+								   struct cloud_msg *output);
 #endif /* CONFIG_LIGHT_SENSOR */
 
 
@@ -257,7 +257,7 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
  * @return true If the data should be sent to the cloud.
  */
 bool cloud_is_send_allowed(const enum cloud_channel channel,
-			   const double value);
+						   const double value);
 /**
  * @}
  */
