@@ -116,7 +116,7 @@ static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, CMD_ARRAY(
 			)
 		),
 		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_SENSOR, CMD_ARRAY(
-			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(CLOUD_CMD_ENABLE)
 			)
 		),
 		CMD_NEW_CHAN(CLOUD_CHANNEL_LIGHT_RED, CMD_ARRAY(
@@ -145,7 +145,7 @@ static CMD_NEW_GROUP(group_cfg_set, CLOUD_CMD_GROUP_CFG_SET, CMD_ARRAY(
 		),
 		CMD_NEW_CHAN(CLOUD_CHANNEL_RGB_LED, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_COLOR),
-			CMD_NEW_TYPE(CLOUD_CMD_ENABLE),
+			CMD_NEW_TYPE(CLOUD_CMD_ENABLE)
 			)
 		),
 	)
@@ -155,7 +155,7 @@ static CMD_NEW_GROUP(group_get, CLOUD_CMD_GROUP_GET, CMD_ARRAY(
 		CMD_NEW_CHAN(CLOUD_CHANNEL_LTE_LINK_RSRP, CMD_ARRAY(
 			CMD_NEW_TYPE(CLOUD_CMD_EMPTY)
 			)
-		),
+		)
 	)
 );
 
@@ -278,7 +278,7 @@ static bool json_value_string_compare(cJSON *obj, const char *const str)
 		return false;
 	}
 
-	return (strncmp(json_str, str, strlen(str)) == 0);
+	return (strcmp(json_str, str) == 0);
 }
 
 int cloud_encode_data(const struct cloud_channel_data *channel,
