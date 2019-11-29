@@ -352,19 +352,14 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 						 ((u32_t)cmd->data.sv.value >> 8) & 0xFF,
 						 ((u32_t)cmd->data.sv.value) & 0xFF);
 
-	} else if ((cmd->channel == CLOUD_CHANNEL_ASSISTED_GPS) &&
-			   (cmd->group == CLOUD_CMD_GROUP_DATA) &&
-			   (cmd->type == CLOUD_CMD_MODEM_PARAM)) {
-
-		printk("AGPS modem params: \n  blob: %s\n  checksum: %s\n",
-		       cmd->data.mp.blob, cmd->data.mp.checksum);
-
 	} else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
 			   (cmd->group == CLOUD_CMD_GROUP_GET) &&
 			   (cmd->type == CLOUD_CMD_EMPTY)) {
+
 #if CONFIG_MODEM_INFO
 		k_work_submit(&rsrp_work);
 #endif
+
 	}
 }
 

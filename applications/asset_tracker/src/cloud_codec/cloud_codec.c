@@ -797,7 +797,7 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 	switch (cmd->type) {
 	case CLOUD_CMD_INTERVAL:
 		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
-			/* undefined means a valid value was set, so enable */
+			/* Undefined means a valid value was set, so enable */
 			cloud_set_chan_cfg_item(
 				cmd->channel,
 				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,

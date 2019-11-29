@@ -191,7 +191,7 @@ typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      	  	  struct cloud_msg *output);
+					  struct cloud_msg *output);
 
 /**
  * @brief Decode cloud data.
@@ -222,7 +222,7 @@ int cloud_decode_init(cloud_cmd_cb_t cb);
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
-				 	 	 	 	   struct cloud_msg *output);
+								   struct cloud_msg *output);
 
 /**
  * @brief Releases memory used by cloud data structure.
