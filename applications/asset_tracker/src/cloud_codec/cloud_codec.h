@@ -247,7 +247,6 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 								   struct cloud_msg *output);
 #endif /* CONFIG_LIGHT_SENSOR */
 
-
 /**
  * @brief Checks if data could be sent to the cloud based on config.
  *

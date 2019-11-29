@@ -352,6 +352,12 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 						 ((u32_t)cmd->data.sv.value >> 8) & 0xFF,
 						 ((u32_t)cmd->data.sv.value) & 0xFF);
 
+	} else if ((cmd->channel == CLOUD_CHANNEL_DEVICE_INFO) &&
+			   (cmd->group == CLOUD_CMD_GROUP_GET) &&
+			   (cmd->type == CLOUD_CMD_EMPTY)) {
+
+		k_work_submit(&device_status_work);
+
 	} else if ((cmd->channel == CLOUD_CHANNEL_LTE_LINK_RSRP) &&
 			   (cmd->group == CLOUD_CMD_GROUP_GET) &&
 			   (cmd->type == CLOUD_CMD_EMPTY)) {

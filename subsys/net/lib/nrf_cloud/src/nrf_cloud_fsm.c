@@ -111,7 +111,7 @@ static const fsm_transition *state_event_handlers[] = {
 	[STATE_DC_CONNECTING] = dc_connecting_fsm_transition,
 	[STATE_DC_CONNECTED] = dc_connected_fsm_transition,
 	[STATE_READY] = not_implemented_fsm_transition,
-	[STATE_DISCONNECTING] = not_implemented_fsm_transition,
+	//[STATE_DISCONNECTING] = not_implemented_fsm_transition,
 	[STATE_ERROR] = not_implemented_fsm_transition,
 };
 BUILD_ASSERT(ARRAY_SIZE(state_event_handlers) == STATE_TOTAL);
