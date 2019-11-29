@@ -490,6 +490,7 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd,
 		} else if (parsed_cmd->data.sv.value <
 				   MIN_INTERVAL_VAL_SECONDS) {
 			parsed_cmd->data.sv.value = MIN_INTERVAL_VAL_SECONDS;
+
 		}
 	}
 
