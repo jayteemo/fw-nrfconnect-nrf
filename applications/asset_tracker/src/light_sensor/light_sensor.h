@@ -49,6 +49,9 @@ int light_sensor_init_and_start(const light_sensor_data_ready_cb cb);
  */
 int light_sensor_get_data(struct light_sensor_data *const data);
 
+void light_sensor_set_send_interval(const s32_t interval_s);
+s32_t light_sensor_get_send_interval(void);
+
 #ifdef __cplusplus
 }
 #endif
