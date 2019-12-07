@@ -177,6 +177,7 @@ static const char *const channel_type_str[] = {
 	[CLOUD_CHANNEL_PIN] = "",
 	[CLOUD_CHANNEL_RGB_LED] = CLOUD_CHANNEL_STR_RGB_LED,
 	[CLOUD_CHANNEL_BUZZER] = "",
+	[CLOUD_CHANNEL_ENVIRONMENT] = CLOUD_CHANNEL_STR_ENVIRONMENT,
 	[CLOUD_CHANNEL_TEMP] = CLOUD_CHANNEL_STR_TEMP,
 	[CLOUD_CHANNEL_HUMID] = CLOUD_CHANNEL_STR_HUMID,
 	[CLOUD_CHANNEL_AIR_PRESS] = CLOUD_CHANNEL_STR_AIR_PRESS,
@@ -797,20 +798,11 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 	}
 
 	switch (cmd->type) {
-	case CLOUD_CMD_INTERVAL:
-		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
-			/* Undefined means a valid value was set, so enable */
-			err = cloud_set_chan_cfg_item(
-				cmd->channel,
-				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-				true);
-
-		} else {
-			err = cloud_set_chan_cfg_item(
-				cmd->channel,
-				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
-		}
+	case CLOUD_CMD_ENABLE:
+		err = cloud_set_chan_cfg_item(
+			cmd->channel,
+			SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
+			(cmd->data.sv.state ==CLOUD_CMD_STATE_TRUE));
 		break;
 	case CLOUD_CMD_THRESHOLD_HIGH:
 		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {

@@ -46,6 +46,8 @@ typedef struct {
 	double value;
 } env_sensor_data_t;
 
+typedef void (*env_sensors_data_ready_cb)(void);
+
 /**
  * @brief Get latest sampled temperature data.
  *
@@ -88,7 +90,11 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data);
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
-int env_sensors_init_and_start(void);
+int env_sensors_init_and_start(const env_sensors_data_ready_cb cb);
+
+void env_sensors_set_send_interval(const s32_t interval_s);
+s32_t env_sensors_get_send_interval(void);
+void env_sensors_set_backoff_enable(const bool backoff_enable);
 
 #ifdef __cplusplus
 }
