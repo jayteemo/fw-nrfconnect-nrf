@@ -84,7 +84,6 @@ int env_sensors_get_pressure(env_sensor_data_t *sensor_data);
  */
 int env_sensors_get_air_quality(env_sensor_data_t *sensor_data);
 
-
 /**
  * @brief Initialize and start the environmental sensors.
  *
@@ -92,9 +91,34 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data);
  */
 int env_sensors_init_and_start(const env_sensors_data_ready_cb cb);
 
+/**
+ * @brief Set environmental sensor's poll/send interval.
+ *
+ * @param interval_s Interval, in seconds. 0 to disable.
+ *
+ */
 void env_sensors_set_send_interval(const s32_t interval_s);
+
+/**
+ * @brief Get environmental sensor's poll/send interval.
+ *
+ * @return Interval, in seconds.
+ */
 s32_t env_sensors_get_send_interval(void);
+
+/**
+ * @brief Enable or disable back-off delay for sending environmental data.
+ *
+ * @param backoff_enable True to enable back-off delay, otherwise false.
+ *
+ */
 void env_sensors_set_backoff_enable(const bool backoff_enable);
+
+/**
+ * @brief Perform an immediate poll of the environmental sensor.
+ *
+ */
+void env_sensors_poll(void);
 
 #ifdef __cplusplus
 }
