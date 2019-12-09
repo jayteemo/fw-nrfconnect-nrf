@@ -117,8 +117,9 @@ void env_sensors_set_backoff_enable(const bool backoff_enable);
 /**
  * @brief Perform an immediate poll of the environmental sensor.
  *
+ * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
-void env_sensors_poll(void);
+int env_sensors_poll(void);
 
 #ifdef __cplusplus
 }

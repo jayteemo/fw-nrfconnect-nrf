@@ -59,15 +59,16 @@ static struct k_delayed_work env_sensors_poller;
 static env_sensors_data_ready_cb data_ready_cb;
 static s32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
 static bool backoff_enabled = false;
+static bool initialized = false;
 
 static inline int submit_poll_work(const s32_t delay_s)
 {
 	return k_delayed_work_submit(&env_sensors_poller, K_SECONDS(delay_s));
 }
 
-void env_sensors_poll(void)
+int env_sensors_poll(void)
 {
-	submit_poll_work(K_NO_WAIT);
+	return (initialized ? submit_poll_work(K_NO_WAIT) : -ENXIO);
 }
 
 static void env_sensors_poll_fn(struct k_work *work)
@@ -76,6 +77,11 @@ static void env_sensors_poll_fn(struct k_work *work)
 	struct sensor_value data[num_sensors];
 
 	int err;
+
+	if (data_send_interval_s == 0)
+	{
+		return;
+	}
 
 	if (IS_ENABLED(CONFIG_BME680)) {
 		err = sensor_sample_fetch_chan(env_sensors[0]->dev,
@@ -111,14 +117,9 @@ static void env_sensors_poll_fn(struct k_work *work)
 		data_ready_cb();
 	}
 
-	if (backoff_enabled) {
-		submit_poll_work(CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME);
-	}
-	else if ((data_send_interval_s > 0) &&
-		(k_delayed_work_remaining_get(&env_sensors_poller) == 0)) {
-		submit_poll_work(data_send_interval_s);
-	}
+	submit_poll_work( backoff_enabled ? CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME : data_send_interval_s);
 }
+
 /**@brief Initialize environment sensors. */
 int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 {
@@ -132,6 +133,8 @@ int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 	data_ready_cb = cb;
 
 	k_delayed_work_init(&env_sensors_poller, env_sensors_poll_fn);
+
+	initialized = true;
 
 	return ((data_send_interval_s > 0) ? submit_poll_work(ENV_INIT_DELAY_S) : 0);
 }
@@ -187,11 +190,15 @@ void env_sensors_set_send_interval(const s32_t interval_s)
 
 	data_send_interval_s = interval_s;
 
+	if ( !initialized ) {
+		return;
+	}
+
 	if (data_send_interval_s) {
 		/* restart work for new interval to take effect */
 		env_sensors_poll();
 	}
-	else {
+	else if (k_delayed_work_remaining_get(&env_sensors_poller) > 0) {
 		k_delayed_work_cancel(&env_sensors_poller);
 	}
 }
