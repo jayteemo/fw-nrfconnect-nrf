@@ -264,6 +264,7 @@ static void gps_trigger_handler(struct device *dev, struct gps_trigger *trigger)
 
 	gps_control_stop(K_NO_WAIT);
 	k_work_submit(&send_gps_data_work);
+	env_sensors_poll();
 }
 
 #if defined(CONFIG_USE_UI_MODULE)

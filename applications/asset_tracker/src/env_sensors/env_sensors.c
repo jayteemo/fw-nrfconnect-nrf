@@ -65,6 +65,11 @@ static inline int submit_poll_work(const s32_t delay_s)
 	return k_delayed_work_submit(&env_sensors_poller, K_SECONDS(delay_s));
 }
 
+void env_sensors_poll(void)
+{
+	submit_poll_work(K_NO_WAIT);
+}
+
 static void env_sensors_poll_fn(struct k_work *work)
 {
 	int num_sensors = ARRAY_SIZE(env_sensors);
@@ -184,7 +189,7 @@ void env_sensors_set_send_interval(const s32_t interval_s)
 
 	if (data_send_interval_s) {
 		/* restart work for new interval to take effect */
-		submit_poll_work(K_NO_WAIT);
+		env_sensors_poll();
 	}
 	else {
 		k_delayed_work_cancel(&env_sensors_poller);
