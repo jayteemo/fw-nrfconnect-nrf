@@ -33,6 +33,7 @@
 #include "ui.h"
 #include "gps_controller.h"
 #include "service_info.h"
+#include "at_cmd.h"
 
 #define CALIBRATION_PRESS_DURATION 	K_SECONDS(5)
 #define CLOUD_CONNACK_WAIT_DURATION	K_SECONDS(CONFIG_CLOUD_WAIT_DURATION)
@@ -330,12 +331,28 @@ static void motion_handler(motion_data_t  motion_data)
 	last_orientation_state = motion_data.orientation;
 }
 
+static void modem_at_cmd_handler(char *response)
+{
+	printk("AT Response: %s\n", response);
+
+	printk("----END----\n");
+}
+
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
+	enum at_cmd_state state;
+
 	if ((cmd->channel == CLOUD_CHANNEL_GPS) &&
 	    (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 	    (cmd->type == CLOUD_CMD_ENABLE)) {
 		set_gps_enable(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE);
+	} else if ((cmd->channel == CLOUD_CHANNEL_MODEM) &&
+			(cmd->group == CLOUD_CMD_GROUP_COMMAND) &&
+			(cmd->type == CLOUD_CMD_DATA_STRING)) {
+		if (at_cmd_write_with_callback(cmd->data.data_string,
+				modem_at_cmd_handler, &state) != 0) {
+			// TODO: handle error
+		}
 	} else if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
 		   (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 		   (cmd->type == CLOUD_CMD_COLOR)) {
@@ -371,7 +388,6 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 			printk("Interval command not valid for channel %d\n", cmd->channel);
 		}
 	}
-
 }
 
 #if CONFIG_MODEM_INFO
@@ -508,6 +524,8 @@ static void env_data_send(void)
 		.endpoint.type = CLOUD_EP_TOPIC_MSG
 	};
 
+	printk("%s\n",__func__);
+
 	if (!atomic_get(&send_data_enable)) {
 		return;
 	}
@@ -579,6 +597,8 @@ void light_sensor_data_send(void)
 	struct light_sensor_data light_data;
 	struct cloud_msg msg = { .qos = CLOUD_QOS_AT_MOST_ONCE,
 				 .endpoint.type = CLOUD_EP_TOPIC_MSG };
+
+	printk("%s\n",__func__);
 
 	if (!atomic_get(&send_data_enable) || gps_control_is_active()) {
 		return;

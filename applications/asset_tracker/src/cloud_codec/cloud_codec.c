@@ -8,6 +8,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <zephyr.h>
 #include <zephyr/types.h>
 #include <net/cloud.h>
@@ -169,7 +170,15 @@ static CMD_NEW_GROUP(group_data, CLOUD_CMD_GROUP_DATA, CMD_ARRAY(
 	)
 );
 
-struct cmd *cmd_groups[] = {&group_cfg_set, &group_get, &group_data};
+static CMD_NEW_GROUP(group_command, CLOUD_CMD_GROUP_COMMAND, CMD_ARRAY(
+		CMD_NEW_CHAN(CLOUD_CHANNEL_MODEM, CMD_ARRAY(
+			CMD_NEW_TYPE(CLOUD_CMD_DATA_STRING)
+			)
+		),
+	)
+);
+
+struct cmd *cmd_groups[] = {&group_cfg_set, &group_get, &group_data, &group_command};
 static cloud_cmd_cb_t cloud_command_cb;
 struct cloud_command cmd_parsed;
 
@@ -194,6 +203,7 @@ static const char *const channel_type_str[] = {
 	[CLOUD_CHANNEL_LIGHT_BLUE] = CLOUD_CHANNEL_STR_LIGHT_BLUE,
 	[CLOUD_CHANNEL_LIGHT_IR] = CLOUD_CHANNEL_STR_LIGHT_IR,
 	[CLOUD_CHANNEL_ASSISTED_GPS] = CLOUD_CHANNEL_STR_ASSISTED_GPS,
+	[CLOUD_CHANNEL_MODEM] = CLOUD_CHANNEL_STR_MODEM,
 };
 BUILD_ASSERT(ARRAY_SIZE(channel_type_str) == CLOUD_CHANNEL__TOTAL);
 
@@ -208,6 +218,7 @@ static const char *const cmd_group_str[] = {
 	[CLOUD_CMD_GROUP_OK] = CLOUD_CMD_GROUP_STR_OK,
 	[CLOUD_CMD_GROUP_CFG_SET] = CLOUD_CMD_GROUP_STR_CFG_SET,
 	[CLOUD_CMD_GROUP_CFG_GET] = CLOUD_CMD_GROUP_STR_CFG_GET,
+	[CLOUD_CMD_GROUP_COMMAND] = CLOUD_CMD_GROUP_STR_COMMAND,
 };
 BUILD_ASSERT(ARRAY_SIZE(cmd_group_str) == CLOUD_CMD_GROUP__TOTAL);
 
@@ -219,6 +230,7 @@ static const char *const cmd_type_str[] = {
 	[CLOUD_CMD_INTERVAL] = CLOUD_CMD_TYPE_STR_INTERVAL,
 	[CLOUD_CMD_COLOR] = CLOUD_CMD_TYPE_STR_COLOR,
 	[CLOUD_CMD_MODEM_PARAM] = CLOUD_CMD_TYPE_STR_MODEM_PARAM,
+	[CLOUD_CMD_DATA_STRING] = CLOUD_CMD_TYPE_STR_DATA_STRING,
 };
 BUILD_ASSERT(ARRAY_SIZE(cmd_type_str) == CLOUD_CMD__TOTAL);
 
@@ -333,6 +345,8 @@ int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
 	cJSON *root_obj = cJSON_CreateObject();
 	cJSON *state_obj = cJSON_CreateObject();
 	cJSON *reported_obj = cJSON_CreateObject();
+	char dev_str[] = CLOUD_CHANNEL_STR_DEVICE_INFO;
+	const char * channel_type;
 
 	if (root_obj == NULL || state_obj == NULL || reported_obj == NULL) {
 		cJSON_Delete(root_obj);
@@ -355,11 +369,21 @@ int cloud_encode_digital_twin_data(const struct cloud_channel_data *channel,
 			 * silently as it's not a functionally critical error.
 			 */
 		} else {
-			ret += json_add_obj(reported_obj, "DEVICE", dummy_obj);
+			ret += json_add_obj(reported_obj, dev_str, dummy_obj);
 		}
+
+		/* Convert to lowercase for shadow */
+		for (int i = 0; dev_str[i]; ++i) {
+			dev_str[i] = tolower(dev_str[i]);
+		}
+		channel_type = dev_str;
+	}
+	else
+	{
+		channel_type = channel_type_str[channel->type];
 	}
 
-	ret += json_add_obj(reported_obj, channel_type_str[channel->type],
+	ret += json_add_obj(reported_obj, channel_type,
 			   (cJSON *)channel->data.buf);
 	ret += json_add_obj(state_obj, "reported", reported_obj);
 	ret += json_add_obj(root_obj, "state", state_obj);
@@ -395,11 +419,10 @@ static int cloud_decode_modem_params(cJSON *const data_obj,
 	}
 
 	blob = json_object_decode(data_obj, MODEM_PARAM_BLOB_KEY_STR);
-	params->blob = cJSON_IsString(blob) ? blob->valuestring : NULL;
+	params->blob = cJSON_GetStringValue(blob);
 
 	checksum = json_object_decode(data_obj, MODEM_PARAM_CHECKSUM_KEY_STR);
-	params->checksum =
-		cJSON_IsString(checksum) ? checksum->valuestring : NULL;
+	params->checksum = cJSON_GetStringValue(checksum);
 
 	return (((params->blob == NULL) || (params->checksum == NULL)) ?
 			-ESRCH : 0);
@@ -417,11 +440,14 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd,
 	}
 
 	if (type_obj != NULL) {
-		decoded_obj = json_object_decode(type_obj,
-						 cmd_type_str[type_cmd->type]);
+		/* Data string type does not require additional decoding */
+		if (type_cmd->type != CLOUD_CMD_DATA_STRING) {
+			decoded_obj = json_object_decode(type_obj,
+					cmd_type_str[type_cmd->type]);
 
-		if (!decoded_obj) {
-			return -ENOENT; /* Command not found */
+			if (!decoded_obj) {
+				return -ENOENT; /* Command not found */
+			}
 		}
 
 		switch (type_cmd->type) {
@@ -458,13 +484,13 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd,
 			break;
 		}
 		case CLOUD_CMD_COLOR: {
-			if (!cJSON_IsString(decoded_obj) ||
-				!decoded_obj->valuestring) {
+			if (cJSON_GetStringValue(decoded_obj) == NULL){
 				return -ESRCH;
 			}
 
 			parsed_cmd->data.sv.value = (double)strtol(
-				decoded_obj->valuestring, NULL, 16);
+					cJSON_GetStringValue(decoded_obj), NULL, 16);
+
 			break;
 		}
 		case CLOUD_CMD_MODEM_PARAM: {
@@ -477,6 +503,12 @@ static int cloud_cmd_parse_type(const struct cmd *const type_cmd,
 
 			break;
 		}
+		case CLOUD_CMD_DATA_STRING:
+			parsed_cmd->data.data_string = cJSON_GetStringValue(type_obj);
+			if (parsed_cmd->data.data_string == NULL) {
+				return -ESRCH;
+			}
+			break;
 		case CLOUD_CMD_EMPTY:
 		default: {
 			return -ENOTSUP;
