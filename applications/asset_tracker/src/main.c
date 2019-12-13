@@ -125,10 +125,11 @@ static struct k_work device_status_work;
 K_SEM_DEFINE(modem_at_cmd_sem, 1, 1);
 static enum at_cmd_state modem_at_cmd_state;
 static int modem_at_cmd_err;
+#define MODEM_AT_CMD_OK_STR "OK\r\n"
 #define MODEM_AT_CMD_ERR_STR "AT CMD write error: %d, state %d"
+#define MODEM_AT_CMD_ERR_PRINTF_PARAM MODEM_AT_CMD_ERR_STR, modem_at_cmd_err, modem_at_cmd_state
 /* size for error string with 2 error codes. */
 #define MODEM_AT_CMD_ERR_STR_MAX_LEN (sizeof(MODEM_AT_CMD_ERR_STR) + (2 * 11))
-#define MODEM_AT_CMD_ERR_PRINTF_PARAM MODEM_AT_CMD_ERR_STR, modem_at_cmd_err, modem_at_cmd_state
 
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
@@ -372,16 +373,18 @@ static void modem_at_cmd_response_handler(char *response)
 
 	if (modem_data.data.len == CONFIG_AT_CMD_RESPONSE_MAX_LEN) {
 		printk("[%s:%d] Invalid AT command response\n", __func__, __LINE__);
-		return;
+		goto give;
+	} else if ((modem_data.data.len == 0) &&
+		(modem_at_cmd_state == AT_CMD_OK)) {
+		modem_data.data.buf = MODEM_AT_CMD_OK_STR;
+		modem_data.data.len = strlen(modem_data.data.buf);
 	}
 
-	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_DATA, &msg);
+	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_COMMAND, &msg);
 	if (err) {
 		printk("[%s:%d] cloud_encode_data failed with error %d\n",
 			__func__, __LINE__, err);
-		return;
-	} else {
-		printk("Modem AT response: %s\n", response);
+		goto give;
 	}
 
 	err = cloud_send(cloud_backend, &msg);
@@ -391,23 +394,26 @@ static void modem_at_cmd_response_handler(char *response)
 			__func__, __LINE__, err);
 	}
 
+give:
 	k_sem_give(&modem_at_cmd_sem);
 }
 
 static void cloud_cmd_handle_modem_at_cmd(const char * const at_cmd)
 {
-	if (k_sem_take(&modem_at_cmd_sem, K_MSEC(200)) != 0) {
-		printk("[%s:%d] Failed to take semaphore for modem AT cmd.\n",
+	if (k_sem_take(&modem_at_cmd_sem, K_MSEC(20)) != 0) {
+		printk("[%s:%d] Modem AT cmd in progress.\n",
 			__func__, __LINE__);
 		return;
 	}
-
-	modem_at_cmd_err = at_cmd_write_with_callback(at_cmd,
-		modem_at_cmd_response_handler, &modem_at_cmd_state);
+	else
+	{
+		modem_at_cmd_err = at_cmd_write_with_callback(at_cmd,
+			modem_at_cmd_response_handler, &modem_at_cmd_state);
+	}
 
 	if (modem_at_cmd_err != 0) {
 		printk("[%s:%d] Modem AT command write failed with error %d\n",
-				__func__, __LINE__, modem_at_cmd_err);
+			__func__, __LINE__, modem_at_cmd_err);
 		k_work_submit(&send_modem_at_cmd_err_work);
 	}
 }
