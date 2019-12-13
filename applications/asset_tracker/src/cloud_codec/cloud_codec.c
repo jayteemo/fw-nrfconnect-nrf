@@ -295,12 +295,13 @@ static bool json_value_string_compare(cJSON *obj, const char *const str)
 }
 
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      struct cloud_msg *output)
+		      const enum cloud_cmd_group group, struct cloud_msg *output)
 {
 	int ret;
 
 	if (channel == NULL || channel->data.buf == NULL ||
-	    channel->data.len == 0 || output == NULL) {
+	    channel->data.len == 0 || output == NULL ||
+		group >= CLOUD_CMD_GROUP__TOTAL) {
 		return -EINVAL;
 	}
 
@@ -313,8 +314,7 @@ int cloud_encode_data(const struct cloud_channel_data *channel,
 	ret = json_add_str(root_obj, CMD_CHAN_KEY_STR,
 			   channel_type_str[channel->type]);
 	ret += json_add_str(root_obj, CMD_DATA_TYPE_KEY_STR, channel->data.buf);
-	ret += json_add_str(root_obj, CMD_GROUP_KEY_STR,
-			    CLOUD_CMD_GROUP_STR_DATA);
+	ret += json_add_str(root_obj, CMD_GROUP_KEY_STR, cmd_group_str[group]);
 	if (ret != 0) {
 		cJSON_Delete(root_obj);
 		return -ENOMEM;
@@ -684,7 +684,7 @@ int cloud_encode_env_sensors_data(const env_sensor_data_t *sensor_data,
 	cloud_sensor.data.buf = buf;
 	cloud_sensor.data.len = len;
 
-	return cloud_encode_data(&cloud_sensor, output);
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
 }
 
 int cloud_encode_motion_data(const motion_data_t *motion_data,
@@ -710,7 +710,7 @@ int cloud_encode_motion_data(const motion_data_t *motion_data,
 
 	cloud_sensor.data.len = sizeof(cloud_sensor.data.buf) - 1;
 
-	return cloud_encode_data(&cloud_sensor, output);
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
 
 }
 #if CONFIG_LIGHT_SENSOR
@@ -757,7 +757,7 @@ int cloud_encode_light_sensor_data(const struct light_sensor_data *sensor_data,
 	cloud_sensor.data.len = len;
 	cloud_sensor.type = CLOUD_CHANNEL_LIGHT_SENSOR;
 
-	return cloud_encode_data(&cloud_sensor, output);
+	return cloud_encode_data(&cloud_sensor, CLOUD_CMD_GROUP_DATA, output);
 }
 #endif /* CONFIG_LIGHT_SENSOR */
 

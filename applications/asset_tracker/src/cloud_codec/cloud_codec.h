@@ -195,12 +195,13 @@ typedef void (*cloud_cmd_cb_t)(struct cloud_command *cmd);
  * @brief Encode cloud data.
  *
  * @param channel The cloud channel type.
+ * @param group The channel data's group.
  * @param output Pointer to the cloud data output.
  *
  * @return 0 if the operation was successful, otherwise a (negative) error code.
  */
 int cloud_encode_data(const struct cloud_channel_data *channel,
-		      struct cloud_msg *output);
+		      const enum cloud_cmd_group group, struct cloud_msg *output);
 
 /**
  * @brief Decode cloud data.

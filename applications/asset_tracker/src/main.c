@@ -116,10 +116,20 @@ static atomic_val_t reconnect_to_cloud;
 static struct k_work connect_work;
 static struct k_work send_gps_data_work;
 static struct k_work send_button_data_work;
+static struct k_work send_modem_at_cmd_err_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
 static struct k_delayed_work cycle_cloud_connection_work;
 static struct k_work device_status_work;
+
+K_SEM_DEFINE(modem_at_cmd_sem, 1, 1);
+static enum at_cmd_state modem_at_cmd_state;
+static int modem_at_cmd_err;
+#define MODEM_AT_CMD_ERR_STR "AT CMD write error: %d, state %d"
+/* size for error string with 2 error codes. */
+#define MODEM_AT_CMD_ERR_STR_MAX_LEN (sizeof(MODEM_AT_CMD_ERR_STR) + (2 * 11))
+#define MODEM_AT_CMD_ERR_PRINTF_PARAM MODEM_AT_CMD_ERR_STR, modem_at_cmd_err, modem_at_cmd_state
+
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
 #endif /* CONFIG_MODEM_INFO */
@@ -144,6 +154,7 @@ static void sensor_data_send(struct cloud_channel_data *data);
 static void device_status_send(struct k_work *work);
 static void cycle_cloud_connection(struct k_work *work);
 static void set_gps_enable(const bool enable);
+static void modem_at_cmd_response_handler(char *response);
 
 /**@brief nRF Cloud error handler. */
 void error_handler(enum error_type err_type, int err_code)
@@ -233,6 +244,14 @@ static void send_button_data_work_fn(struct k_work *work)
 {
 	sensor_data_send(&button_cloud_data);
 }
+
+static void send_modem_at_cmd_err_work_fn(struct k_work *work)
+{
+	char err_msg[MODEM_AT_CMD_ERR_STR_MAX_LEN];
+	snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_ERR_PRINTF_PARAM);
+	modem_at_cmd_response_handler(err_msg);
+}
+
 
 /**@brief Callback for GPS trigger events */
 static void gps_trigger_handler(struct device *dev, struct gps_trigger *trigger)
@@ -331,17 +350,70 @@ static void motion_handler(motion_data_t  motion_data)
 	last_orientation_state = motion_data.orientation;
 }
 
-static void modem_at_cmd_handler(char *response)
+static void modem_at_cmd_response_handler(char *response)
 {
-	printk("AT Response: %s\n", response);
+	int err;
+	struct cloud_channel_data modem_data = {
+		.type = CLOUD_CHANNEL_MODEM
+	};
+	struct cloud_msg msg = {
+		.qos = CLOUD_QOS_AT_MOST_ONCE,
+		.endpoint.type = CLOUD_EP_TOPIC_MSG
+	};
 
-	printk("----END----\n");
+	if (response == NULL) {
+		printk("[%s:%d] NULL modem AT command response\n",
+			__func__, __LINE__);
+		return;
+	}
+
+	modem_data.data.buf = response;
+	modem_data.data.len = strnlen(response, CONFIG_AT_CMD_RESPONSE_MAX_LEN);
+
+	if (modem_data.data.len == CONFIG_AT_CMD_RESPONSE_MAX_LEN) {
+		printk("[%s:%d] Invalid AT command response\n", __func__, __LINE__);
+		return;
+	}
+
+	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_DATA, &msg);
+	if (err) {
+		printk("[%s:%d] cloud_encode_data failed with error %d\n",
+			__func__, __LINE__, err);
+		return;
+	} else {
+		printk("Modem AT response: %s\n", response);
+	}
+
+	err = cloud_send(cloud_backend, &msg);
+	cloud_release_data(&msg);
+	if (err) {
+		printk("[%s:%d] cloud_send failed with error %d\n",
+			__func__, __LINE__, err);
+	}
+
+	k_sem_give(&modem_at_cmd_sem);
+}
+
+static void cloud_cmd_handle_modem_at_cmd(const char * const at_cmd)
+{
+	if (k_sem_take(&modem_at_cmd_sem, K_MSEC(200)) != 0) {
+		printk("[%s:%d] Failed to take semaphore for modem AT cmd.\n",
+			__func__, __LINE__);
+		return;
+	}
+
+	modem_at_cmd_err = at_cmd_write_with_callback(at_cmd,
+		modem_at_cmd_response_handler, &modem_at_cmd_state);
+
+	if (modem_at_cmd_err != 0) {
+		printk("[%s:%d] Modem AT command write failed with error %d\n",
+				__func__, __LINE__, modem_at_cmd_err);
+		k_work_submit(&send_modem_at_cmd_err_work);
+	}
 }
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
 {
-	enum at_cmd_state state;
-
 	if ((cmd->channel == CLOUD_CHANNEL_GPS) &&
 	    (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 	    (cmd->type == CLOUD_CMD_ENABLE)) {
@@ -349,10 +421,7 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 	} else if ((cmd->channel == CLOUD_CHANNEL_MODEM) &&
 			(cmd->group == CLOUD_CMD_GROUP_COMMAND) &&
 			(cmd->type == CLOUD_CMD_DATA_STRING)) {
-		if (at_cmd_write_with_callback(cmd->data.data_string,
-				modem_at_cmd_handler, &state) != 0) {
-			// TODO: handle error
-		}
+		cloud_cmd_handle_modem_at_cmd(cmd->data.data_string);
 	} else if ((cmd->channel == CLOUD_CHANNEL_RGB_LED) &&
 		   (cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 		   (cmd->type == CLOUD_CMD_COLOR)) {
@@ -654,7 +723,7 @@ static void sensor_data_send(struct cloud_channel_data *data)
 	}
 
 	if (data->type != CLOUD_CHANNEL_DEVICE_INFO) {
-		err = cloud_encode_data(data, &msg);
+		err = cloud_encode_data(data, CLOUD_CMD_GROUP_DATA, &msg);
 	} else {
 		err = cloud_encode_digital_twin_data(data, &msg);
 	}
@@ -839,9 +908,12 @@ static void long_press_handler(struct k_work *work)
 /**@brief Initializes and submits delayed work. */
 static void work_init(void)
 {
+	k_sem_init(&modem_at_cmd_sem, 1, 1);
+
 	k_work_init(&connect_work, app_connect);
 	k_work_init(&send_gps_data_work, send_gps_data_work_fn);
 	k_work_init(&send_button_data_work, send_button_data_work_fn);
+	k_work_init(&send_modem_at_cmd_err_work, send_modem_at_cmd_err_work_fn);
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
 	k_delayed_work_init(&cycle_cloud_connection_work,
