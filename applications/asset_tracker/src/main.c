@@ -116,20 +116,14 @@ static atomic_val_t reconnect_to_cloud;
 static struct k_work connect_work;
 static struct k_work send_gps_data_work;
 static struct k_work send_button_data_work;
-static struct k_work send_modem_at_cmd_err_work;
+static struct k_work send_modem_at_cmd_work;
 static struct k_delayed_work long_press_button_work;
 static struct k_delayed_work cloud_reboot_work;
 static struct k_delayed_work cycle_cloud_connection_work;
 static struct k_work device_status_work;
 
 K_SEM_DEFINE(modem_at_cmd_sem, 1, 1);
-static enum at_cmd_state modem_at_cmd_state;
-static int modem_at_cmd_err;
-#define MODEM_AT_CMD_OK_STR "OK\r\n"
-#define MODEM_AT_CMD_ERR_STR "AT CMD error: %d, state %d"
-#define MODEM_AT_CMD_ERR_PRINTF_PARAM MODEM_AT_CMD_ERR_STR, modem_at_cmd_err, modem_at_cmd_state
-/* size for error string with 2 error codes. */
-#define MODEM_AT_CMD_ERR_STR_MAX_LEN (sizeof(MODEM_AT_CMD_ERR_STR) + (2 * 11))
+static char modem_at_cmd_buff[CONFIG_AT_CMD_RESPONSE_MAX_LEN+1];
 
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
@@ -155,7 +149,6 @@ static void sensor_data_send(struct cloud_channel_data *data);
 static void device_status_send(struct k_work *work);
 static void cycle_cloud_connection(struct k_work *work);
 static void set_gps_enable(const bool enable);
-static void modem_at_cmd_response_handler(char *response);
 
 /**@brief nRF Cloud error handler. */
 void error_handler(enum error_type err_type, int err_code)
@@ -246,19 +239,50 @@ static void send_button_data_work_fn(struct k_work *work)
 	sensor_data_send(&button_cloud_data);
 }
 
-static void send_modem_at_cmd_err_work_fn(struct k_work *work)
+static void send_modem_at_cmd_work_fn(struct k_work *work)
 {
-	printk("send_modem_at_cmd_err_work_fn\n");
+	enum at_cmd_state state;
+	int err;
+	struct cloud_channel_data modem_data = {
+		.type = CLOUD_CHANNEL_MODEM
+	};
+	struct cloud_msg msg = {
+		.qos = CLOUD_QOS_AT_MOST_ONCE,
+		.endpoint.type = CLOUD_EP_TOPIC_MSG
+	};
 
-	char err_msg[MODEM_AT_CMD_ERR_STR_MAX_LEN];
-	if ((modem_at_cmd_state == AT_CMD_OK)) {
-		snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_OK_STR);
+	if (strlen(modem_at_cmd_buff) == 0) {
+		err = -ENOBUFS;
+		state = AT_CMD_ERROR;
+	} else {
+		err = at_cmd_write(modem_at_cmd_buff,modem_at_cmd_buff,
+				sizeof(modem_at_cmd_buff),&state);
 	}
-	else
-	{
-		snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_ERR_PRINTF_PARAM);
+
+	if (err) {
+		snprintf(modem_at_cmd_buff,sizeof(modem_at_cmd_buff),
+				"AT CMD error: %d, state %d", err, state);
+	} else if (strlen(modem_at_cmd_buff) == 0) {
+		snprintf(modem_at_cmd_buff,sizeof(modem_at_cmd_buff), "OK\r\n");
 	}
-	modem_at_cmd_response_handler(err_msg);
+
+	modem_data.data.buf = modem_at_cmd_buff;
+	modem_data.data.len = strlen(modem_at_cmd_buff);
+
+	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_COMMAND, &msg);
+	if (err) {
+		printk("[%s:%d] cloud_encode_data failed with error %d\n",
+			__func__, __LINE__, err);
+	} else {
+		err = cloud_send(cloud_backend, &msg);
+		cloud_release_data(&msg);
+		if (err) {
+			printk("[%s:%d] cloud_send failed with error %d\n",
+				__func__, __LINE__, err);
+		}
+	}
+
+	k_sem_give(&modem_at_cmd_sem);
 }
 
 
@@ -359,100 +383,29 @@ static void motion_handler(motion_data_t  motion_data)
 	last_orientation_state = motion_data.orientation;
 }
 
-static void modem_at_cmd_response_handler(char *response)
-{
-	int err;
-	struct cloud_channel_data modem_data = {
-		.type = CLOUD_CHANNEL_MODEM
-	};
-	struct cloud_msg msg = {
-		.qos = CLOUD_QOS_AT_MOST_ONCE,
-		.endpoint.type = CLOUD_EP_TOPIC_MSG
-	};
-
-	if (k_sem_count_get(&modem_at_cmd_sem)) {
-		printk("[%s:%d] Modem AT command response already handled\n",
-			__func__, __LINE__);
-		return;
-	}
-
-	if (response == NULL) {
-		printk("[%s:%d] NULL modem AT command response\n",
-			__func__, __LINE__);
-		goto give;
-	}
-
-	modem_data.data.buf = response;
-	modem_data.data.len = strlen(response);
-
-	if (modem_data.data.len == 0)
-	{
-		printk("[%s:%d] Empty AT response...\n",
-					__func__, __LINE__);
-		/* Do not give, err handler will take care of it */
-		return;
-	}
-
-	printk("[%s:%d] Modem AT command state: %d, error: %d\n", __func__, __LINE__,
-			modem_at_cmd_state, modem_at_cmd_err);
-
-	if (modem_data.data.len == CONFIG_AT_CMD_RESPONSE_MAX_LEN) {
-		printk("[%s:%d] Invalid modem AT command response\n", __func__, __LINE__);
-		goto give;
-	} else if ((modem_data.data.len == 0)) {
-
-		if ((modem_at_cmd_state == AT_CMD_OK)) {
-			modem_data.data.buf = MODEM_AT_CMD_OK_STR;
-			modem_data.data.len = strlen(modem_data.data.buf);
-		}
-		else
-		{
-			printk("[%s:%d] Modem AT command response is empty\n", __func__, __LINE__);
-			goto give;
-		}
-	}
-
-	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_COMMAND, &msg);
-	if (err) {
-		printk("[%s:%d] cloud_encode_data failed with error %d\n",
-			__func__, __LINE__, err);
-		goto give;
-	}
-
-	err = cloud_send(cloud_backend, &msg);
-	cloud_release_data(&msg);
-	if (err) {
-		printk("[%s:%d] cloud_send failed with error %d\n",
-			__func__, __LINE__, err);
-	}
-
-give:
-	k_sem_give(&modem_at_cmd_sem);
-}
-
 static void cloud_cmd_handle_modem_at_cmd(const char * const at_cmd)
 {
+	const size_t max_cmd_len = sizeof(modem_at_cmd_buff);
+
+	if (!at_cmd) {
+		return;
+	}
+
 	if (k_sem_take(&modem_at_cmd_sem, K_MSEC(20)) != 0) {
 		printk("[%s:%d] Modem AT cmd in progress.\n",
 			__func__, __LINE__);
 		return;
 	}
-	else
-	{
-		modem_at_cmd_err = at_cmd_write_with_callback(at_cmd,
-			modem_at_cmd_response_handler, &modem_at_cmd_state);
+
+	if (strnlen(at_cmd, max_cmd_len) == max_cmd_len) {
+		printk("[%s:%d] Modem AT cmd too long, must be %d bytes or less\n",
+					__func__, __LINE__, max_cmd_len-1);
+		modem_at_cmd_buff[0] = '\0';
+	} else {
+		strcpy(modem_at_cmd_buff, at_cmd);
 	}
 
-	if (modem_at_cmd_err != 0) {
-		printk("[%s:%d] Modem AT cmd write failed with error %d\n",
-			__func__, __LINE__, modem_at_cmd_err);
-		k_work_submit(&send_modem_at_cmd_err_work);
-	}
-	else
-	{
-		printk("[%s:%d] Modem AT cmd write complete.\n",
-					__func__, __LINE__);
-	}
+	k_work_submit(&send_modem_at_cmd_work);
 }
 
 static void cloud_cmd_handler(struct cloud_command *cmd)
@@ -956,7 +909,7 @@ static void work_init(void)
 	k_work_init(&connect_work, app_connect);
 	k_work_init(&send_gps_data_work, send_gps_data_work_fn);
 	k_work_init(&send_button_data_work, send_button_data_work_fn);
-	k_work_init(&send_modem_at_cmd_err_work, send_modem_at_cmd_err_work_fn);
+	k_work_init(&send_modem_at_cmd_work, send_modem_at_cmd_work_fn);
 	k_delayed_work_init(&long_press_button_work, long_press_handler);
 	k_delayed_work_init(&cloud_reboot_work, cloud_reboot_handler);
 	k_delayed_work_init(&cycle_cloud_connection_work,
