@@ -126,7 +126,7 @@ K_SEM_DEFINE(modem_at_cmd_sem, 1, 1);
 static enum at_cmd_state modem_at_cmd_state;
 static int modem_at_cmd_err;
 #define MODEM_AT_CMD_OK_STR "OK\r\n"
-#define MODEM_AT_CMD_ERR_STR "AT CMD write error: %d, state %d"
+#define MODEM_AT_CMD_ERR_STR "AT CMD error: %d, state %d"
 #define MODEM_AT_CMD_ERR_PRINTF_PARAM MODEM_AT_CMD_ERR_STR, modem_at_cmd_err, modem_at_cmd_state
 /* size for error string with 2 error codes. */
 #define MODEM_AT_CMD_ERR_STR_MAX_LEN (sizeof(MODEM_AT_CMD_ERR_STR) + (2 * 11))
@@ -248,8 +248,16 @@ static void send_button_data_work_fn(struct k_work *work)
 
 static void send_modem_at_cmd_err_work_fn(struct k_work *work)
 {
+	printk("send_modem_at_cmd_err_work_fn\n");
+
 	char err_msg[MODEM_AT_CMD_ERR_STR_MAX_LEN];
-	snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_ERR_PRINTF_PARAM);
+	if ((modem_at_cmd_state == AT_CMD_OK)) {
+		snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_OK_STR);
+	}
+	else
+	{
+		snprintf(err_msg,sizeof(err_msg), MODEM_AT_CMD_ERR_PRINTF_PARAM);
+	}
 	modem_at_cmd_response_handler(err_msg);
 }
 
@@ -362,22 +370,46 @@ static void modem_at_cmd_response_handler(char *response)
 		.endpoint.type = CLOUD_EP_TOPIC_MSG
 	};
 
-	if (response == NULL) {
-		printk("[%s:%d] NULL modem AT command response\n",
+	if (k_sem_count_get(&modem_at_cmd_sem)) {
+		printk("[%s:%d] Modem AT command response already handled\n",
 			__func__, __LINE__);
 		return;
 	}
 
+	if (response == NULL) {
+		printk("[%s:%d] NULL modem AT command response\n",
+			__func__, __LINE__);
+		goto give;
+	}
+
 	modem_data.data.buf = response;
-	modem_data.data.len = strnlen(response, CONFIG_AT_CMD_RESPONSE_MAX_LEN);
+	modem_data.data.len = strlen(response);
+
+	if (modem_data.data.len == 0)
+	{
+		printk("[%s:%d] Empty AT response...\n",
+					__func__, __LINE__);
+		/* Do not give, err handler will take care of it */
+		return;
+	}
+
+	printk("[%s:%d] Modem AT command state: %d, error: %d\n", __func__, __LINE__,
+			modem_at_cmd_state, modem_at_cmd_err);
 
 	if (modem_data.data.len == CONFIG_AT_CMD_RESPONSE_MAX_LEN) {
-		printk("[%s:%d] Invalid AT command response\n", __func__, __LINE__);
+		printk("[%s:%d] Invalid modem AT command response\n", __func__, __LINE__);
 		goto give;
-	} else if ((modem_data.data.len == 0) &&
-		(modem_at_cmd_state == AT_CMD_OK)) {
-		modem_data.data.buf = MODEM_AT_CMD_OK_STR;
-		modem_data.data.len = strlen(modem_data.data.buf);
+	} else if ((modem_data.data.len == 0)) {
+
+		if ((modem_at_cmd_state == AT_CMD_OK)) {
+			modem_data.data.buf = MODEM_AT_CMD_OK_STR;
+			modem_data.data.len = strlen(modem_data.data.buf);
+		}
+		else
+		{
+			printk("[%s:%d] Modem AT command response is empty\n", __func__, __LINE__);
+			goto give;
+		}
 	}
 
 	err = cloud_encode_data(&modem_data, CLOUD_CMD_GROUP_COMMAND, &msg);
@@ -412,9 +444,14 @@ static void cloud_cmd_handle_modem_at_cmd(const char * const at_cmd)
 	}
 
 	if (modem_at_cmd_err != 0) {
-		printk("[%s:%d] Modem AT command write failed with error %d\n",
+		printk("[%s:%d] Modem AT cmd write failed with error %d\n",
 			__func__, __LINE__, modem_at_cmd_err);
 		k_work_submit(&send_modem_at_cmd_err_work);
+	}
+	else
+	{
+		printk("[%s:%d] Modem AT cmd write complete.\n",
+					__func__, __LINE__);
 	}
 }
 

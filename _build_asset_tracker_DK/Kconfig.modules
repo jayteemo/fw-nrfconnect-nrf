@@ -1,0 +1,6 @@
+osource "/Users/justin/Github/FORKS/WIP_interval_cmds/nrf/Kconfig.nrf"
+
+osource "/Users/justin/Github/FORKS/WIP_interval_cmds/mcuboot/zephyr/Kconfig"
+
+osource "/Users/justin/Github/FORKS/WIP_interval_cmds/nrfxlib/Kconfig.nrfxlib"
+
