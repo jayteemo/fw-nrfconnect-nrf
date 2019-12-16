@@ -398,7 +398,7 @@ static void cloud_cmd_handle_modem_at_cmd(const char * const at_cmd)
 	}
 
 	if (strnlen(at_cmd, max_cmd_len) == max_cmd_len) {
-		printk("[%s:%d] Modem AT cmd too long, must be %d bytes or less\n",
+		printk("[%s:%d] AT cmd is too long, max length is %d\n",
 					__func__, __LINE__, max_cmd_len-1);
 		modem_at_cmd_buff[0] = '\0';
 	} else {
