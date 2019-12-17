@@ -78,8 +78,7 @@ static void env_sensors_poll_fn(struct k_work *work)
 
 	int err;
 
-	if (data_send_interval_s == 0)
-	{
+	if (data_send_interval_s == 0) {
 		return;
 	}
 
@@ -190,15 +189,14 @@ void env_sensors_set_send_interval(const s32_t interval_s)
 
 	data_send_interval_s = interval_s;
 
-	if ( !initialized ) {
+	if (!initialized) {
 		return;
 	}
 
 	if (data_send_interval_s) {
 		/* restart work for new interval to take effect */
 		env_sensors_poll();
-	}
-	else if (k_delayed_work_remaining_get(&env_sensors_poller) > 0) {
+	} else if (k_delayed_work_remaining_get(&env_sensors_poller) > 0) {
 		k_delayed_work_cancel(&env_sensors_poller);
 	}
 }

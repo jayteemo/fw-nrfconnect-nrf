@@ -354,24 +354,18 @@ static void cloud_cmd_handler(struct cloud_command *cmd)
 #endif
 	} else if ((cmd->group == CLOUD_CMD_GROUP_CFG_SET) &&
 			   (cmd->type == CLOUD_CMD_INTERVAL)) {
-
 		if (cmd->channel == CLOUD_CHANNEL_LIGHT_SENSOR) {
 #if defined(CONFIG_LIGHT_SENSOR)
 			light_sensor_set_send_interval((s32_t)cmd->data.sv.value);
 #endif
-		}
-		else if (cmd->channel == CLOUD_CHANNEL_ENVIRONMENT) {
+		} else if (cmd->channel == CLOUD_CHANNEL_ENVIRONMENT) {
 			env_sensors_set_send_interval((s32_t)cmd->data.sv.value);
-		}
-		else if (cmd->channel == CLOUD_CHANNEL_GPS) {
+		} else if (cmd->channel == CLOUD_CHANNEL_GPS) {
 			/* TODO: update GPS controller to handle send interval */
-		}
-		else
-		{
+		} else {
 			printk("Interval command not valid for channel %d\n", cmd->channel);
 		}
 	}
-
 }
 
 #if CONFIG_MODEM_INFO
