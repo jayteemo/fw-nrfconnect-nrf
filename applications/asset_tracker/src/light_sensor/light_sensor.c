@@ -40,7 +40,7 @@ static struct ls_ch_data *ls_data[LS_CH__END] = { [LS_CH_RED] = &ls_ch_red,
 static light_sensor_data_ready_cb ls_cb;
 static struct k_delayed_work ls_poller;
 static s32_t data_send_interval_s = CONFIG_LIGHT_SENSOR_DATA_SEND_INTERVAL;
-static bool initialized = false;
+static bool initialized;
 
 static void light_sensor_poll_fn(struct k_work *work);
 
@@ -67,7 +67,8 @@ int light_sensor_init_and_start(const light_sensor_data_ready_cb cb)
 
 	initialized = true;
 
-	return ((data_send_interval_s > 0) ? submit_poll_work(LS_INIT_DELAY_S) : 0);
+	return (data_send_interval_s > 0) ?
+		submit_poll_work(LS_INIT_DELAY_S) : 0;
 }
 
 int light_sensor_get_data(struct light_sensor_data *const data)
@@ -131,7 +132,7 @@ void light_sensor_set_send_interval(const s32_t interval_s)
 
 	data_send_interval_s = interval_s;
 
-	if ( !initialized ) {
+	if (!initialized) {
 		return;
 	}
 

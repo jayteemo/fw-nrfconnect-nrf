@@ -805,7 +805,7 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 		err = cloud_set_chan_cfg_item(
 			cmd->channel,
 			SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-			(cmd->data.sv.state ==CLOUD_CMD_STATE_TRUE));
+			(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
 		break;
 	case CLOUD_CMD_THRESHOLD_HIGH:
 		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {

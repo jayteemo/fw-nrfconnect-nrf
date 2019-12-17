@@ -58,8 +58,8 @@ static struct env_sensor *env_sensors[] = {
 static struct k_delayed_work env_sensors_poller;
 static env_sensors_data_ready_cb data_ready_cb;
 static s32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
-static bool backoff_enabled = false;
-static bool initialized = false;
+static bool backoff_enabled;
+static bool initialized;
 
 static inline int submit_poll_work(const s32_t delay_s)
 {
@@ -68,7 +68,7 @@ static inline int submit_poll_work(const s32_t delay_s)
 
 int env_sensors_poll(void)
 {
-	return (initialized ? submit_poll_work(K_NO_WAIT) : -ENXIO);
+	return initialized ? submit_poll_work(K_NO_WAIT) : -ENXIO;
 }
 
 static void env_sensors_poll_fn(struct k_work *work)
@@ -116,7 +116,8 @@ static void env_sensors_poll_fn(struct k_work *work)
 		data_ready_cb();
 	}
 
-	submit_poll_work( backoff_enabled ? CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME : data_send_interval_s);
+	submit_poll_work(backoff_enabled ?
+		CONFIG_ENVIRONMENT_DATA_BACKOFF_TIME : data_send_interval_s);
 }
 
 /**@brief Initialize environment sensors. */
@@ -135,7 +136,8 @@ int env_sensors_init_and_start(const env_sensors_data_ready_cb cb)
 
 	initialized = true;
 
-	return ((data_send_interval_s > 0) ? submit_poll_work(ENV_INIT_DELAY_S) : 0);
+	return (data_send_interval_s > 0) ?
+		submit_poll_work(ENV_INIT_DELAY_S) : 0;
 }
 
 int env_sensors_get_temperature(env_sensor_data_t *sensor_data)
