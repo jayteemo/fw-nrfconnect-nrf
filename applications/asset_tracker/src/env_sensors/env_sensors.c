@@ -12,6 +12,7 @@
 #include "env_sensors.h"
 
 #define ENV_INIT_DELAY_S (5) /* Polling delay upon initialization */
+#define MAX_INTERVAL_S	(INT_MAX/MSEC_PER_SEC)
 
 struct env_sensor {
 	env_sensor_data_t sensor;
@@ -57,13 +58,14 @@ static struct env_sensor *env_sensors[] = {
 
 static struct k_delayed_work env_sensors_poller;
 static env_sensors_data_ready_cb data_ready_cb;
-static s32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
+static u32_t data_send_interval_s = CONFIG_ENVIRONMENT_DATA_SEND_INTERVAL;
 static bool backoff_enabled;
 static bool initialized;
 
-static inline int submit_poll_work(const s32_t delay_s)
+static inline int submit_poll_work(const u32_t delay_s)
 {
-	return k_delayed_work_submit(&env_sensors_poller, K_SECONDS(delay_s));
+	return k_delayed_work_submit(&env_sensors_poller,
+			K_SECONDS((u32_t)delay_s));
 }
 
 int env_sensors_poll(void)
@@ -183,13 +185,14 @@ int env_sensors_get_air_quality(env_sensor_data_t *sensor_data)
 	return -1;
 }
 
-void env_sensors_set_send_interval(const s32_t interval_s)
+void env_sensors_set_send_interval(const u32_t interval_s)
 {
 	if (interval_s == data_send_interval_s) {
 		return;
 	}
 
-	data_send_interval_s = interval_s;
+	data_send_interval_s = (interval_s > MAX_INTERVAL_S) ?
+			MAX_INTERVAL_S:interval_s;
 
 	if (!initialized) {
 		return;
@@ -203,7 +206,7 @@ void env_sensors_set_send_interval(const s32_t interval_s)
 	}
 }
 
-s32_t env_sensors_get_send_interval(void)
+u32_t env_sensors_get_send_interval(void)
 {
 	return data_send_interval_s;
 }

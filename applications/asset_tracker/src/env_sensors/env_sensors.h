@@ -97,14 +97,14 @@ int env_sensors_init_and_start(const env_sensors_data_ready_cb cb);
  * @param interval_s Interval, in seconds. 0 to disable.
  *
  */
-void env_sensors_set_send_interval(const s32_t interval_s);
+void env_sensors_set_send_interval(const u32_t interval_s);
 
 /**
  * @brief Get environmental sensor's poll/send interval.
  *
  * @return Interval, in seconds.
  */
-s32_t env_sensors_get_send_interval(void);
+u32_t env_sensors_get_send_interval(void);
 
 /**
  * @brief Enable or disable back-off delay for sending environmental data.

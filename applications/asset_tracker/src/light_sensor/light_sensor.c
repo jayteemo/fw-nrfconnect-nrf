@@ -9,6 +9,7 @@
 #include "light_sensor.h"
 
 #define LS_INIT_DELAY_S (5) /* Polling delay upon initialization */
+#define MAX_INTERVAL_S	(INT_MAX/MSEC_PER_SEC)
 
 enum ls_ch_type {
 	LS_CH__BEGIN = 0,
@@ -39,14 +40,14 @@ static struct ls_ch_data *ls_data[LS_CH__END] = { [LS_CH_RED] = &ls_ch_red,
 						  [LS_CH_IR] = &ls_ch_ir };
 static light_sensor_data_ready_cb ls_cb;
 static struct k_delayed_work ls_poller;
-static s32_t data_send_interval_s = CONFIG_LIGHT_SENSOR_DATA_SEND_INTERVAL;
+static u32_t data_send_interval_s = CONFIG_LIGHT_SENSOR_DATA_SEND_INTERVAL;
 static bool initialized;
 
 static void light_sensor_poll_fn(struct k_work *work);
 
-static inline int submit_poll_work(const s32_t delay_s)
+static inline int submit_poll_work(const u32_t delay_s)
 {
-	return k_delayed_work_submit(&ls_poller, K_SECONDS(delay_s));
+	return k_delayed_work_submit(&ls_poller, K_SECONDS((u32_t)delay_s));
 }
 
 int light_sensor_init_and_start(const light_sensor_data_ready_cb cb)
@@ -124,13 +125,14 @@ void light_sensor_poll_fn(struct k_work *work)
 	submit_poll_work(data_send_interval_s);
 }
 
-void light_sensor_set_send_interval(const s32_t interval_s)
+void light_sensor_set_send_interval(const u32_t interval_s)
 {
 	if (interval_s == data_send_interval_s) {
 		return;
 	}
 
-	data_send_interval_s = interval_s;
+	data_send_interval_s = (interval_s > MAX_INTERVAL_S) ?
+			MAX_INTERVAL_S:interval_s;
 
 	if (!initialized) {
 		return;
@@ -144,7 +146,7 @@ void light_sensor_set_send_interval(const s32_t interval_s)
 	}
 }
 
-s32_t light_sensor_get_send_interval(void)
+u32_t light_sensor_get_send_interval(void)
 {
 	return data_send_interval_s;
 }
