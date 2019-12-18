@@ -123,7 +123,13 @@ static struct k_delayed_work cycle_cloud_connection_work;
 static struct k_work device_status_work;
 
 K_SEM_DEFINE(modem_at_cmd_sem, 1, 1);
-static char modem_at_cmd_buff[CONFIG_AT_CMD_RESPONSE_MAX_LEN+1];
+#ifdef CONFIG_AT_CMD_RESPONSE_MAX_LEN
+#define MODEM_AT_CMD_BUFFER_LEN (CONFIG_AT_CMD_RESPONSE_MAX_LEN+1)
+#else
+/* Modem's TLS buffer is limited to 2303 */
+#define MODEM_AT_CMD_BUFFER_LEN (2303)
+#endif
+static char modem_at_cmd_buff[MODEM_AT_CMD_BUFFER_LEN];
 
 #if CONFIG_MODEM_INFO
 static struct k_work rsrp_work;
