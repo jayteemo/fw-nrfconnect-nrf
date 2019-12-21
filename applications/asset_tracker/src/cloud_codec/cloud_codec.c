@@ -582,6 +582,31 @@ static int cloud_search_cmd(cJSON *root_obj)
 	return 0;
 }
 
+static int cloud_search_config(cJSON *root_obj)
+{
+	int ret;
+	cJSON *state_obj = NULL;
+	cJSON *config_obj = NULL;
+
+	if (root_obj == NULL) {
+		return -EINVAL;
+	}
+
+	/* A delta update will have state */
+	state_obj = cJSON_GetObjectItem(root_obj, "state");
+	config_obj = cJSON_DetachItemFromObject(state_obj ? state_obj : root_obj,
+			"config");
+
+	if (config_obj)
+	{
+		// TODO: parse config
+		char * buff = cJSON_Print(config_obj);
+		printk("[%s:%d] @#@#@# Config found:\n%s\n", __func__, __LINE__, buff);
+		free(buff);
+	}
+	return 0;
+}
+
 int cloud_decode_command(char const *input)
 {
 	cJSON *root_obj = NULL;
@@ -597,6 +622,8 @@ int cloud_decode_command(char const *input)
 	}
 
 	cloud_search_cmd(root_obj);
+
+	cloud_search_config(root_obj);
 
 	cJSON_Delete(root_obj);
 

@@ -100,7 +100,8 @@ static void nrf_cloud_decode_desired_obj(cJSON *const root_obj,
 	cJSON *state_obj;
 
 	if ((root_obj != NULL) && (desired_obj != NULL)) {
-		/* On initial pairing there is no "desired" JSON key, */
+		/* On initial pairing, a shadow delta event is sent */
+		/* which does not include the "desired" JSON key, */
 		/* "state" is used instead */
 		state_obj = json_object_decode(root_obj, "state");
 		if (state_obj == NULL) {
@@ -247,6 +248,79 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	}
 
 	cJSON_Delete(root_obj);
+
+	return 0;
+}
+
+int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
+								  struct nrf_cloud_data * const output,
+								  bool * const has_config)
+{
+	char *buffer;
+
+	__ASSERT_NO_MSG(output != NULL);
+
+	cJSON *root_obj = cJSON_CreateObject();
+	cJSON *desired_obj = cJSON_CreateObject();
+	cJSON *null_obj = cJSON_CreateNull();
+	cJSON *input_obj = input ? cJSON_Parse(input->ptr) : NULL;
+	cJSON *reported_obj = input_obj ? cJSON_CreateObject() : NULL;
+	cJSON *state_obj = NULL;
+	cJSON *config_obj = NULL;
+
+	if ((root_obj == NULL) || (desired_obj == NULL) || (null_obj == NULL) ||
+		(input_obj && !reported_obj)) {
+		cJSON_Delete(root_obj);
+		cJSON_Delete(desired_obj);
+		cJSON_Delete(null_obj);
+		cJSON_Delete(reported_obj);
+		return -ENOMEM;
+	}
+
+	/* A delta update will have state */
+	state_obj = cJSON_GetObjectItem(input_obj, "state");
+	config_obj = cJSON_DetachItemFromObject(state_obj ? state_obj : input_obj,
+			"config");
+	cJSON_Delete(input_obj);
+
+	if (has_config) {
+		*has_config = (config_obj != NULL);
+		LOG_INF("@!@!@! HAS config!");
+	}
+
+	if (state_obj && config_obj)
+	{
+		/* Add delta config to reported */
+		json_add_obj(reported_obj, "config", config_obj);
+		json_add_obj(root_obj, "reported", reported_obj);
+
+		/* Add a null config to desired */
+		(void)json_add_obj(desired_obj, "config", null_obj);
+		(void)json_add_obj(root_obj, "desired", desired_obj);
+
+		buffer = cJSON_PrintUnformatted(root_obj);
+
+		LOG_INF("@!@!@! CONFIG:\n%s", buffer);
+		cJSON_Delete(root_obj);
+
+		if (buffer == NULL) {
+			return -ENOMEM;
+		}
+
+		output->ptr = buffer;
+		output->len = strlen(buffer);
+	} else {
+		/* Only a delta config requires response data */
+		output->ptr = NULL;
+		output->len = 0;
+
+		cJSON_Delete(root_obj);
+		cJSON_Delete(desired_obj);
+		cJSON_Delete(null_obj);
+		cJSON_Delete(reported_obj);
+		cJSON_Delete(config_obj);
+		cJSON_Delete(state_obj);
+	}
 
 	return 0;
 }
