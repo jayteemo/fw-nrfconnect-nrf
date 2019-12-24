@@ -232,7 +232,9 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	pairing_state_obj = json_object_decode(pairing_obj, "state");
 
 	if (!pairing_state_obj || pairing_state_obj->type != cJSON_String) {
-		LOG_DBG("No valid state found!");
+		if (cJSON_HasObjectItem(desired_obj, "config") == false) {
+			LOG_DBG("No valid state found!");
+		}
 		cJSON_Delete(root_obj);
 		return -ENOENT;
 	}
@@ -288,20 +290,23 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 		LOG_INF("@!@!@! HAS config!");
 	}
 
+	/* A state and config indicate this is a delta */
 	if (state_obj && config_obj)
 	{
 		/* Add delta config to reported */
-		json_add_obj(reported_obj, "config", config_obj);
-		json_add_obj(root_obj, "reported", reported_obj);
+		(void)json_add_obj(reported_obj, "config", config_obj);
+		(void)json_add_obj(root_obj, "reported", reported_obj);
 
 		/* Add a null config to desired */
 		(void)json_add_obj(desired_obj, "config", null_obj);
 		(void)json_add_obj(root_obj, "desired", desired_obj);
 
-		buffer = cJSON_PrintUnformatted(root_obj);
-
-		LOG_INF("@!@!@! CONFIG:\n%s", buffer);
-		cJSON_Delete(root_obj);
+		/* Cleanup received state obj and re-use for the response */
+		cJSON_Delete(state_obj);
+		state_obj = cJSON_CreateObject();
+		(void)json_add_obj(state_obj, "state", root_obj);
+		buffer = cJSON_PrintUnformatted(state_obj);
+		cJSON_Delete(state_obj);
 
 		if (buffer == NULL) {
 			return -ENOMEM;
@@ -309,18 +314,20 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 
 		output->ptr = buffer;
 		output->len = strlen(buffer);
-	} else {
-		/* Only a delta config requires response data */
-		output->ptr = NULL;
-		output->len = 0;
 
-		cJSON_Delete(root_obj);
-		cJSON_Delete(desired_obj);
-		cJSON_Delete(null_obj);
-		cJSON_Delete(reported_obj);
-		cJSON_Delete(config_obj);
-		cJSON_Delete(state_obj);
+		return 0;
 	}
+
+	/* Only a delta config requires response data */
+	output->ptr = NULL;
+	output->len = 0;
+
+	cJSON_Delete(root_obj);
+	cJSON_Delete(desired_obj);
+	cJSON_Delete(null_obj);
+	cJSON_Delete(reported_obj);
+	cJSON_Delete(config_obj);
+	cJSON_Delete(state_obj);
 
 	return 0;
 }
