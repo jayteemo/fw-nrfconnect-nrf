@@ -7,6 +7,7 @@
 #include "nrf_cloud_codec.h"
 #include "nrf_cloud_mem.h"
 
+#include <stdlib.h> // TODO: delete me
 #include <stdbool.h>
 #include <string.h>
 #include <zephyr.h>
@@ -272,22 +273,31 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 
 	if ((root_obj == NULL) || (desired_obj == NULL) || (null_obj == NULL) ||
 		(input_obj && !reported_obj)) {
+		/* A NULL input_obj is not a memory error */
 		cJSON_Delete(root_obj);
 		cJSON_Delete(desired_obj);
 		cJSON_Delete(null_obj);
+		cJSON_Delete(input_obj);
 		cJSON_Delete(reported_obj);
 		return -ENOMEM;
 	}
 
+	// TODO: delete me //////////////////////////////////////////////////
+	char * temp_buffer = cJSON_PrintUnformatted(input_obj);
+	if (temp_buffer) {
+		LOG_INF("@$@$@$@ RX: %s", temp_buffer);
+		free(temp_buffer);
+	}
+	////////////////////////////////////////////////////////////////////
+
 	/* A delta update will have state */
-	state_obj = cJSON_GetObjectItem(input_obj, "state");
+	state_obj = cJSON_DetachItemFromObject(input_obj, "state");
 	config_obj = cJSON_DetachItemFromObject(state_obj ? state_obj : input_obj,
 			"config");
 	cJSON_Delete(input_obj);
 
 	if (has_config) {
 		*has_config = (config_obj != NULL);
-		LOG_INF("@!@!@! HAS config!");
 	}
 
 	/* A state and config indicate this is a delta */
@@ -306,6 +316,7 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 		state_obj = cJSON_CreateObject();
 		(void)json_add_obj(state_obj, "state", root_obj);
 		buffer = cJSON_PrintUnformatted(state_obj);
+		LOG_INF("Delta response RX: %s", buffer); // TODO: delete me
 		cJSON_Delete(state_obj);
 
 		if (buffer == NULL) {
