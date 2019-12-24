@@ -587,6 +587,12 @@ static int cloud_search_config(cJSON *root_obj)
 	int ret;
 	cJSON *state_obj = NULL;
 	cJSON *config_obj = NULL;
+	cJSON *channel_obj = NULL;
+	struct cmd *chan = NULL;
+	struct cmd const * const group = &group_cfg_set;
+	struct cloud_command found_config_item = {
+			.group = CLOUD_CMD_GROUP_CFG_SET
+	};
 
 	if (root_obj == NULL) {
 		return -EINVAL;
@@ -597,13 +603,56 @@ static int cloud_search_config(cJSON *root_obj)
 	config_obj = cJSON_DetachItemFromObject(state_obj ? state_obj : root_obj,
 			"config");
 
-	if (config_obj)
+	if (config_obj == NULL)
 	{
-		// TODO: parse config
-		char * buff = cJSON_Print(config_obj);
-		printk("[%s:%d] @#@#@# Config found:\n%s\n", __func__, __LINE__, buff);
-		free(buff);
+		return 0;
 	}
+
+	/* Search all channels */
+	for (size_t ch = 0; ch < group->num_children; ++ch) {
+
+		channel_obj = json_object_decode(config_obj,
+						channel_type_str[group->children[ch].channel]);
+
+		if (channel_obj == NULL) {
+			continue;
+		}
+
+		chan = &group->children[ch];
+		found_config_item.channel = chan->channel;
+
+		/* Search channel's config types */
+		for (size_t type = 0; type < chan->num_children; ++type) {
+
+			ret = cloud_cmd_parse_type(&chan->children[type],
+					channel_obj, &found_config_item);
+
+			if (ret != 0) {
+				if (ret != -ENOENT) {
+					printk("[%s:%d] Unhandled cfg format for %s, error %d\n",
+							__func__, __LINE__,
+							channel_type_str[chan->channel],
+							ret);
+				}
+				continue;
+			}
+
+			printk("[%s:%d] Found cfg item %s, %s\n", __func__, __LINE__,
+					channel_type_str[found_config_item.channel],
+					cmd_type_str[found_config_item.type]);
+
+			/* Handle cfg commands */
+			(void)cloud_cmd_handle_sensor_set_chan_cfg(&found_config_item);
+
+			if (cloud_command_cb) {
+				cloud_command_cb(&found_config_item);
+			}
+		}
+	}
+
+	/* Config was detached, must be deleted */
+	cJSON_Delete(config_obj);
+
 	return 0;
 }
 
@@ -823,20 +872,11 @@ static int cloud_cmd_handle_sensor_set_chan_cfg(struct cloud_command const *cons
 	}
 
 	switch (cmd->type) {
-	case CLOUD_CMD_INTERVAL:
-		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {
-			/* Undefined means a valid value was set, so enable */
-			err = cloud_set_chan_cfg_item(
-				cmd->channel,
-				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-				true);
-
-		} else {
-			err = cloud_set_chan_cfg_item(
-				cmd->channel,
-				SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
-				(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
-		}
+	case CLOUD_CMD_ENABLE:
+		err = cloud_set_chan_cfg_item(
+			cmd->channel,
+			SENSOR_CHAN_CFG_ITEM_TYPE_SEND_ENABLE,
+			(cmd->data.sv.state == CLOUD_CMD_STATE_TRUE));
 		break;
 	case CLOUD_CMD_THRESHOLD_HIGH:
 		if (cmd->data.sv.state == CLOUD_CMD_STATE_UNDEFINED) {

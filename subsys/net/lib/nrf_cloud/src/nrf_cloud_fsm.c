@@ -372,17 +372,16 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt) {
 	bool config_found = false;
 	const enum nfsm_state current_state = nfsm_get_current_state();
 
-	if (nct_evt->param.cc)
-	{
-		LOG_INF("!@!@!@!@!@!@!@ Received CC data, opcode: %d", nct_evt->param.cc->opcode);
-	}
-
 	handle_device_config_update(nct_evt, &config_found);
+
 	err = nrf_cloud_decode_requested_state(payload, &expected_state);
-	if (err && !config_found ) {
-		LOG_ERR("nrf_cloud_decode_requested_state Failed %d", err);
-		return err;
-	} else if (config_found) {
+
+	if (err) {
+		if (!config_found) {
+			LOG_ERR("nrf_cloud_decode_requested_state Failed %d", err);
+			return err;
+		}
+
 		/* Config only, nothing else to do */
 		return 0;
 	}
