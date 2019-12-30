@@ -41,10 +41,10 @@ static int dc_connection_handler(const struct nct_evt *nct_evt);
 static int dc_rx_data_handler(const struct nct_evt *nct_evt);
 static int dc_tx_ack_handler(const struct nct_evt *nct_evt);
 static int dc_disconnection_handler(const struct nct_evt *nct_evt);
-static int handle_device_config_update(const struct nct_evt *nct_evt,
-		bool * const config_found);
 static int cc_rx_data_handler(const struct nct_evt *nct_evt);
 static int handle_pin_complete(const struct nct_evt *nct_evt);
+static int handle_device_config_update(const struct nct_evt *const nct_evt,
+		bool *const config_found);
 
 /* Drop all the events. */
 static const fsm_transition not_implemented_fsm_transition[NCT_EVT_TOTAL];
@@ -180,8 +180,8 @@ static int state_ua_pin_wait(void)
 	return 0;
 }
 
-static int handle_device_config_update(const struct nct_evt *nct_evt,
-		bool * const config_found)
+static int handle_device_config_update(const struct nct_evt *const nct_evt,
+		bool *const config_found)
 {
 	int err;
 	struct nct_cc_data msg = {
@@ -200,10 +200,10 @@ static int handle_device_config_update(const struct nct_evt *nct_evt,
 		return -ENOENT;
 	}
 
-	err = nrf_cloud_encode_clear_config(&nct_evt->param.cc->data,
+	err = nrf_cloud_encode_config_response(&nct_evt->param.cc->data,
 										&msg.data, config_found);
 	if (err) {
-		LOG_ERR("nrf_cloud_encode_clear_config failed %d", err);
+		LOG_ERR("nrf_cloud_encode_config_response failed %d", err);
 		return err;
 	}
 

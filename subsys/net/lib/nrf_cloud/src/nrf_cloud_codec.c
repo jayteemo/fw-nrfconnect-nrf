@@ -7,7 +7,6 @@
 #include "nrf_cloud_codec.h"
 #include "nrf_cloud_mem.h"
 
-#include <stdlib.h> // TODO: delete me
 #include <stdbool.h>
 #include <string.h>
 #include <zephyr.h>
@@ -255,14 +254,12 @@ int nrf_cloud_decode_requested_state(const struct nrf_cloud_data *input,
 	return 0;
 }
 
-int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
-								  struct nrf_cloud_data * const output,
-								  bool * const has_config)
+int nrf_cloud_encode_config_response(struct nrf_cloud_data const *const input,
+								  struct nrf_cloud_data *const output,
+								  bool *const has_config)
 {
-	char *buffer;
-
 	__ASSERT_NO_MSG(output != NULL);
-
+	char *buffer;
 	cJSON *root_obj = cJSON_CreateObject();
 	cJSON *desired_obj = cJSON_CreateObject();
 	cJSON *null_obj = cJSON_CreateNull();
@@ -281,14 +278,6 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 		cJSON_Delete(reported_obj);
 		return -ENOMEM;
 	}
-
-	// TODO: delete me //////////////////////////////////////////////////
-	char * temp_buffer = cJSON_PrintUnformatted(input_obj);
-	if (temp_buffer) {
-		LOG_INF("@$@$@$@ RX: %s", temp_buffer);
-		free(temp_buffer);
-	}
-	////////////////////////////////////////////////////////////////////
 
 	/* A delta update will have state */
 	state_obj = cJSON_DetachItemFromObject(input_obj, "state");
@@ -316,7 +305,6 @@ int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
 		state_obj = cJSON_CreateObject();
 		(void)json_add_obj(state_obj, "state", root_obj);
 		buffer = cJSON_PrintUnformatted(state_obj);
-		LOG_INF("Delta response RX: %s", buffer); // TODO: delete me
 		cJSON_Delete(state_obj);
 
 		if (buffer == NULL) {

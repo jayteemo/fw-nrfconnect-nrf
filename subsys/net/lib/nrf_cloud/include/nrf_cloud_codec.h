@@ -40,9 +40,10 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 /** @brief Encodes state information. */
 int nrf_cloud_encode_state(u32_t reported_state, struct nrf_cloud_data *output);
 
-int nrf_cloud_encode_clear_config(struct nrf_cloud_data const * const input,
-		  struct nrf_cloud_data * const output,
-		  bool * const has_config);
+/** @brief Search input for config and encode response if necessary. */
+int nrf_cloud_encode_config_response(struct nrf_cloud_data const *const input,
+		  struct nrf_cloud_data *const output,
+		  bool *const has_config);
 
 #ifdef __cplusplus
 }

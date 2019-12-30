@@ -582,7 +582,7 @@ static int cloud_search_cmd(cJSON *root_obj)
 	return 0;
 }
 
-static int cloud_search_config(cJSON *root_obj)
+static int cloud_search_config(cJSON * const root_obj)
 {
 	int ret;
 	cJSON *state_obj = NULL;
