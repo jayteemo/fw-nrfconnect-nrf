@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <net/mqtt.h>
 #include <net/socket.h>
+#include <net/cloud.h>
 #include <logging/log.h>
 #include <sys/util.h>
 
@@ -468,6 +469,7 @@ static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
 /* Connect to MQTT broker. */
 int nct_mqtt_connect(void)
 {
+	int ret;
 	mqtt_client_init(&nct.client);
 
 	nct.client.broker = (struct sockaddr *)&nct.broker;
@@ -495,10 +497,21 @@ int nct_mqtt_connect(void)
 				aws_fota_cb_handler);
 	if (err != 0) {
 		LOG_ERR("ERROR: aws_fota_init %d", err);
-		return err;
+		return CLOUD_CONNECT_RES_ERR_BACKEND;
 	}
 #endif /* defined(CONFIG_AWS_FOTA) */
-	return mqtt_connect(&nct.client);
+	ret = mqtt_connect(&nct.client);
+
+	switch (ret) {
+	case CLOUD_CONNECT_RES_SUCCESS:
+	case CLOUD_CONNECT_RES_ERR_PRV_KEY:
+	case CLOUD_CONNECT_RES_ERR_CERT:
+	case CLOUD_CONNECT_RES_ERR_CERT_MISC:
+	case CLOUD_CONNECT_RES_ERR_SIM_NO_DATA:
+		return ret;
+	default:
+		return CLOUD_CONNECT_RES_ERR_MISC;
+	}
 }
 
 static int publish_get_payload(struct mqtt_client *client, size_t length)
@@ -691,12 +704,11 @@ int nct_connect(void)
 	err = getaddrinfo(NRF_CLOUD_HOSTNAME, NULL, &hints, &result);
 	if (err) {
 		LOG_DBG("getaddrinfo failed %d", err);
-
-		return err;
+		return CLOUD_CONNECT_RES_ERR_NETWORK;
 	}
 
 	addr = result;
-	err = -ENOENT;
+	err = CLOUD_CONNECT_RES_ERR_NETWORK;
 
 	/* Look for address of the broker. */
 	while (addr != NULL) {
@@ -739,7 +751,6 @@ int nct_connect(void)
 		}
 
 		addr = addr->ai_next;
-		break;
 	}
 
 	/* Free the address. */

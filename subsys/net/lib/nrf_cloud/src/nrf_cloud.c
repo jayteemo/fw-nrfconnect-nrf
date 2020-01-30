@@ -86,7 +86,7 @@ int nrf_cloud_init(const struct nrf_cloud_init_param *param)
 int nrf_cloud_connect(const struct nrf_cloud_connect_param *param)
 {
 	if (NOT_VALID_STATE(STATE_INITIALIZED)) {
-		return -EACCES;
+		return CLOUD_CONNECT_RES_ERR_NOT_INITD;
 	}
 	return nct_connect();
 }
