@@ -29,10 +29,24 @@ enum aws_fota_evt_id {
 	/** AWS FOTA Erase pending*/
 	AWS_FOTA_EVT_ERASE_PENDING,
 	/** AWS FOTA Erase done*/
-	AWS_FOTA_EVT_ERASE_DONE
+	AWS_FOTA_EVT_ERASE_DONE,
+	/** AWS FOTA status/progress */
+	AWS_FOTA_EVT_STATUS,
 };
 
-typedef void (*aws_fota_callback_t)(enum aws_fota_evt_id evt_id);
+struct aws_fota_event_status {
+	int progress;
+};
+
+struct aws_fota_event {
+	enum aws_fota_evt_id id;
+	char * job_id;
+	union {
+		struct aws_fota_event_status status;
+	};
+};
+
+typedef void (*aws_fota_callback_t)(struct aws_fota_event * fota_evt);
 
 /**@brief Initialize the AWS Firmware Over the Air library.
  *

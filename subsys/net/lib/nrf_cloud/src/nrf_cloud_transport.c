@@ -87,6 +87,16 @@ static char update_delta_topic[NCT_UPDATE_DELTA_TOPIC_LEN + 1];
 static char update_topic[NCT_UPDATE_TOPIC_LEN + 1];
 static char shadow_get_topic[NCT_SHADOW_GET_LEN + 1];
 
+#if defined(CONFIG_AWS_FOTA)
+#define NCT_M_D_TOPIC_PREFIX "m/d/"
+#define NCT_TOPIC_PREFIX_M_D_LEN (sizeof(NCT_M_D_TOPIC_PREFIX) - 1)
+#define NCT_JOB_STATUS_TOPIC "/jobs"
+#define NCT_JOB_STATUS_TOPIC_LEN (sizeof(NCT_JOB_STATUS_TOPIC) - 1)
+/* TODO: move to kconfig */
+#define CONFIG_FOTA_PROGRESS_PCT_INCREMENT 10
+static int last_sent_fota_progress;
+#endif
+
 #define NCT_CC_SUBSCRIBE_ID 1234
 #define NCT_DC_SUBSCRIBE_ID 8765
 
@@ -105,6 +115,7 @@ static struct nct {
 	struct mqtt_utf8 dc_tx_endp;
 	struct mqtt_utf8 dc_rx_endp;
 	struct mqtt_utf8 dc_m_endp;
+	struct mqtt_utf8 job_status_endp;
 	u32_t message_id;
 	u8_t rx_buf[CONFIG_NRF_CLOUD_MQTT_MESSAGE_BUFFER_LEN];
 	u8_t tx_buf[CONFIG_NRF_CLOUD_MQTT_MESSAGE_BUFFER_LEN];
@@ -169,6 +180,9 @@ static void dc_endpoint_reset(void)
 
 	nct.dc_m_endp.utf8 = NULL;
 	nct.dc_m_endp.size = 0;
+
+	nct.job_status_endp.utf8 = NULL;
+	nct.job_status_endp.size = 0;
 }
 
 /* Get the next unused message id. */
@@ -194,6 +208,9 @@ static void dc_endpoint_free(void)
 	}
 	if (nct.dc_m_endp.utf8 != NULL) {
 		nrf_cloud_free(nct.dc_m_endp.utf8);
+	}
+	if (nct.job_status_endp.utf8 != NULL) {
+		nrf_cloud_free(nct.job_status_endp.utf8);
 	}
 	dc_endpoint_reset();
 }
@@ -224,6 +241,37 @@ static u32_t dc_send(const struct nct_dc_data *dc_data, u8_t qos)
 
 	return mqtt_publish(&nct.client, &publish);
 }
+#if defined(CONFIG_AWS_FOTA)
+static int job_status_stream(const struct nct_dc_data *dc_data)
+{
+	if (dc_data == NULL) {
+		return -EINVAL;
+	}
+
+	if (nct.job_status_endp.utf8 == NULL)
+	{
+		LOG_ERR("Job status topic not set");
+		return -EACCES;
+	}
+
+	struct mqtt_publish_param publish = {
+		.message.topic.qos = MQTT_QOS_0_AT_MOST_ONCE
+	};
+
+	publish.message.topic.topic.size = nct.job_status_endp.size;
+	publish.message.topic.topic.utf8 = nct.job_status_endp.utf8;
+
+	/* Populate payload. */
+	if ((dc_data->data.len != 0) && (dc_data->data.ptr != NULL)) {
+		publish.message.payload.data = (u8_t *)dc_data->data.ptr;
+		publish.message.payload.len = dc_data->data.len;
+	}
+
+	publish.message_id = 0;
+
+	return mqtt_publish(&nct.client, &publish);
+}
+#endif
 
 static bool strings_compare(const char *s1, const char *s2, u32_t s1_len,
 			    u32_t s2_len)
@@ -450,11 +498,20 @@ static int nct_provision(void)
 
 #if defined(CONFIG_AWS_FOTA)
 /* Handle AWS FOTA events */
-static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
+/* 8 chars of job id + percent progress */
+#define JOB_STATUS_STR_LEN (8 + 1 + 3 + 1)
+static void aws_fota_cb_handler(struct aws_fota_event * fota_evt)
 {
-	switch (evt) {
+	if (fota_evt == NULL){return;}
+
+	char fota_status[JOB_STATUS_STR_LEN] = {0};
+	struct nct_dc_data status;
+	int err;
+
+	switch (fota_evt->id) {
 	case AWS_FOTA_EVT_DONE:
 		LOG_DBG("AWS_FOTA_EVT_DONE, rebooting to apply update.");
+		last_sent_fota_progress = 0;
 		nct_apply_update();
 		break;
 
@@ -469,9 +526,67 @@ static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
 
 	case AWS_FOTA_EVT_ERROR:
 		LOG_ERR("AWS_FOTA_EVT_ERROR");
+		last_sent_fota_progress = 0;
+		break;
+	case AWS_FOTA_EVT_STATUS:
+			LOG_INF("AWS_FOTA_EVT_STATUS");
+			if ((fota_evt->status.progress <= 0) ||
+				(fota_evt->status.progress > 100))
+			{
+				LOG_ERR("Invalid progress value %d",
+						fota_evt->status.progress);
+			}
+			if (fota_evt->job_id == NULL)
+			{
+				LOG_ERR("Job ID not provided");
+				return;
+			}
+
+			if ( (last_sent_fota_progress <= fota_evt->status.progress) &&
+				 ((fota_evt->status.progress - last_sent_fota_progress) <
+				 CONFIG_FOTA_PROGRESS_PCT_INCREMENT)) {
+				return;
+			}
+
+			status.data.len = snprintf(fota_status,
+									   sizeof(fota_status),
+									   "%.8s %d",
+									   fota_evt->job_id,
+									   fota_evt->status.progress);
+			if ((status.data.len <= 0) ||
+				(status.data.len >= sizeof(fota_status))) {
+				LOG_ERR("Failed to create FOTA status");
+				return;
+			}
+
+			status.data.ptr = fota_status;
+
+			err = job_status_stream(&status);
+			if (err) {
+				LOG_ERR("job_status_stream failed %d", err);
+				return;
+			}
+
+			last_sent_fota_progress = fota_evt->status.progress;
 		break;
 	}
 }
+
+	#if 0
+	static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
+	{
+		switch (evt) {
+		case AWS_FOTA_EVT_DONE:
+			LOG_DBG("AWS_FOTA_EVT_DONE, rebooting to apply update.");
+			nct_apply_update();
+			break;
+
+		case AWS_FOTA_EVT_ERROR:
+			LOG_ERR("AWS_FOTA_EVT_ERROR");
+			break;
+		}
+	}
+#endif
 #endif /* defined(CONFIG_AWS_FOTA) */
 
 /* Connect to MQTT broker. */
@@ -843,9 +958,41 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 	nct.dc_rx_endp.size = rx_endp->len;
 
 	if (m_endp != NULL) {
+		int ret;
+
 		nct.dc_m_endp.utf8 = (u8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
+
+#if defined(CONFIG_AWS_FOTA)
+		nct.job_status_endp.size = nct.dc_m_endp.size +
+							  NCT_TOPIC_PREFIX_M_D_LEN +
+							  NRF_CLOUD_CLIENT_ID_LEN +
+							  NCT_JOB_STATUS_TOPIC_LEN + 1;
+		nct.job_status_endp.utf8 = nrf_cloud_malloc(nct.job_status_endp.size);
+		if ( nct.job_status_endp.utf8 == NULL )
+		{
+			LOG_ERR("Failed to allocate memory for job status topic");
+			return;
+		}
+		ret = snprintf(nct.job_status_endp.utf8,
+					   nct.job_status_endp.size,
+				       "%s%s%s%s",
+					   nct.dc_m_endp.utf8,
+					   NCT_M_D_TOPIC_PREFIX,
+					   client_id_buf,
+					   NCT_JOB_STATUS_TOPIC);
+
+		if ((ret <= 0) || (ret >= nct.job_status_endp.size)) {
+			nrf_cloud_free(nct.job_status_endp.utf8);
+			nct.job_status_endp.utf8 = NULL;
+			nct.job_status_endp.size = 0;
+			LOG_ERR("Failed to build job status topic");
+			return;
+		}
+		/* size is actually string length */
+		nct.job_status_endp.size = ret;
 	}
+#endif
 }
 
 void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,

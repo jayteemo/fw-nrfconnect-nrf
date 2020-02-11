@@ -47,8 +47,8 @@ static enum fota_status fota_state = NONE;
  */
 static u32_t execution_version_number;
 
-/* Store file offset progress */
-static size_t stored_progress;
+/* File download progress % */
+static size_t download_progress;
 
 /* Allocated strings for topics */
 static u8_t notify_next_topic[AWS_JOBS_TOPIC_MAX_LEN];
@@ -61,7 +61,6 @@ static u8_t hostname[CONFIG_AWS_FOTA_HOSTNAME_MAX_LEN];
 static u8_t file_path[CONFIG_AWS_FOTA_FILE_PATH_MAX_LEN];
 static u8_t job_id[AWS_JOBS_JOB_ID_MAX_LEN];
 static aws_fota_callback_t callback;
-
 
 /**
  * @brief Read the payload out of the published MQTT message from the MQTT
@@ -117,9 +116,9 @@ static inline void wait_for_update_accepted(void)
  * @param[in] fota_status next_state  The next state the device's fota operation
  *				      is going to enter. Reported to the status
  *				      details of the Job Execution.
- * @param[in] progress How many bytes of the upgrade have been downloaded. Will
- *		       be reported to AWS IoT through the status details field
- *		       of the Job Execution.
+ * @param[in] progress Download progress percent.
+ *			    Will be reported to AWS IoT through the
+ *			    "statusDetails" field of the Job Execution.
  * @param[in] client_token  Client identifier which will be repeated in the
  *			    respone of the update.
  *
@@ -270,7 +269,7 @@ static int job_update_accepted(struct mqtt_client *const client,
 		LOG_INF("Firmware download completed");
 		execution_state = AWS_JOBS_SUCCEEDED;
 		err = update_job_execution(client, job_id,
-				execution_state, fota_state, stored_progress,
+				execution_state, fota_state, download_progress,
 				"");
 		if (err) {
 			LOG_ERR("Unable to update the job execution");
@@ -278,9 +277,12 @@ static int job_update_accepted(struct mqtt_client *const client,
 		}
 	} else if (execution_state == AWS_JOBS_SUCCEEDED
 		   && fota_state == APPLY_UPDATE) {
+		struct aws_fota_event aws_fota_evt = {
+				.id = AWS_FOTA_EVT_DONE,
+				.job_id = job_id };
+		callback(&aws_fota_evt);
 		LOG_INF("Job document updated with SUCCEDED");
 		LOG_INF("Ready to reboot");
-		callback(AWS_FOTA_EVT_DONE);
 	}
 	return 0;
 }
@@ -298,6 +300,9 @@ static int job_update_accepted(struct mqtt_client *const client,
 static int job_update_rejected(struct mqtt_client *const client,
 			       u32_t payload_len)
 {
+	struct aws_fota_event aws_fota_evt = {
+					.id = AWS_FOTA_EVT_ERROR,
+					.job_id = job_id };
 	LOG_ERR("Job document update was rejected");
 	execution_version_number--;
 	int err = get_published_payload(client, payload_buf, payload_len);
@@ -307,7 +312,7 @@ static int job_update_rejected(struct mqtt_client *const client,
 		return err;
 	}
 	LOG_ERR("%s", log_strdup(payload_buf));
-	callback(AWS_FOTA_EVT_ERROR);
+	callback(&aws_fota_evt);
 	return -EFAULT;
 }
 
@@ -450,10 +455,10 @@ int aws_fota_mqtt_evt_handler(struct mqtt_client *const client,
 
 		if ((fota_state == DOWNLOAD_FIRMWARE) &&
 		   (evt->param.suback.message_id == SUBSCRIBE_JOB_ID_UPDATE)) {
-			stored_progress = 0;
+			download_progress = 0;
 			err = update_job_execution(client, job_id,
 						   AWS_JOBS_IN_PROGRESS,
-						   fota_state, stored_progress,
+						   fota_state, download_progress,
 						   "");
 			if (err) {
 				return err;
@@ -475,15 +480,17 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	__ASSERT_NO_MSG(c != NULL);
 
 	int err = 0;
+	struct aws_fota_event aws_fota_evt = {.job_id = job_id};
 
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		LOG_INF("FOTA download completed evt received");
 		fota_state = APPLY_UPDATE;
 		err = update_job_execution(c, job_id, AWS_JOBS_IN_PROGRESS,
-					   fota_state, stored_progress, "");
+					   fota_state, download_progress, "");
 		if (err != 0) {
-			callback(AWS_FOTA_EVT_ERROR);
+			aws_fota_evt.id = AWS_FOTA_EVT_ERROR;
+			callback(&aws_fota_evt);
 		}
 		break;
 
@@ -501,14 +508,16 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		execution_state = AWS_JOBS_QUEUED;
 		(void) update_job_execution(c, job_id, AWS_JOBS_FAILED,
 					    fota_state, -1, "");
-		callback(AWS_FOTA_EVT_ERROR);
+		aws_fota_evt.id = AWS_FOTA_EVT_ERROR;
+		callback(&aws_fota_evt);
 		break;
 
 #ifdef CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
-		stored_progress = evt->offset;
-		err = update_job_execution(c, job_id, AWS_JOBS_IN_PROGRESS,
-					   fota_state, stored_progress, "");
+		download_progress = evt->progress;
+		aws_fota_evt.id = AWS_FOTA_EVT_STATUS;
+		aws_fota_evt.status.progress = download_progress;
+		callback(&aws_fota_evt);
 		break;
 #endif
 	}
