@@ -470,15 +470,13 @@ static int job_status_stream(const struct nct_dc_data *dc_data)
 		return -EINVAL;
 	}
 
-	if (nct.job_status_endp.utf8 == NULL)
-	{
+	if (nct.job_status_endp.utf8 == NULL) {
 		LOG_ERR("Job status topic not set");
 		return -EACCES;
 	}
 
-	struct mqtt_publish_param publish = {
-		.message.topic.qos = MQTT_QOS_0_AT_MOST_ONCE
-	};
+	struct mqtt_publish_param publish = { .message.topic.qos =
+						      MQTT_QOS_0_AT_MOST_ONCE };
 
 	publish.message.topic.topic.size = nct.job_status_endp.size;
 	publish.message.topic.topic.utf8 = nct.job_status_endp.utf8;
@@ -497,11 +495,13 @@ static int job_status_stream(const struct nct_dc_data *dc_data)
 /* Handle AWS FOTA events */
 /* 8 chars of job id + percent progress */
 #define JOB_STATUS_STR_LEN (8 + 1 + 3 + 1)
-static void aws_fota_cb_handler(struct aws_fota_event * fota_evt)
+static void aws_fota_cb_handler(struct aws_fota_event *fota_evt)
 {
-	if (fota_evt == NULL){return;}
+	if (fota_evt == NULL) {
+		return;
+	}
 
-	char fota_status[JOB_STATUS_STR_LEN] = {0};
+	char fota_status[JOB_STATUS_STR_LEN] = { 0 };
 	struct nct_dc_data prog;
 	int err;
 
@@ -528,20 +528,17 @@ static void aws_fota_cb_handler(struct aws_fota_event * fota_evt)
 	case AWS_FOTA_EVT_DL_PROGRESS:
 		LOG_DBG("AWS_FOTA_EVT_DL_PROGRESS");
 		if ((fota_evt->dl.progress < 0) ||
-			(fota_evt->dl.progress >
-			 AWS_FOTA_EVT_DL_COMPLETE_VAL))
-		{
+		    (fota_evt->dl.progress > AWS_FOTA_EVT_DL_COMPLETE_VAL)) {
 			LOG_ERR("Invalid progress value %d",
-					fota_evt->dl.progress);
+				fota_evt->dl.progress);
 		}
-		if (fota_evt->job_id == NULL)
-		{
+		if (fota_evt->job_id == NULL) {
 			LOG_ERR("Job ID not provided");
 			return;
 		}
 		/* Do not send complete status more than once */
 		if ((last_sent_fota_progress == AWS_FOTA_EVT_DL_COMPLETE_VAL) &&
-			(fota_evt->dl.progress == AWS_FOTA_EVT_DL_COMPLETE_VAL)) {
+		    (fota_evt->dl.progress == AWS_FOTA_EVT_DL_COMPLETE_VAL)) {
 			return;
 		}
 
@@ -554,18 +551,16 @@ static void aws_fota_cb_handler(struct aws_fota_event * fota_evt)
 		/* Otherwise skip if increment is not met or disabled (0) */
 		if ((fota_evt->dl.progress < AWS_FOTA_EVT_DL_COMPLETE_VAL) &&
 		    (((fota_evt->dl.progress - last_sent_fota_progress) <
-		    CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT) ||
-		    (CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT == 0))) {
+		      CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT) ||
+		     (CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT == 0))) {
 			return;
 		}
 
-		prog.data.len = snprintf(fota_status,
-								   sizeof(fota_status),
-								   "%.8s %d",
-								   fota_evt->job_id,
-								   fota_evt->dl.progress);
+		prog.data.len =
+			snprintf(fota_status, sizeof(fota_status), "%.8s %d",
+				 fota_evt->job_id, fota_evt->dl.progress);
 		if ((prog.data.len <= 0) ||
-			(prog.data.len >= sizeof(fota_status))) {
+		    (prog.data.len >= sizeof(fota_status))) {
 			LOG_ERR("Failed to create FOTA progress message");
 			return;
 		}
@@ -958,23 +953,19 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 
 #if defined(CONFIG_AWS_FOTA)
 		int ret;
-		nct.job_status_endp.size = nct.dc_m_endp.size +
-							  NCT_TOPIC_PREFIX_M_D_LEN +
-							  NRF_CLOUD_CLIENT_ID_LEN +
-							  NCT_JOB_STATUS_TOPIC_LEN + 1;
-		nct.job_status_endp.utf8 = nrf_cloud_malloc(nct.job_status_endp.size);
-		if ( nct.job_status_endp.utf8 == NULL )
-		{
+		nct.job_status_endp.size =
+			nct.dc_m_endp.size + NCT_TOPIC_PREFIX_M_D_LEN +
+			NRF_CLOUD_CLIENT_ID_LEN + NCT_JOB_STATUS_TOPIC_LEN + 1;
+		nct.job_status_endp.utf8 =
+			nrf_cloud_malloc(nct.job_status_endp.size);
+		if (nct.job_status_endp.utf8 == NULL) {
 			LOG_ERR("Failed to allocate memory for job status topic");
 			return;
 		}
 		ret = snprintf(nct.job_status_endp.utf8,
-					   nct.job_status_endp.size,
-				       "%s%s%s%s",
-					   nct.dc_m_endp.utf8,
-					   NCT_M_D_TOPIC_PREFIX,
-					   client_id_buf,
-					   NCT_JOB_STATUS_TOPIC);
+			       nct.job_status_endp.size, "%s%s%s%s",
+			       nct.dc_m_endp.utf8, NCT_M_D_TOPIC_PREFIX,
+			       client_id_buf, NCT_JOB_STATUS_TOPIC);
 
 		if ((ret <= 0) || (ret >= nct.job_status_endp.size)) {
 			nrf_cloud_free(nct.job_status_endp.utf8);

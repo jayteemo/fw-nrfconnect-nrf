@@ -37,10 +37,8 @@ static void send_evt(enum fota_download_evt_id id)
 static void send_progress(int progress)
 {
 #ifdef CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT
-	const struct fota_download_evt evt = {
-		.id = FOTA_DOWNLOAD_EVT_PROGRESS,
-		.progress = progress
-	};
+	const struct fota_download_evt evt = { .id = FOTA_DOWNLOAD_EVT_PROGRESS,
+					       .progress = progress };
 	callback(&evt);
 #endif
 }
@@ -255,7 +253,6 @@ int fota_download_start(const char *host, const char *file)
 	if (err != 0) {
 		return err;
 	}
-
 
 	err = download_client_start(&dlc, file, 0);
 	if (err != 0) {

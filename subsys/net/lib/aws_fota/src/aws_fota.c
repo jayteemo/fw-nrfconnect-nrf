@@ -158,7 +158,6 @@ static int update_job_execution(struct mqtt_client *const client,
 		LOG_ERR("aws_jobs_update_job_execution failed: %d", ret);
 	}
 
-
 	return ret;
 }
 
@@ -192,7 +191,7 @@ static int get_job_execution(struct mqtt_client *const client,
 	if (err < 0) {
 		LOG_ERR("Error when parsing the json: %d", err);
 		return err;
-	} else  if (err == 0) {
+	} else if (err == 0) {
 		LOG_DBG("Got only one field: %s", log_strdup(payload_buf));
 		LOG_INF("No queued jobs for this device");
 		return 0;
@@ -275,11 +274,10 @@ static int job_update_accepted(struct mqtt_client *const client,
 			LOG_ERR("Unable to update the job execution");
 			return err;
 		}
-	} else if (execution_state == AWS_JOBS_SUCCEEDED
-		   && fota_state == APPLY_UPDATE) {
-		struct aws_fota_event aws_fota_evt = {
-				.id = AWS_FOTA_EVT_DONE,
-				.job_id = job_id };
+	} else if (execution_state == AWS_JOBS_SUCCEEDED &&
+		   fota_state == APPLY_UPDATE) {
+		struct aws_fota_event aws_fota_evt = { .id = AWS_FOTA_EVT_DONE,
+						       .job_id = job_id };
 		callback(&aws_fota_evt);
 		LOG_INF("Job document updated with SUCCEDED");
 		LOG_INF("Ready to reboot");
@@ -300,9 +298,8 @@ static int job_update_accepted(struct mqtt_client *const client,
 static int job_update_rejected(struct mqtt_client *const client,
 			       u32_t payload_len)
 {
-	struct aws_fota_event aws_fota_evt = {
-					.id = AWS_FOTA_EVT_ERROR,
-					.job_id = job_id };
+	struct aws_fota_event aws_fota_evt = { .id = AWS_FOTA_EVT_ERROR,
+					       .job_id = job_id };
 	LOG_ERR("Job document update was rejected");
 	execution_version_number--;
 	int err = get_published_payload(client, payload_buf, payload_len);
@@ -458,8 +455,8 @@ int aws_fota_mqtt_evt_handler(struct mqtt_client *const client,
 			download_progress = 0;
 			err = update_job_execution(client, job_id,
 						   AWS_JOBS_IN_PROGRESS,
-						   fota_state, download_progress,
-						   "");
+						   fota_state,
+						   download_progress, "");
 			if (err) {
 				return err;
 			}
@@ -474,13 +471,12 @@ int aws_fota_mqtt_evt_handler(struct mqtt_client *const client,
 	}
 }
 
-
 static void http_fota_handler(const struct fota_download_evt *evt)
 {
 	__ASSERT_NO_MSG(c != NULL);
 
 	int err = 0;
-	struct aws_fota_event aws_fota_evt = {.job_id = job_id};
+	struct aws_fota_event aws_fota_evt = { .job_id = job_id };
 
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
@@ -512,7 +508,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		LOG_ERR("FOTA download failed, report back");
 		fota_state = NONE;
 		execution_state = AWS_JOBS_QUEUED;
-		(void) update_job_execution(c, job_id, AWS_JOBS_FAILED,
+		(void)update_job_execution(c, job_id, AWS_JOBS_FAILED,
 					    fota_state, -1, "");
 		aws_fota_evt.id = AWS_FOTA_EVT_ERROR;
 		callback(&aws_fota_evt);
@@ -525,7 +521,6 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		callback(&aws_fota_evt);
 		break;
 	}
-
 }
 
 int aws_fota_init(struct mqtt_client *const client,

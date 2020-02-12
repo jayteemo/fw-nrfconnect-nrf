@@ -41,13 +41,13 @@ struct aws_fota_event_dl {
 
 struct aws_fota_event {
 	enum aws_fota_evt_id id;
-	char * job_id;
+	char *job_id;
 	union {
 		struct aws_fota_event_dl dl;
 	};
 };
 
-typedef void (*aws_fota_callback_t)(struct aws_fota_event * fota_evt);
+typedef void (*aws_fota_callback_t)(struct aws_fota_event *fota_evt);
 
 /**@brief Initialize the AWS Firmware Over the Air library.
  *
