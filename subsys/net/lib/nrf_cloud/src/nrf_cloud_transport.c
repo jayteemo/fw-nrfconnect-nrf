@@ -92,8 +92,6 @@ static char shadow_get_topic[NCT_SHADOW_GET_LEN + 1];
 #define NCT_TOPIC_PREFIX_M_D_LEN (sizeof(NCT_M_D_TOPIC_PREFIX) - 1)
 #define NCT_JOB_STATUS_TOPIC "/jobs"
 #define NCT_JOB_STATUS_TOPIC_LEN (sizeof(NCT_JOB_STATUS_TOPIC) - 1)
-/* TODO: move to kconfig */
-#define CONFIG_FOTA_PROGRESS_PCT_INCREMENT 10
 static int last_sent_fota_progress;
 #endif
 
@@ -553,10 +551,11 @@ static void aws_fota_cb_handler(struct aws_fota_event * fota_evt)
 		}
 
 		/* Send download complete status regardless of increment setting */
-		/* Otherwise skip if increment is not met */
-		if ( (fota_evt->dl.progress < AWS_FOTA_EVT_DL_COMPLETE_VAL) &&
-			 ((fota_evt->dl.progress - last_sent_fota_progress) <
-			 CONFIG_FOTA_PROGRESS_PCT_INCREMENT)) {
+		/* Otherwise skip if increment is not met or disabled (0) */
+		if ((fota_evt->dl.progress < AWS_FOTA_EVT_DL_COMPLETE_VAL) &&
+		    (((fota_evt->dl.progress - last_sent_fota_progress) <
+		    CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT) ||
+		    (CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT == 0))) {
 			return;
 		}
 
