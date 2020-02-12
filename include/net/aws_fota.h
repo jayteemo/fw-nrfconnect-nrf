@@ -36,7 +36,7 @@ enum aws_fota_evt_id {
 
 #define AWS_FOTA_EVT_DL_COMPLETE_VAL 100
 struct aws_fota_event_dl {
-	int progress;
+	int progress; /* Download progress percent, 0-100 */
 };
 
 struct aws_fota_event {

@@ -59,7 +59,7 @@ config NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN
 	default 2048
 
 config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
-	int "Percentage increment at which progress is reported"
+	int "Percentage increment at which FOTA download progress is reported"
 	depends on FOTA_DOWNLOAD_PROGRESS_EVT
 	range 0 100
 	default 10

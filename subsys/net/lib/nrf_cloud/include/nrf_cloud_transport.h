@@ -82,7 +82,6 @@ int nct_dc_send(const struct nct_dc_data *dc);
  * NCT_EVT_DC_TX_DATA_ACK event is generated.
  */
 int nct_dc_stream(const struct nct_dc_data *dc);
-int nct_c2a_stream(const struct nct_dc_data *dc_data);
 
 /**@brief Disconnects the logical control channel. */
 int nct_cc_disconnect(void);
