@@ -953,12 +953,11 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 	nct.dc_rx_endp.size = rx_endp->len;
 
 	if (m_endp != NULL) {
-		int ret;
-
 		nct.dc_m_endp.utf8 = (u8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
 
 #if defined(CONFIG_AWS_FOTA)
+		int ret;
 		nct.job_status_endp.size = nct.dc_m_endp.size +
 							  NCT_TOPIC_PREFIX_M_D_LEN +
 							  NRF_CLOUD_CLIENT_ID_LEN +
@@ -986,8 +985,8 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 		}
 		/* size is actually string length */
 		nct.job_status_endp.size = ret;
-	}
 #endif
+	}
 }
 
 void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
