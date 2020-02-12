@@ -485,6 +485,12 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		LOG_INF("FOTA download completed evt received");
+
+		/* Always send download complete progress */
+		aws_fota_evt.id = AWS_FOTA_EVT_DL_PROGRESS;
+		aws_fota_evt.dl.progress = AWS_FOTA_EVT_DL_COMPLETE_VAL;
+		callback(&aws_fota_evt);
+
 		fota_state = APPLY_UPDATE;
 		err = update_job_execution(c, job_id, AWS_JOBS_IN_PROGRESS,
 					   fota_state, download_progress, "");
@@ -511,15 +517,13 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		aws_fota_evt.id = AWS_FOTA_EVT_ERROR;
 		callback(&aws_fota_evt);
 		break;
-
-#ifdef CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
+		/* Only if CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT is enabled */
 		download_progress = evt->progress;
-		aws_fota_evt.id = AWS_FOTA_EVT_STATUS;
-		aws_fota_evt.status.progress = download_progress;
+		aws_fota_evt.id = AWS_FOTA_EVT_DL_PROGRESS;
+		aws_fota_evt.dl.progress = download_progress;
 		callback(&aws_fota_evt);
 		break;
-#endif
 	}
 
 }

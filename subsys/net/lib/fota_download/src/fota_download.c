@@ -36,11 +36,13 @@ static void send_evt(enum fota_download_evt_id id)
 
 static void send_progress(int progress)
 {
+#ifdef CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT
 	const struct fota_download_evt evt = {
 		.id = FOTA_DOWNLOAD_EVT_PROGRESS,
 		.progress = progress
 	};
 	callback(&evt);
+#endif
 }
 
 static void dfu_target_callback_handler(enum dfu_target_evt_id evt)

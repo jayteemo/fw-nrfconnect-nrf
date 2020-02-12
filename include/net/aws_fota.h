@@ -30,11 +30,12 @@ enum aws_fota_evt_id {
 	AWS_FOTA_EVT_ERASE_PENDING,
 	/** AWS FOTA Erase done*/
 	AWS_FOTA_EVT_ERASE_DONE,
-	/** AWS FOTA status/progress */
-	AWS_FOTA_EVT_STATUS,
+	/** AWS FOTA download progress */
+	AWS_FOTA_EVT_DL_PROGRESS,
 };
 
-struct aws_fota_event_status {
+#define AWS_FOTA_EVT_DL_COMPLETE_VAL 100
+struct aws_fota_event_dl {
 	int progress;
 };
 
@@ -42,7 +43,7 @@ struct aws_fota_event {
 	enum aws_fota_evt_id id;
 	char * job_id;
 	union {
-		struct aws_fota_event_status status;
+		struct aws_fota_event_dl dl;
 	};
 };
 
