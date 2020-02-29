@@ -334,6 +334,11 @@ int at_parser_max_params_from_str(const char *at_params_str,
 
 	err = at_parse_param(&at_params_str, list, max_params_count);
 
+	if (err)
+	{
+		//printk("at_parse_param failed with err %d", err);
+	}
+
 	if (next_param_str) {
 		*next_param_str = (char *)at_params_str;
 	}

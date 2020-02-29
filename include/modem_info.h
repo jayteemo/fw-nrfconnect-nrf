@@ -20,7 +20,7 @@
  */
 
 /** Largest expected parameter response size. */
-#define MODEM_INFO_MAX_RESPONSE_SIZE 100
+#define MODEM_INFO_MAX_RESPONSE_SIZE 512
 
 /** Size of the JSON string. */
 #define MODEM_INFO_JSON_STRING_SIZE 512

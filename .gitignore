@@ -29,3 +29,4 @@ doc/*_doc.log
 
 ext/lib/bin/supl
 ext/lib/bin/libsupl.zip
+_build_asset_tracker_DK/*
