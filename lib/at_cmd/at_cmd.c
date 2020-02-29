@@ -34,6 +34,7 @@ static u32_t            response_buf_len;
 static struct k_thread  socket_thread;
 static at_cmd_handler_t notification_handler;
 static at_cmd_handler_t current_cmd_handler;
+static bool initialized;
 
 struct return_state_object {
 	int               code;
@@ -183,8 +184,8 @@ static void socket_thread_fn(void *arg1, void *arg2, void *arg3)
 					memcpy(response_buf, item->data,
 					       payload_len);
 				} else {
-					LOG_ERR("Response buffer not large "
-						"enough");
+					LOG_ERR("Response buffer (%d bytes) not large enough (%d bytes)",
+						response_buf_len, payload_len);
 
 					ret.code  = -EMSGSIZE;
 				}
@@ -317,8 +318,13 @@ static int at_cmd_driver_init(struct device *dev)
 	initialized = true;
 
 	int err;
-
+	
 	ARG_UNUSED(dev);
+
+	if (initialized) {
+		LOG_INF("AT cmd driver already initialized");
+		return 0;
+	}
 
 	err = open_socket();
 	if (err) {
@@ -334,6 +340,7 @@ static int at_cmd_driver_init(struct device *dev)
 			NULL, NULL, NULL,
 			THREAD_PRIORITY, 0, K_NO_WAIT);
 
+	initialized = true;
 	LOG_DBG("Common AT socket processing thread created");
 
 	return 0;
