@@ -117,7 +117,6 @@ static struct cloud_channel_data signal_strength_cloud_data;
 #endif /* CONFIG_MODEM_INFO */
 
 static atomic_t carrier_requested_disconnect;
-static atomic_t rsrp_updated;
 static atomic_t cloud_connect_attempts;
 
 /* Flag used for flip detection */
