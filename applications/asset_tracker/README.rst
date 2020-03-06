@@ -149,6 +149,20 @@ Request Power Saving Mode (PSM)
 	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then
 	set Switch 2 to the GND position.
 
+.. _lwm2m_carrier_support:
+
+Using the LwM2M carrier library
+*******************************
+This application supports the |NCS| :ref:`liblwm2m_carrier_readme` library.
+
+To enable the LwM2M carrier library, add the following parameter to your ``west build`` command:
+
+``-DOVERLAY_CONFIG=lwm2m_carrier_overlay.conf``
+
+In |SES|, select **Tools** > **Options** > **nRF Connect** `to add the above CMake parameter <http://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/gs_modifying.html#providing-cmake-options>`_.
+
+Alternatively, manually set the configuration options to match the contents of the overlay config file.
+
 
 Building and running
 ********************
