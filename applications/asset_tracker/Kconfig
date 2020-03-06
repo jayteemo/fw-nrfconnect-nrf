@@ -339,6 +339,9 @@ config USE_AT_HOST
 
 endmenu
 
+#config LWM2M_CARRIER
+#	depends on !NRF9160_GPS_HANDLE_MODEM_CONFIGURATION
+
 menu "Zephyr Kernel"
 source "Kconfig.zephyr"
 endmenu
