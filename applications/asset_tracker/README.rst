@@ -149,6 +149,18 @@ Request Power Saving Mode (PSM)
 	To enable this mode, set ``CONFIG_POWER_OPTIMIZATION_ENABLE=y`` and then
 	set Switch 2 to the GND position.
 
+.. _lwm2m_carrier:
+
+LWM2M Carrier Library
+*********************
+This application supports the LWM2M carrier library: :ref:`_liblwm2m_carrier_readme`
+
+To enable the LWM2M carrier library, add the following to your ``west build`` command:
+
+``-DOVERLAY_CONFIG=lwm2m_carrier_overlay.conf``
+
+Alternatively, manually set the configuration options to match the contents of the overlay config file.
+
 
 Building and running
 ********************
