@@ -88,6 +88,8 @@ static char update_delta_topic[NCT_UPDATE_DELTA_TOPIC_LEN + 1];
 static char update_topic[NCT_UPDATE_TOPIC_LEN + 1];
 static char shadow_get_topic[NCT_SHADOW_GET_LEN + 1];
 
+static bool mqtt_initialized;
+
 #define NCT_CC_SUBSCRIBE_ID 1234
 #define NCT_DC_SUBSCRIBE_ID 8765
 
@@ -445,7 +447,6 @@ static int nct_provision(void)
 	}
 #endif /* defined(CONFIG_BSD_LIBRARY) */
 #endif /* defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES) */
-
 	return 0;
 }
 
@@ -479,36 +480,41 @@ static void aws_fota_cb_handler(enum aws_fota_evt_id evt)
 int nct_mqtt_connect(void)
 {
 	int err;
+	if (!mqtt_initialized) {
 
-	mqtt_client_init(&nct.client);
+		mqtt_client_init(&nct.client);
 
-	nct.client.broker = (struct sockaddr *)&nct.broker;
-	nct.client.evt_cb = nct_mqtt_evt_handler;
-	nct.client.client_id.utf8 = (u8_t *)client_id_buf;
-	nct.client.client_id.size = strlen(client_id_buf);
-	nct.client.protocol_version = MQTT_VERSION_3_1_1;
-	nct.client.password = NULL;
-	nct.client.user_name = NULL;
-#if defined(CONFIG_MQTT_LIB_TLS)
-	nct.client.transport.type = MQTT_TRANSPORT_SECURE;
-	nct.client.rx_buf = nct.rx_buf;
-	nct.client.rx_buf_size = sizeof(nct.rx_buf);
-	nct.client.tx_buf = nct.tx_buf;
-	nct.client.tx_buf_size = sizeof(nct.tx_buf);
+		nct.client.broker = (struct sockaddr *)&nct.broker;
+		nct.client.evt_cb = nct_mqtt_evt_handler;
+		nct.client.client_id.utf8 = (u8_t *)client_id_buf;
+		nct.client.client_id.size = strlen(client_id_buf);
+		nct.client.protocol_version = MQTT_VERSION_3_1_1;
+		nct.client.password = NULL;
+		nct.client.user_name = NULL;
+	#if defined(CONFIG_MQTT_LIB_TLS)
+		nct.client.transport.type = MQTT_TRANSPORT_SECURE;
+		nct.client.rx_buf = nct.rx_buf;
+		nct.client.rx_buf_size = sizeof(nct.rx_buf);
+		nct.client.tx_buf = nct.tx_buf;
+		nct.client.tx_buf_size = sizeof(nct.tx_buf);
 
-	struct mqtt_sec_config *tls_config = &nct.client.transport.tls.config;
+		struct mqtt_sec_config *tls_config = &nct.client.transport.tls.config;
 
-	memcpy(tls_config, &nct.tls_config, sizeof(struct mqtt_sec_config));
-#else
-	nct.client.transport.type = MQTT_TRANSPORT_NON_SECURE;
-#endif
-#if defined(CONFIG_AWS_FOTA)
-	err = aws_fota_init(&nct.client, aws_fota_cb_handler);
-	if (err != 0) {
-		LOG_ERR("aws_fota_init failed %d", err);
-		return -ENOEXEC;
+		memcpy(tls_config, &nct.tls_config, sizeof(struct mqtt_sec_config));
+	#else
+		nct.client.transport.type = MQTT_TRANSPORT_NON_SECURE;
+	#endif
+	#if defined(CONFIG_AWS_FOTA)
+		err = aws_fota_init(&nct.client, aws_fota_cb_handler);
+		if (err != 0) {
+			LOG_ERR("aws_fota_init failed %d", err);
+			return -ENOEXEC;
+		}
+	#endif /* defined(CONFIG_AWS_FOTA) */
+
+		mqtt_initialized = true;
 	}
-#endif /* defined(CONFIG_AWS_FOTA) */
+	
 	err = mqtt_connect(&nct.client);
 	if (err != 0) {
 		LOG_DBG("mqtt_connect failed %d", err);

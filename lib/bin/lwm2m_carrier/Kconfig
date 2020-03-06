@@ -26,6 +26,8 @@ menuconfig LWM2M_CARRIER
 	depends on DOWNLOAD_CLIENT && DOWNLOAD_CLIENT_TLS
 	# Credentials NCS
 	depends on MODEM_KEY_MGMT
+	# GPS
+	depends on !NRF9160_GPS_HANDLE_MODEM_CONFIGURATION
 	# AT libraries
 	depends on AT_CMD
 	depends on (AT_CMD_RESPONSE_MAX_LEN > 128)
