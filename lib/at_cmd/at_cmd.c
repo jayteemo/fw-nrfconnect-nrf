@@ -34,7 +34,6 @@ static u32_t            response_buf_len;
 static struct k_thread  socket_thread;
 static at_cmd_handler_t notification_handler;
 static at_cmd_handler_t current_cmd_handler;
-static bool initialized;
 
 struct return_state_object {
 	int               code;
@@ -315,16 +314,9 @@ static int at_cmd_driver_init(struct device *dev)
 		return 0;
 	}
 
-	initialized = true;
-
 	int err;
 	
 	ARG_UNUSED(dev);
-
-	if (initialized) {
-		LOG_INF("AT cmd driver already initialized");
-		return 0;
-	}
 
 	err = open_socket();
 	if (err) {
