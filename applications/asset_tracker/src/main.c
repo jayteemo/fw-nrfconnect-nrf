@@ -124,6 +124,7 @@ static atomic_t cloud_connect_attempts;
 
 /* Flag used for flip detection */
 static bool flip_mode_enabled = true;
+static bool sensors_initd;
 
 #if IS_ENABLED(CONFIG_GPS_START_ON_MOTION)
 /* Current state of activity monitor */
@@ -1115,10 +1116,13 @@ static bool data_send_enabled(void)
 /**@brief Callback for sensor attached event from nRF Cloud. */
 void sensors_start(void)
 {
-	sensors_init();
+	if ( !sensors_initd ) {
+		sensors_initd = true;
+		sensors_init();
 
-	if (IS_ENABLED(CONFIG_GPS_START_AFTER_CLOUD_EVT_READY)) {
-		set_gps_enable(true);
+		if (IS_ENABLED(CONFIG_GPS_START_AFTER_CLOUD_EVT_READY)) {
+			set_gps_enable(true);
+		}
 	}
 }
 
@@ -1202,6 +1206,11 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		boot_write_img_confirmed();
 #endif
 		atomic_set(&cloud_association, CLOUD_ASSOCIATION_STATE_READY);
+		if (sensors_initd) {
+			atomic_set(&cloud_association,
+				   CLOUD_ASSOCIATION_STATE_RECONNECT);
+		cycle_cloud_connection(NULL);
+		}
 		sensors_start();
 		break;
 	}
@@ -1453,7 +1462,10 @@ static void ui_evt_handler(struct ui_evt evt)
 
 	if (IS_ENABLED(CONFIG_ACCEL_USE_SIM) && (evt.button == FLIP_INPUT) &&
 	    data_send_enabled()) {
-		motion_simulate_trigger();
+		//motion_simulate_trigger();
+		atomic_set(&cloud_association,
+				   CLOUD_ASSOCIATION_STATE_RECONNECT);
+		cycle_cloud_connection(NULL);
 	}
 
 	if (IS_ENABLED(CONFIG_GPS_CONTROL_ON_LONG_PRESS) &&
@@ -1613,7 +1625,7 @@ connect:
 					CLOUD_ASSOCIATION_STATE_RECONNECT) ||
 				(atomic_get(&carrier_requested_disconnect))) {
 				reconnecting = true;
-				reconnect_delay_s = 10;
+				reconnect_delay_s = 2;
 				goto connect;
 			}
 			LOG_ERR("Socket error: POLLNVAL");
