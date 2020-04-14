@@ -28,6 +28,7 @@ enum cloud_state {
 
 /**@brief Cloud events that can be notified asynchronously by the backend. */
 enum cloud_event_type {
+	CLOUD_EVT_CONNECTING,
 	CLOUD_EVT_CONNECTED,
 	CLOUD_EVT_DISCONNECTED,
 	CLOUD_EVT_READY,
@@ -41,6 +42,14 @@ enum cloud_event_type {
 	CLOUD_EVT_FOTA_ERASE_PENDING,
 	CLOUD_EVT_FOTA_ERASE_DONE,
 	CLOUD_EVT_COUNT
+};
+
+enum cloud_disconnected_err_type {
+	CLOUD_DISCONNECT_ERR_NONE,
+	CLOUD_DISCONNECT_ERR_CLOSED_BY_REMOTE,
+	CLOUD_DISCONNECT_ERR_INVALID_REQUEST,
+	CLOUD_DISCONNECT_ERR_MISC,
+	CLOUD_DISCONN_ERR_COUNT
 };
 
 /**@brief Quality of Service for message sent by a cloud backend. */
