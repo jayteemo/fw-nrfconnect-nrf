@@ -17,10 +17,11 @@
 
 #define HTTPS_PORT 443
 
-#define HTTP_HEAD                                                              \
-	"HEAD / HTTP/1.1\r\n"                                                  \
-	"Host: www.google.com:443\r\n"                                         \
-	"Connection: close\r\n\r\n"
+#define HTTP_HEAD "GET /v1/account HTTP/1.1\r\n" \
+		  "Accept: application/json\r\n" \
+		  "Authorization: Bearer 8d35cb3e165161e8a3b5a20ff3c48399a3f0b40a\r\n" \
+		  "Connection: keep-alive\r\n" \
+		  "Host: api.nrfcloud.com:443\r\n\r\n"
 
 #define HTTP_HEAD_LEN (sizeof(HTTP_HEAD) - 1)
 
@@ -32,9 +33,8 @@
 static const char send_buf[] = HTTP_HEAD;
 static char recv_buf[RECV_BUF_SIZE];
 
-/* Certificate for `google.com` */
 static const char cert[] = {
-	#include "../cert/GlobalSign-Root-CA-R2"
+	#include "../cert/AmazonRootCA1"
 };
 
 BUILD_ASSERT(sizeof(cert) < KB(4), "Certificate too large");
@@ -50,6 +50,9 @@ int at_comms_init(void)
 		printk("Failed to initialize AT commands, err %d\n", err);
 		return err;
 	}
+
+	printk("Trace cmd ret %d\n",
+		at_cmd_write("AT%XMODEMTRACE=1,2\r\n",NULL,0, NULL));
 
 	err = at_notif_init();
 	if (err) {
@@ -181,7 +184,7 @@ void main(void)
 	}
 	printk("OK\n");
 
-	err = getaddrinfo("google.com", NULL, &hints, &res);
+	err = getaddrinfo("api.nrfcloud.com", NULL, &hints, &res);
 	if (err) {
 		printk("getaddrinfo() failed, err %d\n", errno);
 		return;
@@ -201,7 +204,7 @@ void main(void)
 		goto clean_up;
 	}
 
-	printk("Connecting to %s\n", "google.com");
+	printk("Connecting to %s\n", "api.nrfcloud.com");
 	err = connect(fd, res->ai_addr, sizeof(struct sockaddr_in));
 	if (err) {
 		printk("connect() failed, err: %d\n", errno);
