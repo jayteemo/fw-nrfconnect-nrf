@@ -10,6 +10,7 @@
 #include <net/socket.h>
 #include <modem/bsdlib.h>
 #include <net/tls_credentials.h>
+#include <net/http_client.h>
 #include <modem/lte_lc.h>
 #include <modem/at_cmd.h>
 #include <modem/at_notif.h>
@@ -28,11 +29,11 @@
 
 #define DO_SECURE 	1
 #define DO_GOOGLE 	0
-#define DO_CERT_PROV 	1
+#define DO_CERT_PROV 	0
 
 #if DO_SECURE
 	#define SOCKET_PROTOCOL IPPROTO_TLS_1_2
-	#define API_PORT 443
+	#define API_PORT 8443
 #else
 	#define SOCKET_PROTOCOL IPPROTO_TCP
 	#define API_PORT 80
@@ -58,10 +59,23 @@ static const char cert[] = {
 #define HTTP_HEAD "GET /v1/account HTTP/1.1\r\n" \
 		  "Accept: application/json\r\n" \
 		  "Authorization: Bearer 8d35cb3e165161e8a3b5a20ff3c48399a3f0b40a\r\n" \
-		  "Connection: keep-alive\r\n" \
+		  "Connection: close\r\n" \
 		  "Host: api.nrfcloud.com:443\r\n\r\n"
-#define HOSTNAME "api.nrfcloud.com" //"a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com" //
-#define HOSTNAME_TLS "api.nrfcloud.com" //"a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com" //"api.nrfcloud.com"
+
+#define CONTENT_TYPE "Accept: application/json\r\n" \
+		     "Authorization: Bearer 8d35cb3e165161e8a3b5a20ff3c48399a3f0b40a\r\n" \
+		     "Connection: close\r\n" \
+		     "Host: api.nrfcloud.com:443\r\n\r\n"
+
+#define SHADOW_GET 	"Accept: application/json\r\n" \
+			"Connection: close\r\n" \
+			"Host: a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com:8443\r\n\r\n"
+
+#define DO_JITP 	"Connection: close\r\n" \
+			"Host: a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com:8443\r\n\r\n"
+
+#define HOSTNAME "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com" //"api.nrfcloud.com"
+#define HOSTNAME_TLS "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com" //"api.nrfcloud.com"
 static const char cert[] = {
 	#include "../cert/AmazonRootCA1" // "../cert/AmazonRootCA1" //#include "../cert/ClientCert"
 };
@@ -81,6 +95,7 @@ static char shared_secret_hex[] = SHARED_SECRET;
 static char * shared_secret = "294A404E635266556A586E327234753778214125442A472D4B6150645367566B";
 static const char send_buf[] = HTTP_HEAD;
 static char recv_buf[RECV_BUF_SIZE];
+static bool resp_rcvd;
 
 BUILD_ASSERT_MSG(sizeof(cert) < KB(4), "Certificate too large");
 
@@ -213,16 +228,46 @@ int tls_setup(int fd)
 		printk("Failed to setup TLS sec tag, err %d\n", errno);
 		return err;
 	}
-/*
+
 	err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, HOSTNAME_TLS,
 				 strlen(HOSTNAME_TLS));
 	if (err) {
 		printk("Failed to setup TLS hostname, err %d\n", errno);
 		return err;
-	}*/
+	}
 #endif
 	return 0;
 }
+
+static void response_cb(struct http_response *rsp,
+			enum http_final_call final_data,
+			void *user_data)
+{
+	if (final_data == HTTP_DATA_MORE) {
+		printk("Partial data received (%zd bytes)\n", rsp->data_len);
+		if (rsp->body_start) {
+			printk("BODY %s\n", rsp->body_start);
+		}
+	} else if (final_data == HTTP_DATA_FINAL) {
+		printk("All the data received (%zd bytes)\n", rsp->data_len);
+
+		printk("proc: %zd, content len: %zd, body found: %d, complete: %d\n",
+		       rsp->processed, rsp->content_length,
+		       rsp->body_found, rsp->message_complete);
+		if (/*rsp->data_len && */rsp->body_found &&
+		   !rsp->body_start) {
+			printk("RCV BUFF: %s\n", rsp->recv_buf);
+		} else if (rsp->data_len && rsp->body_found) {
+			printk("BODY: %s\n", rsp->body_start);
+		}
+	}
+
+	resp_rcvd = true;
+
+	printk("Response to %s\n", (const char *)user_data);
+	printk("Response status %s\n", rsp->http_status);
+}
+
 
 void main(void)
 {
@@ -470,6 +515,74 @@ void main(void)
 		printk("connect() failed, err: %d\n", errno);
 		goto clean_up;
 	}
+
+	s32_t timeout = K_SECONDS(15);
+	struct http_request req;
+	memset(&req, 0, sizeof(req));
+
+	req.method = HTTP_POST;//HTTP_GET;
+	req.url = "/topics/jitp?qos=1"; //"/v1/account";
+	req.host = HOSTNAME;
+	req.protocol = "HTTP/1.1";
+	req.content_type_value = DO_JITP;//CONTENT_TYPE;
+	req.response = response_cb;
+	req.recv_buf = recv_buf;
+	req.recv_buf_len = sizeof(recv_buf);
+	resp_rcvd = false;
+
+	bytes = http_client_req(fd, &req, timeout, "JITP-req");
+	printk("http_client_req returned %d", bytes);
+
+
+	if (bytes < 0) {
+		goto clean_up;
+	}
+	if (!resp_rcvd) {
+		// no response = device was not already provisioned
+		(void)close(fd);
+
+		k_sleep(K_SECONDS(30));
+
+		err = tls_setup(fd);
+		if (err) {
+			goto clean_up;
+		}
+
+		printk("Connecting to %s\n", HOSTNAME);
+		err = connect(fd, res->ai_addr, sizeof(struct sockaddr_in));
+		if (err) {
+			printk("connect() failed, err: %d\n", errno);
+			goto clean_up;
+		}
+	} else {
+		// probably already provisioned...
+	}
+
+	resp_rcvd = false;
+	memset(&req, 0, sizeof(req));
+	memset(recv_buf, 0, sizeof(recv_buf));
+
+	req.method = HTTP_GET;
+	req.url = "/things/nrf-352656100300204/shadow";
+	req.host = HOSTNAME;
+	req.protocol = "HTTP/1.1";
+	req.content_type_value = SHADOW_GET;
+	req.response = response_cb;
+	req.recv_buf = recv_buf;
+	req.recv_buf_len = sizeof(recv_buf);
+	resp_rcvd = false;
+
+	bytes = http_client_req(fd, &req, timeout, "SHADOW-GET");
+	printk("http_client_req returned %d", bytes);
+
+	goto clean_up;
+
+
+
+
+
+
+
 
 	off = 0;
 	do {
