@@ -32,6 +32,10 @@ static void base64_url_format(char * const base64_string);
 static char * get_base64url_string(const char * const input,
 				   const size_t input_size);
 static char * get_device_id_string(void);
+static int get_signature(const uint8_t * const data_in,
+			 const size_t data_in_size,
+		  	 uint8_t * data_out,
+			 size_t const data_out_size);
 
 void bsd_recoverable_error_handler(uint32_t err)
 {
@@ -161,10 +165,8 @@ static int generate_jwt(char * jwt_buff, size_t jwt_buff_size)
 		return -EINVAL;
 	}
 
-	static char shared_secret[] = SHARED_SECRET;
-	uint8_t jwt_sig[TC_SHA256_DIGEST_SIZE];
 	char jwt_payload[JWT_PAYLOAD_BUFF_SIZE];
-	struct tc_hmac_state_struct hmac;
+	uint8_t jwt_sig[TC_SHA256_DIGEST_SIZE];
 	char * dev_id;
 	char * jwt_sig_b64;
 	char * jwt_payload_b64;
@@ -215,37 +217,12 @@ static int generate_jwt(char * jwt_buff, size_t jwt_buff_size)
 	jwt_len += ret;
 	printk("Combined: %s\n", jwt_buff);
 
-	ret = tc_hmac_set_key(&hmac, shared_secret, sizeof(shared_secret));
-	if (ret != TC_CRYPTO_SUCCESS )
-	{
-		printk("tc_hmac_set_key failed: %d\n", ret);
-		return -EACCES;
+	ret = get_signature((uint8_t*)jwt_buff, strlen(jwt_buff),
+			    jwt_sig, sizeof(jwt_sig));
+	if (ret) {
+		printk("Error signing JWT: %d\n", ret);
+		return -EBADMSG;
 	}
-
-	ret = tc_hmac_init(&hmac);
-	if (ret != TC_CRYPTO_SUCCESS )
-	{
-		printk("tc_hmac_init failed: %d\n", ret);
-	}
-
-	ret = tc_hmac_update(&hmac, jwt_buff, strlen(jwt_buff));
-	if (ret != TC_CRYPTO_SUCCESS) {
-		printk("tc_hmac_update failed: %d\n", ret);
-		return -EACCES;
-	}
-
-	ret = tc_hmac_final(jwt_sig,sizeof(jwt_sig),&hmac);
-	if (ret != TC_CRYPTO_SUCCESS) {
-		printk("tc_hmac_final failed\n");
-		return -EACCES;
-	}
-
-	printk("HMAC hex:\n");
-	for (int i = 0; i < TC_SHA256_DIGEST_SIZE; ++i)
-	{
-		printk("%02X",jwt_sig[i]);
-	}
-	printk("\n");
 
 	jwt_sig_b64 = get_base64url_string(jwt_sig, TC_SHA256_DIGEST_SIZE);
 	if (!jwt_sig_b64) {
@@ -261,6 +238,55 @@ static int generate_jwt(char * jwt_buff, size_t jwt_buff_size)
 	k_free(jwt_sig_b64);
 
 	return strlen(jwt_buff);
+}
+
+static int get_signature(const uint8_t * const data_in,
+			 const size_t data_in_size,
+			 uint8_t * data_out,
+			 size_t const data_out_size) {
+
+	if (!data_in || !data_in_size || !data_out) {
+		return -EINVAL;
+	} else if (data_out_size < TC_SHA256_DIGEST_SIZE) {
+		printk("data_out must be >= %d bytes\n",
+		       TC_SHA256_DIGEST_SIZE);
+		return -ENOBUFS;
+	}
+
+	struct tc_hmac_state_struct hmac;
+	char shared_secret[] = SHARED_SECRET;
+	int ret;
+
+	ret = tc_hmac_set_key(&hmac, shared_secret, sizeof(shared_secret));
+	if (ret != TC_CRYPTO_SUCCESS) {
+		printk("tc_hmac_set_key failed: %d\n", ret);
+		return -EACCES;
+	}
+
+	ret = tc_hmac_init(&hmac);
+	if (ret != TC_CRYPTO_SUCCESS) {
+		printk("tc_hmac_init failed: %d\n", ret);
+	}
+
+	ret = tc_hmac_update(&hmac, data_in, data_in_size);
+	if (ret != TC_CRYPTO_SUCCESS) {
+		printk("tc_hmac_update failed: %d\n", ret);
+		return -EACCES;
+	}
+
+	ret = tc_hmac_final(data_out,data_out_size,&hmac);
+	if (ret != TC_CRYPTO_SUCCESS) {
+		printk("tc_hmac_final failed\n");
+		return -EACCES;
+	}
+
+	printk("HMAC hex:\n");
+	for (int i = 0; i < TC_SHA256_DIGEST_SIZE; ++i) {
+		printk("%02X",data_out[i]);
+	}
+	printk("\n");
+
+	return 0;
 }
 
 static char * get_device_id_string(void)
@@ -348,17 +374,17 @@ void base64_url_format(char * const base64_string)
 
 	char * found = NULL;
 
-	// replace '+' with "-"
+	/* replace '+' with "-" */
 	for(found = base64_string; (found = strchr(found,'+'));) {
 		*found = '-';
 	}
 
-	// replace '/' with "_"
+	/* replace '/' with "_" */
 	for(found = base64_string; (found = strchr(found,'/'));) {
 		*found = '_';
 	}
 
-	// remove trailing '='
+	/* remove trailing '=' */
 	found = strchr(base64_string, '=');
 	if (found) {
 		*found = '\0';
