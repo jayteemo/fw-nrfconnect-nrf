@@ -24,7 +24,7 @@
 #include "fota_client_mgmt.h"
 
 static int provision_device(void);
-static bool get_pending_job(void);
+static int get_pending_job(void);
 static int update_job_status(void);
 
 void bsd_recoverable_error_handler(uint32_t err)
@@ -67,7 +67,6 @@ void modem_fota_callback(enum modem_fota_evt_id event_id)
 void main(void)
 {
 	int err;
-	char * jwt;
 
 	printk("Modem FOTA sample started\n");
 
@@ -107,13 +106,6 @@ void main(void)
 	at_cmd_init();
 	at_notif_init();
 
-	err = fota_client_generate_jwt(&jwt);
-	if (err < 0){
-		printk("Failed to generate JWT: %d\n", err);
-		return;
-	}
-	printk("JWT: %s\n", jwt);
-
 	printk("LTE link connecting...\n");
 	err = lte_lc_init_and_connect();
 	__ASSERT(err == 0, "LTE link could not be established.");
@@ -123,8 +115,6 @@ void main(void)
 	get_pending_job();
 
 	modem_fota_init(&modem_fota_callback);
-
-	k_free(jwt);
 
 	k_sleep(K_FOREVER);
 }
@@ -143,9 +133,17 @@ static int provision_device(void)
 	return ret;
 }
 
-static bool get_pending_job(void)
+static int get_pending_job(void)
 {
-	return false;
+	int ret = fota_client_get_pending_job();
+	if (ret == 0) {
+		printk("No job pending.\n");
+	} else if (ret == 1) {
+		printk("Job is pending.\n");
+	} else {
+		printk("Error getting pending job: %d.\n", ret);
+	}
+	return ret;
 }
 
 static int update_job_status(void)

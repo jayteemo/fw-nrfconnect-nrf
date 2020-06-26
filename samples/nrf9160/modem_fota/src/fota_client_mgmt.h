@@ -5,5 +5,6 @@
  */
 #include <string.h>
 
-int fota_client_generate_jwt(char ** jwt_out);
+int fota_client_generate_jwt(const char * const device_id, char ** jwt_out);
 int fota_client_provision_device(void);
+int fota_client_get_pending_job(void);

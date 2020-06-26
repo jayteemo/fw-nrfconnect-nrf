@@ -33,8 +33,8 @@
  */
 /* JWT header: {"alg":"HS256","typ":"JWT"} */
 #define JWT_HEADER_B64 "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-/* JWT payload: {"devId":"nrf-<IMEI>"} */
-#define JWT_PAYLOAD_TEMPLATE "{\"devId\":\"%s\"}"
+/* JWT payload: {"deviceIdentifier":"nrf-<IMEI>"} */
+#define JWT_PAYLOAD_TEMPLATE "{\"deviceIdentifier\":\"%s\"}"
 #define JWT_PAYLOAD_BUFF_SIZE (sizeof(JWT_PAYLOAD_TEMPLATE) + DEV_ID_BUFF_SIZE)
 
 /* TODO: For initial certification, a hard-coded shared secret will be used.
@@ -64,20 +64,31 @@ static int get_signature(const uint8_t * const data_in,
 static void response_cb(struct http_response *rsp,
 			enum http_final_call final_data,
 			void *user_data);
-static int tls_setup(int fd);
+static int tls_setup(int fd, const char * const tls_hostname);
+static int do_connect( int * const fd, struct addrinfo **addr_info,
+		const char * const hostname, const uint16_t port_num);
 
-
-#define FW_GET  "Accept: */*\r\n" \
-		"Connection: keep-alive\r\n" \
-		"range: bytes=0-1023\r\n"\
-		"Host: api.dev.nrfcloud.com:443\r\n\r\n"
 #define API_HOSTNAME "api.dev.nrfcloud.com"
 #define API_HOSTNAME_TLS API_HOSTNAME
 #define API_PORT 443
+#define API_HTTP_TIMEOUT_MS (15000)
 
-#define JITP_HOSTNAME "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com"
+#define API_FW_GET	"Accept: */*\r\n" \
+			"Connection: keep-alive\r\n" \
+			"range: bytes=0-1023\r\n"\
+			"Host: " API_HOSTNAME ":" \
+			STRINGIFY(API_PORT) "\r\n\r\n"
+
+#define API_GET_JOB_URL_TEMPLATE "/dfu-jobs/device/%s/latest-pending"
+#define API_GET_JOB_TEMPLATE	 "accept: application/json\r\n" \
+				 "Authorization: Bearer %s\r\n" \
+				 "Host: " API_HOSTNAME "\r\n\r\n"
+
+// TODO: switch to PROD endpoint: "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com"
+#define JITP_HOSTNAME "a2wg6q8yw7gv5r-ats.iot.us-east-1.amazonaws.com"
 #define JITP_HOSTNAME_TLS JITP_HOSTNAME
 #define JITP_PORT 8443
+#define JITP_URL "/topics/jitp?qos=1"
 #define DO_JITP "Connection: close\r\n" \
 		"Host: " JITP_HOSTNAME ":" \
 		STRINGIFY(JITP_PORT) "\r\n\r\n"
@@ -92,21 +103,31 @@ static const char cert[] = {
 };
 */
 
+enum http_status {
+	HTTP_STATUS_UNHANDLED = -1,
+	HTTP_STATUS_NONE = 0,
+	HTTP_STATUS_OK = 200,
+	HTTP_STATUS_BAD_REQ = 400,
+	HTTP_STATUS_UNAUTH = 401,
+	HTTP_STATUS_FORBIDDEN = 403,
+	HTTP_STATUS_NOT_FOUND = 404,
+};
+
 #define HTTP_RX_BUF_SIZE (2048*2)
 static char http_rx_buf[HTTP_RX_BUF_SIZE];
 static bool http_resp_rcvd;
+static enum http_status http_resp_status;
 
-int fota_client_provision_device(void)
+static int do_connect( int * const fd, struct addrinfo **addr_info,
+		const char * const hostname, const uint16_t port_num)
 {
-	int fd;
 	int ret;
-	struct addrinfo *res;
 	struct addrinfo hints = {
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
 
-	ret = getaddrinfo(JITP_HOSTNAME, NULL, &hints, &res);
+	ret = getaddrinfo(hostname, NULL, &hints, addr_info);
 	if (ret) {
 		printk("getaddrinfo() failed, err %d\n", errno);
 		return -EFAULT;
@@ -114,12 +135,69 @@ int fota_client_provision_device(void)
 	else
 	{
 		char peer_addr[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &res->ai_addr, peer_addr, INET_ADDRSTRLEN);
+		inet_ntop(AF_INET, &(*addr_info)->ai_addr, peer_addr, INET_ADDRSTRLEN);
 		printk("getaddrinfo() %s\n", peer_addr);
 	}
 
 
-	((struct sockaddr_in *)res->ai_addr)->sin_port = htons(JITP_PORT);
+	((struct sockaddr_in *)(*addr_info)->ai_addr)->sin_port = htons(port_num);
+
+	*fd = socket(AF_INET, SOCK_STREAM, SOCKET_PROTOCOL);
+	if (*fd == -1) {
+		printk("Failed to open socket!\n");
+		ret = -ENOTCONN;
+		goto clean_up;
+	}
+
+	/* Setup TLS socket options */
+	ret = tls_setup(*fd, hostname);
+	if (ret) {
+		ret = -EACCES;
+		goto clean_up;
+	}
+
+	printk("Connecting to %s\n", hostname);
+	ret = connect(*fd, (*addr_info)->ai_addr, sizeof(struct sockaddr_in));
+	if (ret) {
+		printk("connect() failed, err: %d\n", errno);
+		ret = -ECONNREFUSED;
+		goto clean_up;
+	} else {
+		return 0;
+	}
+
+clean_up:
+	freeaddrinfo(*addr_info);
+	(void)close(*fd);
+	return ret;
+}
+
+int fota_client_provision_device(void)
+{
+	int fd;
+	int ret;
+	struct addrinfo *addr_info;
+	struct http_request req;
+
+	ret = do_connect(&fd, &addr_info, JITP_HOSTNAME, JITP_PORT);
+	if (ret) {
+		return ret;
+	}
+#if 0
+	ret = getaddrinfo(API_HOSTNAME, NULL, &hints, &addr_info);
+	if (ret) {
+		printk("getaddrinfo() failed, err %d\n", errno);
+		return -EFAULT;
+	}
+	else
+	{
+		char peer_addr[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &addr_info->ai_addr, peer_addr, INET_ADDRSTRLEN);
+		printk("getaddrinfo() %s\n", peer_addr);
+	}
+
+
+	((struct sockaddr_in *)addr_info->ai_addr)->sin_port = htons(JITP_PORT);
 
 	fd = socket(AF_INET, SOCK_STREAM, SOCKET_PROTOCOL);
 	if (fd == -1) {
@@ -129,25 +207,25 @@ int fota_client_provision_device(void)
 	}
 
 	/* Setup TLS socket options */
-	ret = tls_setup(fd);
+	ret = tls_setup(fd, JITP_HOSTNAME_TLS);
 	if (ret) {
 		ret = -EACCES;
 		goto clean_up;
 	}
 
 	printk("Connecting to %s\n", JITP_HOSTNAME);
-	ret = connect(fd, res->ai_addr, sizeof(struct sockaddr_in));
+	ret = connect(fd, addr_info->ai_addr, sizeof(struct sockaddr_in));
 	if (ret) {
 		printk("connect() failed, err: %d\n", errno);
 		ret = -ECONNREFUSED;
 		goto clean_up;
 	}
+#endif
 
-	struct http_request req;
 	memset(&req, 0, sizeof(req));
 
 	req.method = HTTP_POST;
-	req.url = "/topics/jitp?qos=1";
+	req.url = JITP_URL;
 	req.host = JITP_HOSTNAME;
 	req.protocol = "HTTP/1.1";
 	req.content_type_value = DO_JITP;
@@ -155,16 +233,14 @@ int fota_client_provision_device(void)
 	req.recv_buf = http_rx_buf;
 	req.recv_buf_len = sizeof(http_rx_buf);
 	http_resp_rcvd = false;
+	http_resp_status = HTTP_STATUS_NONE;
 
 	ret = http_client_req(fd, &req, JITP_HTTP_TIMEOUT_MS, "JITP_REQ");
 	printk("http_client_req returned %d\n", ret);
 
 	if (ret < 0) {
 		ret = -EIO;
-		goto clean_up;
-	}
-
-	if (!http_resp_rcvd) {
+	} else if (!http_resp_rcvd) {
 		// no response = device was NOT already provisioned
 		// so provisioning should be occurring...
 		// wait 30s before attemping another API call
@@ -192,14 +268,118 @@ int fota_client_provision_device(void)
 		ret = 1;
 	}
 
-clean_up:
-	freeaddrinfo(res);
+	freeaddrinfo(addr_info);
 	(void)close(fd);
 
 	return ret;
 }
 
-int fota_client_generate_jwt(char ** jwt_out)
+int fota_client_get_pending_job(void)
+{
+	int fd;
+	int ret;
+	struct addrinfo *addr_info = NULL;
+	struct http_request req;
+	size_t buff_size;
+	char * jwt = NULL;
+	char * url = NULL;
+	char * content =  NULL;
+	char * device_id = get_device_id_string();
+
+	if (!device_id) {
+		return -ENXIO;
+		goto clean_up;
+	}
+
+	ret = fota_client_generate_jwt(device_id,&jwt);
+
+	if (ret < 0){
+		printk("Failed to generate JWT: %d\n", ret);
+		goto clean_up;
+	}
+	printk("JWT: %s\n", jwt);
+
+	/* Format API URL with device ID */
+	buff_size = sizeof(API_GET_JOB_URL_TEMPLATE) + strlen(device_id);
+	url = k_calloc(buff_size, 1);
+	if (!url) {
+		ret = -ENOMEM;
+	}
+	ret = snprintk(url, buff_size, API_GET_JOB_URL_TEMPLATE, device_id);
+	if (ret < 0 || ret >= buff_size) {
+		printk("Could not format URL\n");
+		return -ENOBUFS;
+	}
+
+	/* Format API content with JWT */
+	buff_size = sizeof(API_GET_JOB_TEMPLATE) + strlen(jwt);
+	content = k_calloc(buff_size,1);
+	if (!content) {
+		ret = -ENOMEM;
+	}
+	ret = snprintk(content, buff_size, API_GET_JOB_TEMPLATE, jwt);
+	if (ret < 0 || ret >= buff_size) {
+		printk("Could not format HTTP content\n");
+		return -ENOBUFS;
+	}
+
+	printk("URL: %s\n", url);
+	printk("Content: %s\n", content);
+
+	/* Init HTTP request */
+	memset(&req, 0, sizeof(req));
+	req.method = HTTP_GET;
+	req.url = url;
+	req.host = API_HOSTNAME;
+	req.protocol = "HTTP/1.1";
+	req.content_type_value = content;
+	req.response = response_cb;
+	req.recv_buf = http_rx_buf;
+	req.recv_buf_len = sizeof(http_rx_buf);
+	http_resp_rcvd = false;
+	http_resp_status = HTTP_STATUS_NONE;
+
+	ret = do_connect(&fd, &addr_info, API_HOSTNAME, API_PORT);
+	if (ret) {
+		goto clean_up;
+	}
+
+	ret = http_client_req(fd, &req, JITP_HTTP_TIMEOUT_MS, "API_GET_JOB");
+	printk("http_client_req returned %d\n", ret);
+
+	if (ret < 0) {
+		ret = -EIO;
+	} else {
+
+		if (http_resp_status == HTTP_STATUS_NOT_FOUND) {
+			ret = 0;
+		}
+	}
+
+clean_up:
+	if (addr_info) {
+		freeaddrinfo(addr_info);
+	}
+	if (fd) {
+		(void)close(fd);
+	}
+	if (jwt) {
+		k_free(jwt);
+	}
+	if (device_id) {
+		k_free(device_id);
+	}
+	if (url) {
+		k_free(url);
+	}
+	if (content) {
+		k_free(content);
+	}
+
+	return ret;
+}
+
+int fota_client_generate_jwt(const char * const device_id, char ** jwt_out)
 {
 	if (!jwt_out)
 	{
@@ -208,26 +388,32 @@ int fota_client_generate_jwt(char ** jwt_out)
 
 	char jwt_payload[JWT_PAYLOAD_BUFF_SIZE];
 	uint8_t jwt_sig[TC_SHA256_DIGEST_SIZE];
-	char * dev_id;
+	int ret;
 	char * jwt_buff;
 	char * jwt_sig_b64;
 	char * jwt_payload_b64;
-	int ret;
+	char * dev_id = NULL;
 	size_t jwt_len = 0;
 
 	*jwt_out = NULL;
 
-	/* Get the device ID and add it to the payload string */
-	dev_id = get_device_id_string();
-	if (!dev_id) {
-		printk("Could get device ID string\n");
-		return -ENODEV;
+	/* Get device ID if it was not provided */
+	if (!device_id) {
+		dev_id = get_device_id_string();
+		if (!dev_id) {
+			printk("Could get device ID string\n");
+			return -ENODEV;
+		}
 	}
 
+	/* Add device ID to JWT payload */
 	ret = snprintk(jwt_payload, sizeof(jwt_payload),
-		       JWT_PAYLOAD_TEMPLATE, dev_id);
-	k_free(dev_id);
-	dev_id = NULL;
+		       JWT_PAYLOAD_TEMPLATE,
+		       device_id ? device_id : dev_id);
+	if (dev_id) {
+		k_free(dev_id);
+		dev_id = NULL;
+	}
 	if (ret < 0 || ret >= sizeof(jwt_payload)) {
 		printk("Could not format JWT payload\n");
 		return -ENOBUFS;
@@ -448,6 +634,7 @@ void base64_url_format(char * const base64_string)
 	}
 }
 
+
 static void response_cb(struct http_response *rsp,
 			enum http_final_call final_data,
 			void *user_data)
@@ -464,22 +651,36 @@ static void response_cb(struct http_response *rsp,
 		       rsp->processed, rsp->content_length,
 		       rsp->body_found, rsp->message_complete);
 
+		http_resp_rcvd = true;
+
 		if (rsp->data_len && rsp->body_found) {
 			printk("BODY: %s\n", rsp->body_start);
 		}
 		else if (rsp->body_found && !rsp->body_start) {
 			printk("RCV BUFF: %s\n", rsp->recv_buf);
 		}
+		if (strncmp(rsp->http_status,"Not Found", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_NOT_FOUND;
+		} else if (strncmp(rsp->http_status,"Forbidden", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_FORBIDDEN;
+		} else if (strncmp(rsp->http_status,"OK", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_OK;
+		} else if (strncmp(rsp->http_status,"Unauthorized", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_UNAUTH;
+		} else if (strncmp(rsp->http_status,"Bad Request", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_BAD_REQ;
+		} else {
+			http_resp_status = HTTP_STATUS_UNHANDLED;
+		}
+		printk("Response status: %s\n", rsp->http_status);
+
+		printk("Response to %s\n", (const char *)user_data);
+
 	}
-
-	http_resp_rcvd = true;
-
-	printk("Response to %s\n", (const char *)user_data);
-	printk("Response status %s\n", rsp->http_status);
 }
 
 /* Setup TLS options on a given socket */
-int tls_setup(int fd)
+int tls_setup(int fd, const char * const tls_hostname)
 {
 	int err;
 	int verify;
@@ -514,11 +715,13 @@ int tls_setup(int fd)
 		return err;
 	}
 
-	err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, JITP_HOSTNAME_TLS,
-				 strlen(JITP_HOSTNAME_TLS));
-	if (err) {
-		printk("Failed to setup TLS hostname, err %d\n", errno);
-		return err;
+	if (tls_hostname) {
+		err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, tls_hostname,
+				 strlen(tls_hostname));
+		if (err) {
+			printk("Failed to setup TLS hostname, err %d\n", errno);
+			return err;
+		}
 	}
 	return 0;
 }
