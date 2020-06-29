@@ -53,6 +53,7 @@
 		       GET_BASE64_LEN(sizeof(jwt_payload)) + 1 + \
 		       GET_BASE64_LEN(sizeof(jwt_sig)) + 1)
 
+static int generate_jwt(const char * const device_id, char ** jwt_out);
 static void base64_url_format(char * const base64_string);
 static char * get_base64url_string(const char * const input,
 				   const size_t input_size);
@@ -179,51 +180,7 @@ int fota_client_provision_device(void)
 	struct addrinfo *addr_info;
 	struct http_request req;
 
-	ret = do_connect(&fd, &addr_info, JITP_HOSTNAME, JITP_PORT);
-	if (ret) {
-		return ret;
-	}
-#if 0
-	ret = getaddrinfo(API_HOSTNAME, NULL, &hints, &addr_info);
-	if (ret) {
-		printk("getaddrinfo() failed, err %d\n", errno);
-		return -EFAULT;
-	}
-	else
-	{
-		char peer_addr[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &addr_info->ai_addr, peer_addr, INET_ADDRSTRLEN);
-		printk("getaddrinfo() %s\n", peer_addr);
-	}
-
-
-	((struct sockaddr_in *)addr_info->ai_addr)->sin_port = htons(JITP_PORT);
-
-	fd = socket(AF_INET, SOCK_STREAM, SOCKET_PROTOCOL);
-	if (fd == -1) {
-		printk("Failed to open socket!\n");
-		ret = -ENOTCONN;
-		goto clean_up;
-	}
-
-	/* Setup TLS socket options */
-	ret = tls_setup(fd, JITP_HOSTNAME_TLS);
-	if (ret) {
-		ret = -EACCES;
-		goto clean_up;
-	}
-
-	printk("Connecting to %s\n", JITP_HOSTNAME);
-	ret = connect(fd, addr_info->ai_addr, sizeof(struct sockaddr_in));
-	if (ret) {
-		printk("connect() failed, err: %d\n", errno);
-		ret = -ECONNREFUSED;
-		goto clean_up;
-	}
-#endif
-
 	memset(&req, 0, sizeof(req));
-
 	req.method = HTTP_POST;
 	req.url = JITP_URL;
 	req.host = JITP_HOSTNAME;
@@ -234,6 +191,11 @@ int fota_client_provision_device(void)
 	req.recv_buf_len = sizeof(http_rx_buf);
 	http_resp_rcvd = false;
 	http_resp_status = HTTP_STATUS_NONE;
+
+	ret = do_connect(&fd, &addr_info, JITP_HOSTNAME, JITP_PORT);
+	if (ret) {
+		return ret;
+	}
 
 	ret = http_client_req(fd, &req, JITP_HTTP_TIMEOUT_MS, "JITP_REQ");
 	printk("http_client_req returned %d\n", ret);
@@ -274,8 +236,12 @@ int fota_client_provision_device(void)
 	return ret;
 }
 
-int fota_client_get_pending_job(void)
+int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 {
+	if (!job) {
+		return -EINVAL;
+	}
+
 	int fd;
 	int ret;
 	struct addrinfo *addr_info = NULL;
@@ -286,12 +252,14 @@ int fota_client_get_pending_job(void)
 	char * content =  NULL;
 	char * device_id = get_device_id_string();
 
+	memset(job,0,sizeof(*job));
+
 	if (!device_id) {
 		return -ENXIO;
 		goto clean_up;
 	}
 
-	ret = fota_client_generate_jwt(device_id,&jwt);
+	ret = generate_jwt(device_id,&jwt);
 
 	if (ret < 0){
 		printk("Failed to generate JWT: %d\n", ret);
@@ -350,10 +318,27 @@ int fota_client_get_pending_job(void)
 	if (ret < 0) {
 		ret = -EIO;
 	} else {
-
+		ret = 0;
 		if (http_resp_status == HTTP_STATUS_NOT_FOUND) {
-			ret = 0;
+			/* No pending job */
+		} else if (http_resp_status == HTTP_STATUS_OK) {
+			/* TODO: get job details */
+			#define TEST_JOB_HOST "hostname.com"
+			#define TEST_JOB_PATH "/files/fw.bin"
+			#define TEST_JOB_ID "123456ABCDEF"
+			job->host = calloc(sizeof(TEST_JOB_HOST),1);
+			strncpy(job->host,TEST_JOB_HOST,sizeof(TEST_JOB_HOST));
+
+			job->path = calloc(sizeof(TEST_JOB_PATH),1);
+			strncpy(job->path,TEST_JOB_PATH,sizeof(TEST_JOB_PATH));
+
+			job->id = calloc(sizeof(TEST_JOB_ID),1);
+			strncpy(job->id,TEST_JOB_ID,sizeof(TEST_JOB_ID));
+		} else {
+			printk("Error: HTTP status %d\n", http_resp_status);
+			ret = -ENODATA;
 		}
+
 	}
 
 clean_up:
@@ -379,7 +364,17 @@ clean_up:
 	return ret;
 }
 
-int fota_client_generate_jwt(const char * const device_id, char ** jwt_out)
+int fota_client_update_job(const struct fota_client_mgmt_job * job)
+{
+	if (!job)
+	{
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int generate_jwt(const char * const device_id, char ** jwt_out)
 {
 	if (!jwt_out)
 	{
@@ -659,6 +654,8 @@ static void response_cb(struct http_response *rsp,
 		else if (rsp->body_found && !rsp->body_start) {
 			printk("RCV BUFF: %s\n", rsp->recv_buf);
 		}
+
+		/* TODO: handled all statuses returned from API */
 		if (strncmp(rsp->http_status,"Not Found", HTTP_STATUS_STR_SIZE) == 0) {
 			http_resp_status = HTTP_STATUS_NOT_FOUND;
 		} else if (strncmp(rsp->http_status,"Forbidden", HTTP_STATUS_STR_SIZE) == 0) {
@@ -672,9 +669,9 @@ static void response_cb(struct http_response *rsp,
 		} else {
 			http_resp_status = HTTP_STATUS_UNHANDLED;
 		}
-		printk("Response status: %s\n", rsp->http_status);
 
-		printk("Response to %s\n", (const char *)user_data);
+		printk("Response to \"%s\": %s\n",
+		       (const char *)user_data, rsp->http_status);
 
 	}
 }

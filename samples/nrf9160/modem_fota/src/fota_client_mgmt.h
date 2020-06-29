@@ -3,8 +3,23 @@
  *
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
-#include <string.h>
 
-int fota_client_generate_jwt(const char * const device_id, char ** jwt_out);
+struct fota_client_mgmt_job {
+
+	/** Hostname for download */
+	char * host;
+	/** Path for download */
+	char * path;
+
+	/* TODO */
+	/** Job ID */
+	char * id;
+	/** Job status */
+	int status;
+	/** Job status details */
+	char * status_details;
+};
+
 int fota_client_provision_device(void);
-int fota_client_get_pending_job(void);
+int fota_client_get_pending_job(struct fota_client_mgmt_job * const job);
+int fota_client_update_job(const struct fota_client_mgmt_job * job);

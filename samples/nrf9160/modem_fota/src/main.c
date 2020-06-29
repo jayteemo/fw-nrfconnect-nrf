@@ -23,6 +23,8 @@
 #include <net/http_client.h>
 #include "fota_client_mgmt.h"
 
+static struct fota_client_mgmt_job current_job;
+
 static int provision_device(void);
 static int get_pending_job(void);
 static int update_job_status(void);
@@ -34,9 +36,10 @@ void bsd_recoverable_error_handler(uint32_t err)
 
 void modem_fota_callback(enum modem_fota_evt_id event_id)
 {
+	printk("%s() - event_id %d/n", __func__, event_id);
+
 	switch (event_id) {
 	case MODEM_FOTA_EVT_CHECKING_FOR_UPDATE:
-		/* TODO: check for update */
 		get_pending_job();
 		break;
 
@@ -44,12 +47,10 @@ void modem_fota_callback(enum modem_fota_evt_id event_id)
 		break;
 
 	case MODEM_FOTA_EVT_DOWNLOADING_UPDATE:
-		/* TODO: report progress? */
 		update_job_status();
 		break;
 
 	case MODEM_FOTA_EVT_RESTART_PENDING:
-		 /* TODO: update job status before reboot */
 		update_job_status();
 		printk("Rebooting...\n");
 		lte_lc_offline();
@@ -57,7 +58,6 @@ void modem_fota_callback(enum modem_fota_evt_id event_id)
 		break;
 
 	case MODEM_FOTA_EVT_ERROR:
-		/* TODO: report error */
 		update_job_status();
 	default:
 		break;
@@ -135,11 +135,14 @@ static int provision_device(void)
 
 static int get_pending_job(void)
 {
-	int ret = fota_client_get_pending_job();
+	int ret = fota_client_get_pending_job(&current_job);
 	if (ret == 0) {
-		printk("No job pending.\n");
-	} else if (ret == 1) {
-		printk("Job is pending.\n");
+		if (current_job.host) {
+			/* TODO: send job to modem_fota lib */
+
+		} else {
+			printk("No job pending.\n");
+		}
 	} else {
 		printk("Error getting pending job: %d.\n", ret);
 	}
@@ -148,5 +151,13 @@ static int get_pending_job(void)
 
 static int update_job_status(void)
 {
-	return 0;
+	int ret = fota_client_update_job(&current_job);
+	if (ret == 0) {
+		printk("No job pending.\n");
+	} else if (ret == 1) {
+		printk("Job is pending.\n");
+	} else {
+		printk("Error getting pending job: %d.\n", ret);
+	}
+	return ret;
 }
