@@ -21,5 +21,8 @@ struct fota_client_mgmt_job {
 };
 
 int fota_client_provision_device(void);
+
 int fota_client_get_pending_job(struct fota_client_mgmt_job * const job);
+void fota_client_job_free(struct fota_client_mgmt_job * const job);
+
 int fota_client_update_job(const struct fota_client_mgmt_job * job);

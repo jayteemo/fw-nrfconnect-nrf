@@ -123,6 +123,7 @@ static int provision_device(void)
 {
 	int ret = fota_client_provision_device();
 	if (ret == 0) {
+
 		printk("Device provisioned, wait 30s before using API.\n");
 	} else if (ret == 1) {
 		printk("Device already provisioned.\n");
@@ -135,11 +136,13 @@ static int provision_device(void)
 
 static int get_pending_job(void)
 {
+	fota_client_job_free(&current_job);
+
 	int ret = fota_client_get_pending_job(&current_job);
+
 	if (ret == 0) {
 		if (current_job.host) {
 			/* TODO: send job to modem_fota lib */
-
 		} else {
 			printk("No job pending.\n");
 		}

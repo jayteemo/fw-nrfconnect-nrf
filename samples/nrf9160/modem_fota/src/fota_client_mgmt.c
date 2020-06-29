@@ -236,6 +236,26 @@ int fota_client_provision_device(void)
 	return ret;
 }
 
+void fota_client_job_free(struct fota_client_mgmt_job * const job)
+{
+	if (!job) {
+		return;
+	}
+
+	if (job->host) {
+		k_free(job->host);
+		job->host = NULL;
+	}
+	if (job->path) {
+		k_free(job->path);
+		job->path = NULL;
+	}
+	if (job->id) {
+		k_free(job->id);
+		job->id = NULL;
+	}
+}
+
 int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 {
 	if (!job) {
@@ -326,13 +346,13 @@ int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 			#define TEST_JOB_HOST "hostname.com"
 			#define TEST_JOB_PATH "/files/fw.bin"
 			#define TEST_JOB_ID "123456ABCDEF"
-			job->host = calloc(sizeof(TEST_JOB_HOST),1);
+			job->host = k_calloc(sizeof(TEST_JOB_HOST),1);
 			strncpy(job->host,TEST_JOB_HOST,sizeof(TEST_JOB_HOST));
 
-			job->path = calloc(sizeof(TEST_JOB_PATH),1);
+			job->path = k_calloc(sizeof(TEST_JOB_PATH),1);
 			strncpy(job->path,TEST_JOB_PATH,sizeof(TEST_JOB_PATH));
 
-			job->id = calloc(sizeof(TEST_JOB_ID),1);
+			job->id = k_calloc(sizeof(TEST_JOB_ID),1);
 			strncpy(job->id,TEST_JOB_ID,sizeof(TEST_JOB_ID));
 		} else {
 			printk("Error: HTTP status %d\n", http_resp_status);
