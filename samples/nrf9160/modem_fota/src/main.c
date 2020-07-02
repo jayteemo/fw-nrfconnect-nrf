@@ -27,6 +27,7 @@ static struct fota_client_mgmt_job current_job;
 
 static int provision_device(void);
 static int get_pending_job(void);
+#define TEST_JOB_UPDATE 0 /* Enable to set job status immediately */
 static int update_job_status(void);
 
 void bsd_recoverable_error_handler(uint32_t err)
@@ -121,13 +122,13 @@ void main(void)
 	provision_device();
 	get_pending_job();
 
-	/////// TODO: remove /////
+#if TEST_JOB_UPDATE
 	if(current_job.host)
 	{
 		current_job.status = AWS_JOBS_SUCCEEDED;
 		update_job_status();
 	}
-	/////////////////////////
+#endif
 
 	modem_fota_init(&modem_fota_callback);
 
@@ -136,11 +137,12 @@ void main(void)
 
 static int provision_device(void)
 {
+	printk("Attempting to provision device...\n");
 	int ret = fota_client_provision_device();
 
 	if (ret == 0) {
-
-		printk("Device provisioned, wait 30s before using API.\n");
+		printk("Device provisioned, waiting 30s before using API.\n");
+		k_sleep(K_SECONDS(30));
 	} else if (ret == 1) {
 		printk("Device already provisioned.\n");
 	} else {
@@ -154,25 +156,30 @@ static int get_pending_job(void)
 {
 	fota_client_job_free(&current_job);
 
+	printk("Checking for FOTA update...\n");
 	int ret = fota_client_get_pending_job(&current_job);
 
 	if (ret == 0) {
 		if (current_job.host) {
+			printk("FOTA update job is available!\n");
+			printk("   ID: %s\n", 	current_job.id);
+			printk("   Host: %s\n", current_job.host);
+			printk("   Path: %s\n", current_job.path);
 			/* TODO: send download info to modem_fota lib:
-			 * current_job.host
-			 * current_job.path
+			 * current_job.host + current_job.path
 			 */
 		} else {
-			printk("No job pending.\n");
+			printk("No FOTA update available.\n");
 		}
 	} else {
-		printk("Error getting pending job: %d\n", ret);
+		printk("Error getting FOTA update: %d\n", ret);
 	}
 	return ret;
 }
 
 static int update_job_status(void)
 {
+	printk("Updating FOTA update job status...\n");
 	int ret = fota_client_update_job(&current_job);
 
 	if (ret == 0) {
@@ -184,7 +191,7 @@ static int update_job_status(void)
 			fota_client_job_free(&current_job);
 		}
 	} else {
-		printk("Error updatingjob: %d\n", ret);
+		printk("Error updating job: %d\n", ret);
 	}
 	return ret;
 }
