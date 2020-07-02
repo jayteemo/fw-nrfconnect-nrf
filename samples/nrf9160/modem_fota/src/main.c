@@ -179,7 +179,7 @@ static int update_job_status(void)
 		printk("Job status updated.\n");
 
 		/* cleanup job only on terminal statuses */
-		if ((current_job.status != AWS_JOBS_IN_PROGRESS) ||
+		if ((current_job.status != AWS_JOBS_IN_PROGRESS) &&
 		    (current_job.status != AWS_JOBS_QUEUED)) {
 			fota_client_job_free(&current_job);
 		}
