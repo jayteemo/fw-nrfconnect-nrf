@@ -3,6 +3,7 @@
  *
  * SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
  */
+#include <net/aws_jobs.h>
 
 struct fota_client_mgmt_job {
 
@@ -15,7 +16,7 @@ struct fota_client_mgmt_job {
 	/** Job ID */
 	char * id;
 	/** Job status */
-	int status;
+	enum execution_status status;
 	/** Job status details */
 	char * status_details;
 };

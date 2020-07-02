@@ -47,17 +47,24 @@ void modem_fota_callback(enum modem_fota_evt_id event_id)
 		break;
 
 	case MODEM_FOTA_EVT_DOWNLOADING_UPDATE:
+		current_job.status = AWS_JOBS_IN_PROGRESS;
 		update_job_status();
 		break;
 
 	case MODEM_FOTA_EVT_RESTART_PENDING:
+
+		/* TODO: probably need to save job info
+		 * and send this after reboot/success */
+		current_job.status = AWS_JOBS_SUCCEEDED;
 		update_job_status();
+
 		printk("Rebooting...\n");
 		lte_lc_offline();
 		sys_reboot(SYS_REBOOT_WARM);
 		break;
 
 	case MODEM_FOTA_EVT_ERROR:
+		current_job.status = AWS_JOBS_FAILED;
 		update_job_status();
 	default:
 		break;
@@ -114,6 +121,14 @@ void main(void)
 	provision_device();
 	get_pending_job();
 
+	/////// TODO: remove /////
+	if(current_job.host)
+	{
+		current_job.status = AWS_JOBS_SUCCEEDED;
+		update_job_status();
+	}
+	/////////////////////////
+
 	modem_fota_init(&modem_fota_callback);
 
 	k_sleep(K_FOREVER);
@@ -122,13 +137,14 @@ void main(void)
 static int provision_device(void)
 {
 	int ret = fota_client_provision_device();
+
 	if (ret == 0) {
 
 		printk("Device provisioned, wait 30s before using API.\n");
 	} else if (ret == 1) {
 		printk("Device already provisioned.\n");
 	} else {
-		printk("Error provisioning device: %d.\n", ret);
+		printk("Error provisioning device: %d\n", ret);
 	}
 
 	return ret;
@@ -142,12 +158,15 @@ static int get_pending_job(void)
 
 	if (ret == 0) {
 		if (current_job.host) {
-			/* TODO: send job to modem_fota lib */
+			/* TODO: send download info to modem_fota lib:
+			 * current_job.host
+			 * current_job.path
+			 */
 		} else {
 			printk("No job pending.\n");
 		}
 	} else {
-		printk("Error getting pending job: %d.\n", ret);
+		printk("Error getting pending job: %d\n", ret);
 	}
 	return ret;
 }
@@ -155,12 +174,17 @@ static int get_pending_job(void)
 static int update_job_status(void)
 {
 	int ret = fota_client_update_job(&current_job);
+
 	if (ret == 0) {
-		printk("No job pending.\n");
-	} else if (ret == 1) {
-		printk("Job is pending.\n");
+		printk("Job status updated.\n");
+
+		/* cleanup job only on terminal statuses */
+		if ((current_job.status != AWS_JOBS_IN_PROGRESS) ||
+		    (current_job.status != AWS_JOBS_QUEUED)) {
+			fota_client_job_free(&current_job);
+		}
 	} else {
-		printk("Error getting pending job: %d.\n", ret);
+		printk("Error updatingjob: %d\n", ret);
 	}
 	return ret;
 }
