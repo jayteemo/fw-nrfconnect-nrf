@@ -14,13 +14,6 @@
 #include <modem/at_cmd.h>
 #include <modem/at_notif.h>
 #include <modem/modem_fota.h>
-
-#include <net/socket.h>
-#include <tinycrypt/hmac_prng.h>
-#include <tinycrypt/hmac.h>
-#include <tinycrypt/constants.h>
-#include <sys/base64.h>
-#include <net/http_client.h>
 #include "fota_client_mgmt.h"
 
 static struct fota_client_mgmt_job current_job;
