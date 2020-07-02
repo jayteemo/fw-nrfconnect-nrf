@@ -20,6 +20,9 @@
 #include <net/aws_jobs.h> /* for enum execution_status */
 #include "fota_client_mgmt.h"
 
+/* TODO: switch to logger */
+#define HTTP_DEBUG 0
+#define JWT_DEBUG 0
 //LOG_MODULE_REGISTER(fota_client_mgmt, CONFIG_FOTA_CLIENT_MGMT_LOG_LEVEL);
 
 /* TODO: the nrf-<IMEI> format is for testing/certification only
@@ -63,9 +66,9 @@ static int get_signature(const uint8_t * const data_in,
 			 const size_t data_in_size,
 		  	 uint8_t * data_out,
 			 size_t const data_out_size);
-static void response_cb(struct http_response *rsp,
-			enum http_final_call final_data,
-			void *user_data);
+static void http_response_cb(struct http_response *rsp,
+			     enum http_final_call final_data,
+			     void *user_data);
 static int tls_setup(int fd, const char * const tls_hostname);
 static int do_connect(int * const fd, struct addrinfo **addr_info,
 		      const char * const hostname, const uint16_t port_num);
@@ -84,26 +87,33 @@ static int parse_pending_job_response(const char * const resp_buff,
 #define FW_URI_END_STR		"\"]"
 #define FW_PATH_PREFIX		"/v1/firmwares/"
 
+/*
+ * TODO: use http headers correctly instead of
+ *       putting it all in content-type string
+ */
 #define API_UPDATE_JOB_URL_PREFIX "/v1/dfu-job-execution-statuses/"
-#define API_UPDATE_JOB_TEMPLATE	 "content-type: application/json\r\n" \
+#define API_UPDATE_JOB_TEMPLATE	 "application/json\r\n" \
+				 "accept: */*\r\n" \
 				 "Authorization: Bearer %s\r\n" \
-				 "Host: " API_HOSTNAME "\r\n\r\n"
-#define API_UPDATE_JOB_BODY_TEMPLATE 	"{\"status\":\"%s\"," \
-					"\"statusDetails\": %s}"
+				 "Host: " API_HOSTNAME
+
+#define API_UPDATE_JOB_BODY_TEMPLATE "{\"status\":\"%s\"}"
 
 #define API_GET_JOB_URL_TEMPLATE "/v1/dfu-jobs/device/%s/latest-pending"
-#define API_GET_JOB_TEMPLATE	 "accept: application/json\r\n" \
+#define API_GET_JOB_TEMPLATE	 "*/*\r\n" \
+				 "accept: application/json\r\n" \
 				 "Authorization: Bearer %s\r\n" \
-				 "Host: " API_HOSTNAME "\r\n\r\n"
+				 "Host: " API_HOSTNAME "\r\n"
 
 // TODO: switch to PROD endpoint: "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com"
 #define JITP_HOSTNAME "a2wg6q8yw7gv5r-ats.iot.us-east-1.amazonaws.com"
 #define JITP_HOSTNAME_TLS JITP_HOSTNAME
 #define JITP_PORT 8443
 #define JITP_URL "/topics/jitp?qos=1"
-#define DO_JITP "Connection: close\r\n" \
+#define DO_JITP "*/*\r\n" \
+		"Connection: close\r\n" \
 		"Host: " JITP_HOSTNAME ":" \
-		STRINGIFY(JITP_PORT) "\r\n\r\n"
+		STRINGIFY(JITP_PORT) "\r\n"
 #define JITP_HTTP_TIMEOUT_MS (15000)
 
 #define SOCKET_PROTOCOL IPPROTO_TLS_1_2
@@ -123,6 +133,7 @@ enum http_status {
 	HTTP_STATUS_UNAUTH = 401,
 	HTTP_STATUS_FORBIDDEN = 403,
 	HTTP_STATUS_NOT_FOUND = 404,
+	HTTP_STATUS_UNPROC_ENTITY = 422,
 };
 
 enum http_req_type {
@@ -178,9 +189,10 @@ static int do_connect( int * const fd, struct addrinfo **addr_info,
 	{
 		char peer_addr[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &(*addr_info)->ai_addr, peer_addr, INET_ADDRSTRLEN);
+#if HTTP_DEBUG
 		printk("getaddrinfo() %s\n", peer_addr);
+#endif
 	}
-
 
 	((struct sockaddr_in *)(*addr_info)->ai_addr)->sin_port = htons(port_num);
 
@@ -191,14 +203,16 @@ static int do_connect( int * const fd, struct addrinfo **addr_info,
 		goto clean_up;
 	}
 
-	/* Setup TLS socket options */
 	ret = tls_setup(*fd, hostname);
 	if (ret) {
 		ret = -EACCES;
 		goto clean_up;
 	}
 
+#if HTTP_DEBUG
 	printk("Connecting to %s\n", hostname);
+#endif
+
 	ret = connect(*fd, (*addr_info)->ai_addr, sizeof(struct sockaddr_in));
 	if (ret) {
 		printk("connect() failed, err: %d\n", errno);
@@ -228,7 +242,7 @@ int fota_client_provision_device(void)
 	req.host = JITP_HOSTNAME;
 	req.protocol = "HTTP/1.1";
 	req.content_type_value = DO_JITP;
-	req.response = response_cb;
+	req.response = http_response_cb;
 	req.recv_buf = http_rx_buf;
 	req.recv_buf_len = sizeof(http_rx_buf);
 	http_resp_rcvd = false;
@@ -240,8 +254,9 @@ int fota_client_provision_device(void)
 	}
 
 	ret = http_client_req(fd, &req, JITP_HTTP_TIMEOUT_MS, &prov_data);
+#if HTTP_DEBUG
 	printk("http_client_req returned %d\n", ret);
-
+#endif
 	if (ret < 0) {
 		ret = -EIO;
 	} else if (!http_resp_rcvd) {
@@ -260,12 +275,6 @@ int fota_client_provision_device(void)
 		/* NOTE: when already provisioned, the following data is rcvd:
 		 * Response status Forbidden
 		 * HTTP/1.1 403 Forbidden
-		 * content-type: application/json
-		 * content-length: 65
-		 * date: Wed, 24 Jun 2020 23:10:47 GMT
-		 * x-amzn-RequestId: 229ca570-9d45-e73d-6fcd-0f977ed89d9a
-		 * connection: keep-alive
-		 * x-amzn-ErrorType: ForbiddenException:
 		 * {"message":null,"traceId":"229ca570-9d45-e73d-6fcd-0f977ed89d9a"}
 		 */
 
@@ -328,7 +337,9 @@ int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 		printk("Failed to generate JWT: %d\n", ret);
 		goto clean_up;
 	}
+#if JWT_DEBUG
 	printk("JWT: %s\n", jwt);
+#endif
 
 	/* Format API URL with device ID */
 	buff_size = sizeof(API_GET_JOB_URL_TEMPLATE) + strlen(device_id);
@@ -354,17 +365,19 @@ int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 		return -ENOBUFS;
 	}
 
+#if HTTP_DEBUG
 	printk("URL: %s\n", url);
 	printk("Content: %s\n", content);
-
+#endif
 	/* Init HTTP request */
+	memset(http_rx_buf,0,HTTP_RX_BUF_SIZE);
 	memset(&req, 0, sizeof(req));
 	req.method = HTTP_GET;
 	req.url = url;
 	req.host = API_HOSTNAME;
 	req.protocol = "HTTP/1.1";
 	req.content_type_value = content;
-	req.response = response_cb;
+	req.response = http_response_cb;
 	req.recv_buf = http_rx_buf;
 	req.recv_buf_len = sizeof(http_rx_buf);
 	http_resp_rcvd = false;
@@ -376,7 +389,9 @@ int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 	}
 
 	ret = http_client_req(fd, &req, JITP_HTTP_TIMEOUT_MS, &job_data);
+#if HTTP_DEBUG
 	printk("http_client_req returned %d\n", ret);
+#endif
 
 	if (ret < 0) {
 		ret = -EIO;
@@ -386,9 +401,6 @@ int fota_client_get_pending_job(struct fota_client_mgmt_job * const job)
 			/* No pending job */
 		} else if (http_resp_status == HTTP_STATUS_OK) {
 			job->status = AWS_JOBS_IN_PROGRESS;
-			printk("job id: %s\n", job->id);
-			printk("job host: %s\n", job->host);
-			printk("job path: %s\n", job->path);
 		} else {
 			printk("Error: HTTP status %d\n", http_resp_status);
 			ret = -ENODATA;
@@ -442,7 +454,6 @@ int fota_client_update_job(const struct fota_client_mgmt_job * job)
 		printk("Failed to generate JWT: %d\n", ret);
 		goto clean_up;
 	}
-	printk("JWT: %s\n", jwt);
 
 	/* Format API URL with job ID */
 	buff_size = sizeof(API_UPDATE_JOB_URL_PREFIX) + strlen(job->id);
@@ -472,26 +483,25 @@ int fota_client_update_job(const struct fota_client_mgmt_job * job)
 	/* Create payload */
 	buff_size = sizeof(API_UPDATE_JOB_BODY_TEMPLATE) +
 		    strlen(job_status_strings[job->status]);
-	if (job->status_details) {
-		buff_size += strlen(job->status_details);
-	}
 	payload = k_calloc(buff_size,1);
 	if (!payload) {
 		ret = -ENOMEM;
 	}
 	ret = snprintk(payload, buff_size, API_UPDATE_JOB_BODY_TEMPLATE,
-		       job_status_strings[job->status],
-		       (job->status_details ? job->status_details : ""));
+		       job_status_strings[job->status]);
 	if (ret < 0 || ret >= buff_size) {
 		printk("Could not format HTTP payload\n");
 		return -ENOBUFS;
 	}
 
+#if HTTP_DEBUG
 	printk("URL: %s\n", url);
 	printk("Content: %s\n", content);
 	printk("Payload: %s\n", payload);
+#endif
 
 	/* Init HTTP request */
+	memset(http_rx_buf,0,HTTP_RX_BUF_SIZE);
 	memset(&req, 0, sizeof(req));
 	req.method = HTTP_PATCH;
 	req.url = url;
@@ -500,7 +510,7 @@ int fota_client_update_job(const struct fota_client_mgmt_job * job)
 	req.content_type_value = content;
 	req.payload = payload;
 	req.payload_len = strlen(payload);
-	req.response = response_cb;
+	req.response = http_response_cb;
 	req.recv_buf = http_rx_buf;
 	req.recv_buf_len = sizeof(http_rx_buf);
 	http_resp_rcvd = false;
@@ -512,15 +522,16 @@ int fota_client_update_job(const struct fota_client_mgmt_job * job)
 	}
 
 	ret = http_client_req(fd, &req, API_HTTP_TIMEOUT_MS, &job_data);
+
+#if HTTP_DEBUG
 	printk("http_client_req returned %d\n", ret);
+#endif
 
 	if (ret < 0) {
 		ret = -EIO;
 	} else {
 		ret = 0;
-		if (http_resp_status == HTTP_STATUS_OK) {
-			printk("Job status updated.\n");
-		} else {
+		if (http_resp_status != HTTP_STATUS_OK) {
 			printk("Error: HTTP status %d\n", http_resp_status);
 			ret = -ENODATA;
 		}
@@ -571,7 +582,7 @@ static int generate_jwt(const char * const device_id, char ** jwt_out)
 	if (!device_id) {
 		dev_id = get_device_id_string();
 		if (!dev_id) {
-			printk("Could get device ID string\n");
+			printk("Could not get device ID string\n");
 			return -ENODEV;
 		}
 	}
@@ -588,7 +599,9 @@ static int generate_jwt(const char * const device_id, char ** jwt_out)
 		printk("Could not format JWT payload\n");
 		return -ENOBUFS;
 	}
+#if JWT_DEBUG
 	printk("JWT payload: %s\n", jwt_payload);
+#endif
 
 	/* Encode payload string to base64 */
 	jwt_payload_b64 = get_base64url_string(jwt_payload,
@@ -632,7 +645,10 @@ static int generate_jwt(const char * const device_id, char ** jwt_out)
 		k_free(jwt_buff);
 		return -ENOMSG;
 	}
+
+#if JWT_DEBUG
 	printk("signature: %s\n", jwt_sig_b64);
+#endif
 
 	ret = snprintk(&jwt_buff[jwt_len],
 		       JWT_BUFF_SIZE,
@@ -646,7 +662,12 @@ static int generate_jwt(const char * const device_id, char ** jwt_out)
 		return -ENOBUFS;
 	}
 
+#if JWT_DEBUG
+	printk("JWT: %s\n", jwt_buff);
+#endif
+
 	*jwt_out = jwt_buff;
+
 	return strlen(*jwt_out);
 }
 
@@ -690,11 +711,13 @@ static int get_signature(const uint8_t * const data_in,
 		return -EACCES;
 	}
 
+#if JWT_DEBUG
 	printk("HMAC hex:\n");
 	for (int i = 0; i < TC_SHA256_DIGEST_SIZE; ++i) {
 		printk("%02X",data_out[i]);
 	}
 	printk("\n");
+#endif
 
 	return 0;
 }
@@ -804,7 +827,7 @@ void base64_url_format(char * const base64_string)
 	}
 }
 
-static void response_cb(struct http_response *rsp,
+static void http_response_cb(struct http_response *rsp,
 			enum http_final_call final_data,
 			void *user_data)
 {
@@ -815,25 +838,24 @@ static void response_cb(struct http_response *rsp,
 	}
 
 	if (final_data == HTTP_DATA_MORE) {
-		printk("Partial data received (%zd bytes)\n", rsp->data_len);
+#if HTTP_DEBUG
+		printk("HTTP: partial data received (%zd bytes)\n", rsp->data_len);
 		if (rsp->body_start) {
 			printk("BODY %s\n", rsp->body_start);
 		}
+#endif
 	} else if (final_data == HTTP_DATA_FINAL) {
-		printk("All the data received (%zd bytes)\n", rsp->data_len);
-
-		printk("proc: %zd, content len: %zd, body found: %d, complete: %d\n",
-		       rsp->processed, rsp->content_length,
-		       rsp->body_found, rsp->message_complete);
-
 		http_resp_rcvd = true;
 
+#if HTTP_DEBUG
+		printk("HTTP: All data received (%zd bytes)\n", rsp->data_len);
 		if (rsp->data_len && rsp->body_found) {
-			printk("BODY: %s\n", rsp->body_start);
+			printk("HTTP body:\n%s\n", rsp->body_start);
 		}
 		else if (rsp->body_found && !rsp->body_start) {
-			printk("RCV BUFF: %s\n", rsp->recv_buf);
+			printk("HTTP rx:\n%s\n", rsp->recv_buf);
 		}
+#endif
 
 		/* TODO: handle all statuses returned from API */
 		if (strncmp(rsp->http_status,"Not Found", HTTP_STATUS_STR_SIZE) == 0) {
@@ -846,30 +868,33 @@ static void response_cb(struct http_response *rsp,
 			http_resp_status = HTTP_STATUS_UNAUTH;
 		} else if (strncmp(rsp->http_status,"Bad Request", HTTP_STATUS_STR_SIZE) == 0) {
 			http_resp_status = HTTP_STATUS_BAD_REQ;
+		} else if (strncmp(rsp->http_status,"Unprocessable Entity", HTTP_STATUS_STR_SIZE) == 0) {
+			http_resp_status = HTTP_STATUS_UNPROC_ENTITY;
 		} else {
 			http_resp_status = HTTP_STATUS_UNHANDLED;
 		}
 		if (!usr) {
-			printk("Response to unknown request: %s\n",
+			printk("HTTP response to unknown request: %s\n",
 			       rsp->http_status);
 			return;
 		}
-
-		printk("Response to request type %d: %s\n",
+#if HTTP_DEBUG
+		printk("HTTP response to request type %d: \"%s\"\n",
 		       usr->type, rsp->http_status);
-
+#endif
 		switch (usr->type) {
 		case HTTP_REQ_TYPE_GET_JOB:
-			// TODO: error handling
-			parse_pending_job_response(rsp->recv_buf,
-						   usr->data.job);
+			if (http_resp_status == HTTP_STATUS_OK) {
+				// TODO: error handling
+				parse_pending_job_response(rsp->recv_buf,
+						   	   usr->data.job);
+			}
 			break;
 		case HTTP_REQ_TYPE_PROVISION:
 		case HTTP_REQ_TYPE_UPDATE_JOB:
 		default:
 			break;
 		}
-
 	}
 }
 
@@ -931,18 +956,14 @@ int parse_pending_job_response(const char * const resp_buff,
 	return 0;
 }
 
-/* Setup TLS options on a given socket */
 int tls_setup(int fd, const char * const tls_hostname)
 {
 	int err;
 	int verify;
-
-	/* Security tag that we have provisioned the certificate with */
 	const sec_tag_t tls_sec_tag[] = {
 		TLS_SEC_TAG,
 	};
 
-	/* Set up TLS peer verification */
 	enum {
 		NONE = 0,
 		OPTIONAL = 1,
@@ -957,9 +978,6 @@ int tls_setup(int fd, const char * const tls_hostname)
 		return err;
 	}
 
-	/* Associate the socket with the security tag
-	 * we have provisioned the certificate with.
-	 */
 	err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, tls_sec_tag,
 			 sizeof(tls_sec_tag));
 	if (err) {
