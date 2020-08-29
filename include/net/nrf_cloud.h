@@ -17,6 +17,10 @@ extern "C" {
  * @{
  */
 
+#define NCT_CC_SUBSCRIBE_ID 1234
+#define NCT_DC_SUBSCRIBE_ID 8765
+#define NRF_CLOUD_FOTA_SUBSCRIBE_ID 8766
+
 /** @brief Asynchronous nRF Cloud events notified by the module. */
 enum nrf_cloud_evt_type {
 	/** The transport to the nRF Cloud is established. */
