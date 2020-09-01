@@ -12,6 +12,7 @@
 #include <dk_buttons_and_leds.h>
 #include <drivers/gps.h>
 #include <power/reboot.h>
+#include <net/download_client.h>
 
 #include <logging/log.h>
 
@@ -26,6 +27,82 @@ static struct k_delayed_work gps_start_work;
 static struct k_delayed_work reboot_work;
 
 static void gps_start_work_fn(struct k_work *work);
+static void process_agps_data(char *buf, size_t len);
+
+static struct download_client dlc;
+static char * agps_file;
+static size_t agps_file_rcvd_size;
+static size_t agps_file_total_size;
+
+static int download_client_callback(const struct download_client_evt *event)
+{
+	static bool first_fragment = true;
+	size_t offset;
+	int err;
+
+	if (event == NULL) {
+		return -EINVAL;
+	}
+
+	switch (event->id) {
+	case DOWNLOAD_CLIENT_EVT_FRAGMENT: {
+		if (first_fragment) {
+
+			if (agps_file) {
+				k_free(agps_file);
+				agps_file = NULL;
+			}
+
+			agps_file_rcvd_size = 0;
+			agps_file_total_size = 0;
+
+			err = download_client_file_size_get(&dlc, &agps_file_total_size);
+			if (err != 0) {
+				LOG_ERR("download_client_file_size_get err: %d",
+					err);
+				return err;
+			} else {
+				LOG_INF("download_client_file_size_get: %d",
+					agps_file_total_size);
+				agps_file = k_calloc(1, agps_file_total_size);
+				if (!agps_file) {
+					LOG_ERR("No memory for AGPS file");
+					return -ENOMEM;
+				}
+			}
+			first_fragment = false;
+		}
+
+		memcpy(&agps_file[agps_file_rcvd_size],event->fragment.buf, event->fragment.len);
+		agps_file_rcvd_size += event->fragment.len;
+		LOG_INF("Rcvd %d/%d", agps_file_total_size, agps_file_total_size );
+	break;
+	}
+
+	case DOWNLOAD_CLIENT_EVT_DONE:
+		LOG_INF("DOWNLOAD_CLIENT_EVT_DONE");
+		err = download_client_disconnect(&dlc);
+		if (err != 0) {
+			LOG_ERR("download_client_disconnect err: %d", err);
+			return err;
+		}
+
+		process_agps_data(agps_file, agps_file_rcvd_size);
+
+		first_fragment = true;
+		break;
+
+	case DOWNLOAD_CLIENT_EVT_ERROR: {
+		LOG_ERR("Download client error: %d", event->error);
+		download_client_disconnect(&dlc);
+		break;
+	}
+	default:
+		break;
+	}
+
+	return 0;
+}
 
 static void cloud_send_msg(void)
 {
@@ -353,8 +430,15 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 void main(void)
 {
 	int err;
+#if 0
+	/* By default POLLERR, POLLNVAL and POLLUHP are alway polled for */
+	struct pollfd fds[] = {
+		{
+			.events = POLLIN
+		}
+	};
 
-	LOG_INF("A-GPS sample has started");
+	LOG_INF("nRF Cloud and A-GPS sample has started");
 
 	cloud_backend = cloud_get_binding("NRF_CLOUD");
 	__ASSERT(cloud_backend, "Could not get binding to cloud backend");
@@ -365,7 +449,7 @@ void main(void)
 			err);
 		return;
 	}
-
+#endif
 	work_init();
 
 	err = modem_configure();
@@ -387,6 +471,29 @@ void main(void)
 		return;
 	}
 
+	err = download_client_init(&dlc, download_client_callback);
+
+	struct download_client_cfg config = {
+		.port = 0,
+		.sec_tag = -1,
+		.apn = NULL
+	};
+
+	// "https://agps-test.s3.amazonaws.com/agps-payload.bin"
+	err = download_client_connect(&dlc, "agps-test.s3.amazonaws.com", &config);
+	if (err != 0) {
+		LOG_ERR("download_client_connect error: %d", err);
+		return;
+	}
+
+	err = download_client_start(&dlc, "agps-payload2.bin", 0);
+	if (err != 0) {
+		LOG_ERR("download_client_start error: %d", err);
+		download_client_disconnect(&dlc);
+		return;
+	}
+
+#if 0
 	err = dk_buttons_init(button_handler);
 	if (err) {
 		LOG_ERR("Buttons could not be initialized, error: %d", err);
@@ -403,4 +510,42 @@ void main(void)
 	 * Events will be received to cloud_event_handler() when data is
 	 * received from the cloud.
 	 */
+	fds[0].fd = cloud_backend->config->socket;
+
+	while (true) {
+		err = poll(fds, ARRAY_SIZE(fds),
+			   cloud_keepalive_time_left(cloud_backend));
+		if (err < 0) {
+			LOG_ERR("poll() returned an error: %d", err);
+			continue;
+		}
+
+		if (err == 0) {
+			(void)cloud_ping(cloud_backend);
+			continue;
+		}
+
+		if ((fds[0].revents & POLLIN) == POLLIN) {
+			(void)cloud_input(cloud_backend);
+		}
+
+		if ((fds[0].revents & POLLNVAL) == POLLNVAL) {
+			LOG_ERR("Socket error: POLLNVAL");
+			LOG_ERR("The cloud socket was unexpectedly closed");
+			return;
+		}
+
+		if ((fds[0].revents & POLLHUP) == POLLHUP) {
+			LOG_ERR("Socket error: POLLHUP");
+			LOG_ERR("Connection was closed, possibly by cloud");
+			return;
+		}
+
+		if ((fds[0].revents & POLLERR) == POLLERR) {
+			LOG_ERR("Socket error: POLLERR");
+			LOG_ERR("Cloud connection was unexpectedly closed");
+			return;
+		}
+	}
+#endif
 }
