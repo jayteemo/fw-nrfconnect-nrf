@@ -39,11 +39,19 @@ enum nrf_cloud_fota_evt_id {
 	NRF_FOTA_EVT_DL_PROGRESS,
 };
 
+enum nrf_cloud_fota_error {
+	NRF_FOTA_ERROR_NONE = 0,
+	NRF_FOTA_ERROR_DOWNLOAD_START,
+	NRF_FOTA_ERROR_DOWNLOAD,
+};
+
 struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_evt_id id;
-	const struct nrf_cloud_fota_job * const job;
+
+	enum nrf_cloud_fota_status status;
+	enum nrf_cloud_fota_type type;
 	union {
-		int error;
+		enum nrf_cloud_fota_error error;
 		int dl_progress;
 	} evt_data;
 };
@@ -54,7 +62,8 @@ int nrf_cloud_fota_init(struct mqtt_client *const client, nrf_cloud_fota_callbac
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
 
-int nrf_cloud_fota_endpoint_set(const struct mqtt_utf8 * const endpoint);
+int nrf_cloud_fota_endpoint_set(const char * const client_id,
+				const struct mqtt_utf8 * const endpoint);
 void nrf_cloud_fota_endpoint_clear(void);
 
 int nrf_cloud_fota_subscribe(void);
