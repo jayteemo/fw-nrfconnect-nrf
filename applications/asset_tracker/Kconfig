@@ -270,13 +270,11 @@ config CLOUD_WAIT_DURATION
 
 config CLOUD_FOTA_APP
 	bool "Enable firmware over-the-air upgrades for application"
-	depends on AWS_FOTA
 	depends on DFU_TARGET_MCUBOOT
 	default y
 
 config CLOUD_FOTA_MODEM
 	bool "Enable firmware over-the-air upgrades for modem"
-	depends on AWS_FOTA
 	depends on DFU_TARGET_MODEM
 	default y
 

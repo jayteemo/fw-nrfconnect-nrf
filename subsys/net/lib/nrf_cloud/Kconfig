@@ -9,6 +9,9 @@ menuconfig NRF_CLOUD
 	select MQTT_LIB
 	select MQTT_LIB_TLS
 	select SETTINGS if !MQTT_CLEAN_SESSION
+	select FOTA_DOWNLOAD
+	select DFU_TARGET
+	select DOWNLOAD_CLIENT
 
 if NRF_CLOUD
 

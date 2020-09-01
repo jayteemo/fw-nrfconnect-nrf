@@ -687,33 +687,21 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt * const ev
 	case NRF_FOTA_EVT_START:
 	{
 		LOG_DBG("NRF_FOTA_EVT_START");
-		/*if (aws_fota_get_job_id(current_job_id, sizeof(current_job_id))
-			< JOB_ID_LEN) {
-			LOG_ERR("Failed to get current job ID");
-			current_job_id[0] = 0;
-		}
-		*/
 		break;
 	}
 	case NRF_FOTA_EVT_DONE:
 	{
-		LOG_DBG("NRF_FOTA_EVT_DONE: rebooting to apply update");
-		/*last_sent_fota_progress = 0;
-		current_job_id[0] = 0;*/
-		nct_apply_update();
+		LOG_DBG("NRF_FOTA_EVT_DONE");
 		break;
 	}
 	case NRF_FOTA_EVT_ERROR:
 	{
 		LOG_ERR("NRF_FOTA_EVT_ERROR");
-		/*last_sent_fota_progress = 0;
-		current_job_id[0] = 0;*/
 		break;
 	}
 	case NRF_FOTA_EVT_ERASE_PENDING:
 	{
-		LOG_DBG("NRF_FOTA_EVT_ERASE_PENDING: rebooting");
-		nct_apply_update();
+		LOG_DBG("NRF_FOTA_EVT_ERASE_PENDING");
 		break;
 	}
 	case NRF_FOTA_EVT_ERASE_DONE:
@@ -930,6 +918,11 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			if (err) {
 				LOG_ERR("Failed to save session state: %d",
 					err);
+
+			err = nrf_cloud_fota_subscribe();
+			if (err)
+			{
+				LOG_ERR("nrf_cloud_fota_subscribe() failed: %d", err);
 			}
 		}
 		break;
@@ -1174,7 +1167,7 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 		nct.dc_m_endp.utf8 = (const uint8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
 
-		nrf_cloud_fota_endpoint_set(&nct.dc_m_endp);
+		nrf_cloud_fota_endpoint_set(client_id_buf, &nct.dc_m_endp);
 
 #if defined(CONFIG_AWS_FOTA)
 		void *job_status_utf8;
@@ -1249,7 +1242,10 @@ int nct_dc_connect(void)
 	ret = mqtt_subscribe(&nct.client, &subscription_list);
 
 	if (ret == 0) {
-		ret = nrf_cloud_fota_subscribe();
+		//ret = nrf_cloud_fota_subscribe();
+		if (ret) {
+			LOG_ERR("nrf_cloud_fota_subscribe failed: %d", ret);
+		}
 	}
 
 	return ret;
