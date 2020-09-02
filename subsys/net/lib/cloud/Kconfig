@@ -9,6 +9,8 @@ config CLOUD_API
 config CLOUD_PERSISTENT_SESSIONS
 	bool "Enable reusing previous subscriptions to save bandwidth"
 	default n
+	depends on SETTINGS
+	depends on !SETTINGS_NONE
 	help
 	  If y, request using the previous session on connect. If allowed by the broker,
 	  the broker will indicate it is or not.  If not, the device must resubscribe. If
