@@ -15,6 +15,7 @@
 #include <net/cloud.h>
 #include <logging/log.h>
 #include <sys/util.h>
+#include <settings/settings.h>
 
 #if defined(CONFIG_BSD_LIBRARY)
 #include <nrf_socket.h>
@@ -102,12 +103,19 @@ static int last_sent_fota_progress;
 #endif
 
 static bool initialized;
+static bool persistent_session;
 
 #define NCT_CC_SUBSCRIBE_ID 1234
 #define NCT_DC_SUBSCRIBE_ID 8765
 
 #define NCT_RX_LIST 0
 #define NCT_TX_LIST 1
+
+#define SETTINGS_NAME "nrf_cloud"
+#define SETTINGS_KEY_PERSISTENT_SESSION "p_sesh"
+#define SETTINGS_FULL_PERSISTENT_SESSION SETTINGS_NAME \
+					 "/" \
+					 SETTINGS_KEY_PERSISTENT_SESSION
 
 /* Forward declaration of the event handler registered with MQTT. */
 static void nct_mqtt_evt_handler(struct mqtt_client *client,
@@ -608,6 +616,73 @@ static void aws_fota_cb_handler(struct aws_fota_event *fota_evt)
 }
 #endif /* defined(CONFIG_AWS_FOTA) */
 
+static int nct_settings_set(const char *key, size_t len_rd,
+				 settings_read_cb read_cb, void *cb_arg)
+{
+	if (!key) {
+		return -EINVAL;
+	}
+
+	int read_val;
+
+	LOG_DBG("Settings key: %s", log_strdup(key));
+
+	if (!strncmp(key, SETTINGS_KEY_PERSISTENT_SESSION,
+		     strlen(SETTINGS_KEY_PERSISTENT_SESSION))) {
+		if (read_cb(cb_arg, (void *)&read_val, len_rd) == len_rd) {
+			LOG_DBG("Read setting val: %d", read_val);
+#if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
+			persistent_session = (bool)read_val;
+#endif
+			return 0;
+		}
+	}
+	return -ENOTSUP;
+}
+
+int save_session_state(const int session_valid)
+{
+	int ret = 0;
+
+#if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
+	LOG_DBG("Setting session state: %d", session_valid);
+	persistent_session = (bool)session_valid;
+	ret = settings_save_one(SETTINGS_FULL_PERSISTENT_SESSION,
+				&session_valid, sizeof(session_valid));
+#endif
+	return ret;
+}
+
+static int nct_settings_init(void)
+{
+	int err = 0;
+
+	struct settings_handler settings_cfg = {
+		.name = SETTINGS_NAME,
+		.h_set = nct_settings_set
+	};
+
+#if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
+
+	settings_subsys_init();
+
+	err = settings_register(&settings_cfg);
+	if (err) {
+		LOG_ERR("Cannot register settings handler: %d", err);
+		return err;
+	}
+
+	err = settings_load();
+	if (err) {
+		LOG_ERR("Cannot load settings: %d", err);
+	}
+#else
+	ARG_UNUSED(settings_cfg);
+#endif
+
+	return err;
+}
+
 /* Connect to MQTT broker. */
 int nct_mqtt_connect(void)
 {
@@ -623,10 +698,11 @@ int nct_mqtt_connect(void)
 		nct.client.protocol_version = MQTT_VERSION_3_1_1;
 		nct.client.password = NULL;
 		nct.client.user_name = NULL;
-#if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
-		nct.client.clean_session = 0U;
-		LOG_DBG("mqtt_connect requesting persistent session");
-#endif
+		if (persistent_session) {
+			LOG_DBG("Requesting MQTT persistent session");
+			nct.client.clean_session = 0U;
+		}
+
 #if defined(CONFIG_MQTT_LIB_TLS)
 		nct.client.transport.type = MQTT_TRANSPORT_SECURE;
 		nct.client.rx_buf = nct.rx_buf;
@@ -714,8 +790,15 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 
 		LOG_DBG("MQTT_EVT_CONNACK: result %d", _mqtt_evt->result);
 
+		evt.param.flag = (p->session_present_flag != 0) &&
+				 persistent_session;
+
+		if (persistent_session && (p->session_present_flag == 0)) {
+			/* Session not present, clear saved state */
+			save_session_state(0);
+		}
+
 		evt.type = NCT_EVT_CONNECTED;
-		evt.param.flag = (p->session_present_flag != 0);
 		event_notify = true;
 		break;
 	}
@@ -784,6 +867,13 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 		if (_mqtt_evt->param.suback.message_id == NCT_DC_SUBSCRIBE_ID) {
 			evt.type = NCT_EVT_DC_CONNECTED;
 			event_notify = true;
+
+			/* Subscribing complete, session is now valid */
+			err = save_session_state(1);
+			if (err) {
+				LOG_ERR("Failed to save session state: %d",
+					err);
+			}
 		}
 		break;
 	}
@@ -832,6 +922,11 @@ int nct_init(void)
 	dc_endpoint_reset();
 
 	err = nct_topics_populate();
+	if (err) {
+		return err;
+	}
+
+	err = nct_settings_init();
 	if (err) {
 		return err;
 	}
