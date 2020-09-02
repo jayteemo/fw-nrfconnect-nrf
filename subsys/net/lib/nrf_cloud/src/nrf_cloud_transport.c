@@ -659,7 +659,10 @@ static int nct_settings_init(void)
 
 	struct settings_handler settings_cfg = {
 		.name = SETTINGS_NAME,
-		.h_set = nct_settings_set
+		.h_set = nct_settings_set,
+		.h_commit = NULL,
+		.h_export = NULL,
+		.h_get = NULL
 	};
 
 #if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
@@ -672,7 +675,8 @@ static int nct_settings_init(void)
 		return err;
 	}
 
-	err = settings_load();
+	//err = settings_load();
+	err = settings_load_subtree(settings_cfg.name);
 	if (err) {
 		LOG_ERR("Cannot load settings: %d", err);
 	}
