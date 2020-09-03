@@ -111,11 +111,17 @@ static bool persistent_session;
 #define NCT_RX_LIST 0
 #define NCT_TX_LIST 1
 
+static int nct_settings_set(const char *key, size_t len_rd,
+			    settings_read_cb read_cb, void *cb_arg);
+
 #define SETTINGS_NAME "nrf_cloud"
 #define SETTINGS_KEY_PERSISTENT_SESSION "p_sesh"
 #define SETTINGS_FULL_PERSISTENT_SESSION SETTINGS_NAME \
 					 "/" \
 					 SETTINGS_KEY_PERSISTENT_SESSION
+
+SETTINGS_STATIC_HANDLER_DEFINE(nrf_cloud, SETTINGS_NAME, NULL,nct_settings_set,
+			       NULL, NULL);
 
 /* Forward declaration of the event handler registered with MQTT. */
 static void nct_mqtt_evt_handler(struct mqtt_client *client,
@@ -617,7 +623,7 @@ static void aws_fota_cb_handler(struct aws_fota_event *fota_evt)
 #endif /* defined(CONFIG_AWS_FOTA) */
 
 static int nct_settings_set(const char *key, size_t len_rd,
-				 settings_read_cb read_cb, void *cb_arg)
+			    settings_read_cb read_cb, void *cb_arg)
 {
 	if (!key) {
 		return -EINVAL;
@@ -625,15 +631,16 @@ static int nct_settings_set(const char *key, size_t len_rd,
 
 	int read_val;
 
-	LOG_DBG("Settings key: %s", log_strdup(key));
+	LOG_DBG("Settings key: %s, size: %d", log_strdup(key), len_rd);
 
 	if (!strncmp(key, SETTINGS_KEY_PERSISTENT_SESSION,
-		     strlen(SETTINGS_KEY_PERSISTENT_SESSION))) {
+		     strlen(SETTINGS_KEY_PERSISTENT_SESSION)) &&
+	    (len_rd == sizeof(read_val))) {
 		if (read_cb(cb_arg, (void *)&read_val, len_rd) == len_rd) {
-			LOG_DBG("Read setting val: %d", read_val);
 #if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
 			persistent_session = (bool)read_val;
 #endif
+			LOG_DBG("Read setting val: %d", read_val);
 			return 0;
 		}
 	}
@@ -655,36 +662,24 @@ int save_session_state(const int session_valid)
 
 static int nct_settings_init(void)
 {
-	int err = 0;
-
-	struct settings_handler settings_cfg = {
-		.name = SETTINGS_NAME,
-		.h_set = nct_settings_set,
-		.h_commit = NULL,
-		.h_export = NULL,
-		.h_get = NULL
-	};
+	int ret = 0;
 
 #if defined(CONFIG_CLOUD_PERSISTENT_SESSIONS)
-
-	settings_subsys_init();
-
-	err = settings_register(&settings_cfg);
-	if (err) {
-		LOG_ERR("Cannot register settings handler: %d", err);
-		return err;
+	ret = settings_subsys_init();
+	if (ret) {
+		LOG_ERR("Settings init failed: %d", ret);
+		return ret;
 	}
 
-	//err = settings_load();
-	err = settings_load_subtree(settings_cfg.name);
-	if (err) {
-		LOG_ERR("Cannot load settings: %d", err);
+	ret = settings_load_subtree(settings_handler_nrf_cloud.name);
+	if (ret) {
+		LOG_ERR("Cannot load settings: %d", ret);
 	}
 #else
-	ARG_UNUSED(settings_cfg);
+	ARG_UNUSED(settings_handler_nrf_cloud);
 #endif
 
-	return err;
+	return ret;
 }
 
 /* Connect to MQTT broker. */
