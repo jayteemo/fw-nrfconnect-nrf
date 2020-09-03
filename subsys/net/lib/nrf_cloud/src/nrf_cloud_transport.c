@@ -826,7 +826,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	if (err == 0) {
 		return;
 	} else if (err < 0) {
-		LOG_ERR("aws_fota_mqtt_evt_handler: Failed! %d", err);
+		LOG_ERR("nrf_cloud_fota_mqtt_evt_handler: Failed! %d", err);
 	}
 
 	switch (_mqtt_evt->type) {
@@ -1240,13 +1240,6 @@ int nct_dc_connect(void)
 	};
 
 	ret = mqtt_subscribe(&nct.client, &subscription_list);
-
-	if (ret == 0) {
-		//ret = nrf_cloud_fota_subscribe();
-		if (ret) {
-			LOG_ERR("nrf_cloud_fota_subscribe failed: %d", ret);
-		}
-	}
 
 	return ret;
 }

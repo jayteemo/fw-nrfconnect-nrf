@@ -235,13 +235,16 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
 		/* MODEM: don't care? */
+		current_fota.status = NRF_FOTA_IN_PROGRESS;
 		send_event(NRF_FOTA_EVT_ERASE_DONE,&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERROR:
 		current_fota.error = NRF_FOTA_ERROR_DOWNLOAD;
 		current_fota.status = NRF_FOTA_FAILED;
+		update_job(&current_fota);
 		send_event(NRF_FOTA_EVT_ERROR,&current_fota);
+		cleanup_job(&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
@@ -265,8 +268,9 @@ static int parse_job(struct nrf_cloud_fota_job * const job)
 	 * [“jobExecutionId”,firmwareType,fileSize,”host”,”path”]
 	 *
 	 * Example:
-	 * [“abcd1234”,0,1234,”dev.nrfcloud.com”,v1/firmwares/appfw.bin"]
+	 * [“abcd1234”,0,1234,”dev.nrfcloud.com”,"v1/firmwares/appfw.bin"]
 	 */
+	LOG_DBG("Parsing: %s", log_strdup(job->mqtt_payload));
 
 	/* Get execution ID */
 	job->id = strtok_r(job->mqtt_payload, "[\",]", &save_ptr);
@@ -362,7 +366,8 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 		job->error = NRF_FOTA_ERROR_DOWNLOAD_START;
 		send_event(NRF_FOTA_EVT_ERROR, job);
 	} else {
-		job->status = NRF_FOTA_IN_PROGRESS;
+		job->dl_progress = 0;
+		job->status = NRF_FOTA_DOWNLOADING;
 		send_event(NRF_FOTA_EVT_START, job);
 	}
 
@@ -411,7 +416,18 @@ static int update_job(struct nrf_cloud_fota_job * const job)
 	}
 
 	param.message.payload.len = ret;
-	return mqtt_publish(client_mqtt, &param);
+	LOG_DBG("Topic: %s",
+		log_strdup(param.message.topic.topic.utf8));
+	LOG_DBG("Payload (%d bytes): %s",
+		param.message.payload.len,
+		log_strdup(param.message.payload.data));
+
+	ret = mqtt_publish(client_mqtt, &param);
+	if (ret) {
+		LOG_ERR("Publish failed: %d", ret);
+	}
+
+	return ret;
 }
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
@@ -447,7 +463,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 			goto send_ack;
 		}
 
-		current_fota.mqtt_payload_size = p->message.payload.len;
+		current_fota.mqtt_payload_size = p->message.payload.len + 1;
 		current_fota.mqtt_payload =
 			nrf_cloud_calloc(current_fota.mqtt_payload_size,1);
 
@@ -459,7 +475,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 
 		ret = mqtt_readall_publish_payload(client_mqtt,
 				current_fota.mqtt_payload,
-				current_fota.mqtt_payload_size);
+				p->message.payload.len);
 		if (ret) {
 			LOG_ERR("Error reading MQTTT payload: %d", ret);
 			err = ret;
@@ -474,7 +490,14 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 
 		start = true;
 send_ack:
-		ret = mqtt_publish_qos1_ack(client_mqtt, &ack);
+		if (p->message.topic.qos == MQTT_QOS_0_AT_MOST_ONCE) {
+			LOG_DBG("No ack required");
+		} else {
+			ret = mqtt_publish_qos1_ack(client_mqtt, &ack);
+			if (ret) {
+				LOG_ERR("MQTT ACK failed: %d", ret);
+			}
+		}
 
 		if (start) {
 			(void)start_job(&current_fota);
