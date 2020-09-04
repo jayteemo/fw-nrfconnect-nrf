@@ -33,6 +33,11 @@ LOG_MODULE_REGISTER(nrf_cloud_fota, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define JOB_UPDATE_MSG_TEMPLATE "[\"%s\",%d,%s]"
 #define JOB_UPDATE_PROGRESS_TEMPLATE "[\"%s\",%d,%d]"
 
+#define JOB_REQUEST_LATEST_PAYLOAD "[\"\"]"
+#define JOB_REQUEST_ID_TEMPLATE "[\"%s\"]"
+
+#define UPDATE_PAYLOAD_SIZE 255
+
 #define DOWNLOAD_COMPLETE_VAL 100
 struct nrf_cloud_fota_job {
 	char * mqtt_payload;
@@ -57,6 +62,8 @@ static void send_event(const enum nrf_cloud_fota_evt_id id,
 static void cleanup_job(struct nrf_cloud_fota_job * const job);
 static int start_job(struct nrf_cloud_fota_job * const job);
 static int update_job(struct nrf_cloud_fota_job * const job);
+static int publish(const struct mqtt_publish_param * const pub);
+static bool is_fota_active(void);
 
 static struct mqtt_client * client_mqtt;
 static nrf_cloud_fota_callback_t event_cb;
@@ -213,6 +220,12 @@ int nrf_cloud_fota_unsubscribe(void)
 	return mqtt_unsubscribe(client_mqtt, &sub_list);
 }
 
+static bool is_fota_active(void)
+{
+	return (current_fota.mqtt_payload != NULL &&
+		current_fota.mqtt_payload_size != 0);
+}
+
 static void http_fota_handler(const struct fota_download_evt *evt)
 {
 	__ASSERT_NO_MSG(evt != NULL);
@@ -286,6 +299,11 @@ static int parse_job(struct nrf_cloud_fota_job * const job)
 	errno = 0;
 	job->type = (int)strtol(tok, &end_ptr,10);
 	if (errno) {
+		goto handle_error;
+	}
+	if (job->type < NRF_FOTA_TYPE__BEGIN &&
+	    job->type >= NRF_FOTA_TYPE__END) {
+		LOG_ERR("Invalid FOTA type: %d", job->type);
 		goto handle_error;
 	}
 
@@ -385,10 +403,28 @@ static void cleanup_job(struct nrf_cloud_fota_job * const job)
 	memset(job,0,sizeof(*job));
 }
 
-#define UPDATE_PAYLOAD_SIZE 255
+static int publish(const struct mqtt_publish_param * const pub)
+{
+	__ASSERT_NO_MSG(pub != NULL);
+
+	int ret;
+	LOG_DBG("Topic: %s",
+		log_strdup(pub->message.topic.topic.utf8));
+	LOG_DBG("Payload (%d bytes): %s",
+		pub->message.payload.len,
+		log_strdup(pub->message.payload.data));
+
+	ret = mqtt_publish(client_mqtt, pub);
+	if (ret) {
+		LOG_ERR("Publish failed: %d", ret);
+	}
+	return ret;
+}
+
 static int update_job(struct nrf_cloud_fota_job * const job)
 {
 	__ASSERT_NO_MSG(job != NULL);
+	__ASSERT_NO_MSG(client_mqtt != NULL);
 
 	int ret;
 	char payload[UPDATE_PAYLOAD_SIZE];
@@ -416,6 +452,8 @@ static int update_job(struct nrf_cloud_fota_job * const job)
 	}
 
 	param.message.payload.len = ret;
+
+	return publish(&param);
 	LOG_DBG("Topic: %s",
 		log_strdup(param.message.topic.topic.utf8));
 	LOG_DBG("Payload (%d bytes): %s",
@@ -428,6 +466,28 @@ static int update_job(struct nrf_cloud_fota_job * const job)
 	}
 
 	return ret;
+}
+
+int nrf_cloud_fota_update_check(void)
+{
+	if (client_mqtt == NULL) {
+		return -ENXIO;
+	}
+	if (topic_req.topic.utf8 == NULL || topic_req.topic.size == 0) {
+		return -EADDRNOTAVAIL;
+	}
+
+	struct mqtt_publish_param param = {
+		.message_id = NRF_CLOUD_FOTA_REQUEST_ID,
+		.dup_flag = 0,
+		.retain_flag = 0,
+	};
+
+	param.message.payload.data = JOB_REQUEST_LATEST_PAYLOAD;
+	param.message.payload.len = strlen(JOB_REQUEST_LATEST_PAYLOAD);
+	param.message.topic = topic_req;
+
+	return publish(&param);
 }
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
@@ -458,7 +518,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 			p->message_id,
 			p->message.payload.len);
 
-		if (current_fota.mqtt_payload) {
+		if (is_fota_active()) {
 			LOG_DBG("Job in progress... skipping");
 			goto send_ack;
 		}
@@ -524,12 +584,22 @@ send_ack:
 	}
 	case MQTT_EVT_PUBACK:
 	{
-		bool apply = false;
-
-		if (evt->param.puback.message_id != NRF_CLOUD_FOTA_UPDATE_ID) {
+		if ((evt->param.puback.message_id !=
+		    NRF_CLOUD_FOTA_UPDATE_ID) &&
+		    (evt->param.puback.message_id !=
+		    NRF_CLOUD_FOTA_REQUEST_ID)) {
 			return 1;
 		}
-		LOG_DBG("MQTT_EVT_PUBACK");
+
+		LOG_DBG("MQTT_EVT_PUBACK: msg id %d",
+			evt->param.puback.message_id);
+
+		if (!is_fota_active() || (evt->param.puback.message_id !=
+		    NRF_CLOUD_FOTA_REQUEST_ID)) {
+			return 0;
+		}
+
+		bool apply = false;
 
 		switch (current_fota.status)
 		{
@@ -545,9 +615,11 @@ send_ack:
 		default:
 			break;
 		}
+
 		if (apply) {
 			nct_apply_update();
 		}
+		break;
 	}
 	case MQTT_EVT_CONNACK:
 	case MQTT_EVT_DISCONNECT:

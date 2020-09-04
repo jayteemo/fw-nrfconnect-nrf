@@ -14,9 +14,12 @@ extern "C" {
 #include <net/mqtt.h>
 
 enum nrf_cloud_fota_type {
-	NRF_FOTA_APPLICATION = 0,
+	NRF_FOTA_TYPE__BEGIN = 0,
+	NRF_FOTA_APPLICATION = NRF_FOTA_TYPE__BEGIN,
 	NRF_FOTA_MODEM = 1,
 	NRF_FOTA_BOOTLOADER = 2,
+
+	NRF_FOTA_TYPE__END
 };
 
 enum nrf_cloud_fota_status {
@@ -64,6 +67,9 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
 
 int nrf_cloud_fota_endpoint_set(const char * const client_id,
 				const struct mqtt_utf8 * const endpoint);
+
+int nrf_cloud_fota_update_check(void);
+
 void nrf_cloud_fota_endpoint_clear(void);
 
 int nrf_cloud_fota_subscribe(void);
