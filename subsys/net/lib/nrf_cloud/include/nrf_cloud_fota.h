@@ -15,11 +15,13 @@ extern "C" {
 
 enum nrf_cloud_fota_type {
 	NRF_FOTA_TYPE__BEGIN = 0,
+
 	NRF_FOTA_APPLICATION = NRF_FOTA_TYPE__BEGIN,
 	NRF_FOTA_MODEM = 1,
 	NRF_FOTA_BOOTLOADER = 2,
 
-	NRF_FOTA_TYPE__END
+	NRF_FOTA_TYPE__END,
+	NRF_FOTA_TYPE__INVALID = NRF_FOTA_TYPE__END
 };
 
 enum nrf_cloud_fota_status {
@@ -61,11 +63,12 @@ struct nrf_cloud_fota_evt {
 
 typedef void (*nrf_cloud_fota_callback_t)(const struct nrf_cloud_fota_evt * const evt);
 
-int nrf_cloud_fota_init(struct mqtt_client *const client, nrf_cloud_fota_callback_t cb);
+int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
 
-int nrf_cloud_fota_endpoint_set(const char * const client_id,
+int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
+				const char * const client_id,
 				const struct mqtt_utf8 * const endpoint);
 
 int nrf_cloud_fota_update_check(void);

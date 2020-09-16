@@ -12,6 +12,7 @@ menuconfig NRF_CLOUD
 	select FOTA_DOWNLOAD
 	select DFU_TARGET
 	select DOWNLOAD_CLIENT
+	select SETTINGS
 
 if NRF_CLOUD
 
