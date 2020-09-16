@@ -663,17 +663,18 @@ static int nct_settings_init(void)
 {
 	int ret = 0;
 
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)
+#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION) || IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 	ret = settings_subsys_init();
 	if (ret) {
 		LOG_ERR("Settings init failed: %d", ret);
 		return ret;
 	}
-
+#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)
 	ret = settings_load_subtree(settings_handler_nrf_cloud.name);
 	if (ret) {
 		LOG_ERR("Cannot load settings: %d", ret);
 	}
+#endif
 #else
 	ARG_UNUSED(settings_handler_nrf_cloud);
 #endif
@@ -760,8 +761,6 @@ int nct_mqtt_connect(void)
 			return -ENOEXEC;
 		}
 #endif /* defined(CONFIG_AWS_FOTA) */
-
-		err = nrf_cloud_fota_init(&nct.client, nrf_cloud_fota_cb_handler);
 
 		initialized = true;
 	}
@@ -969,14 +968,19 @@ int nct_init(void)
 {
 	int err;
 
-	dc_endpoint_reset();
-
-	err = nct_topics_populate();
+	err = nct_settings_init();
 	if (err) {
 		return err;
 	}
 
-	err = nct_settings_init();
+	err = nrf_cloud_fota_init(nrf_cloud_fota_cb_handler);
+	if (err) {
+		return err;
+	}
+
+	dc_endpoint_reset();
+
+	err = nct_topics_populate();
 	if (err) {
 		return err;
 	}
@@ -1150,6 +1154,8 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 			 const struct nrf_cloud_data *rx_endp,
 			 const struct nrf_cloud_data *m_endp)
 {
+	int ret;
+
 	LOG_DBG("nct_dc_endpoint_set");
 
 	/* In case the endpoint was previous set, free and reset
@@ -1167,11 +1173,14 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 		nct.dc_m_endp.utf8 = (const uint8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
 
-		nrf_cloud_fota_endpoint_set(client_id_buf, &nct.dc_m_endp);
+		ret = nrf_cloud_fota_endpoint_set(&nct.client, client_id_buf,
+						  &nct.dc_m_endp);
+		if (ret) {
+			LOG_ERR("Failed to set fota endpoint: %d", ret);
+		}
 
 #if defined(CONFIG_AWS_FOTA)
 		void *job_status_utf8;
-		int ret;
 
 		nct.job_status_endp.size =
 			nct.dc_m_endp.size + NCT_TOPIC_PREFIX_M_D_LEN +

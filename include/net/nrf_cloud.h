@@ -26,6 +26,8 @@ extern "C" {
 #define NRF_CLOUD_FOTA_REQUEST_ID	8767
 #define NRF_CLOUD_FOTA_UPDATE_ID	8768
 
+#define NRF_CLOUD_SETTINGS_NAME "nrf_cloud"
+
 /** @brief Asynchronous nRF Cloud events notified by the module. */
 enum nrf_cloud_evt_type {
 	/** The transport to the nRF Cloud is established. */
