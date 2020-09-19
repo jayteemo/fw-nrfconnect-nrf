@@ -107,6 +107,7 @@ static const struct mqtt_subscription_list sub_list = {
 	.message_id = NRF_CLOUD_FOTA_SUBSCRIBE_ID,
 };
 
+static enum fota_download_evt_id last_fota_dl_evt = FOTA_DOWNLOAD_EVT_ERROR;
 static struct nrf_cloud_fota_job current_fota;
 static struct settings_fota_job saved_job = { .type = NRF_FOTA_TYPE__INVALID };
 static bool initialized;
@@ -416,7 +417,6 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 {
 	__ASSERT_NO_MSG(evt != NULL);
 
-
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		/* MCUBOOT: download finished, update job status and reboot */
@@ -437,21 +437,29 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
-		/* MODEM: don't care? */
-		current_fota.status = NRF_FOTA_IN_PROGRESS;
+		/* TODO */
+		/* MODEM: this event can be received when the initial
+		 * fragment is downloaded and dfu_target_modem_init() is
+		 * called.  TBD if anything should be done with this
+		 * status.
+		 */
 		send_event(NRF_FOTA_EVT_ERASE_DONE,&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERROR:
-		current_fota.error = NRF_FOTA_ERROR_DOWNLOAD;
-		current_fota.status = NRF_FOTA_FAILED;
+		if (last_fota_dl_evt == FOTA_DOWNLOAD_EVT_ERASE_DONE) {
+			current_fota.status = NRF_FOTA_REJECTED;
+		} else {
+			current_fota.status = NRF_FOTA_FAILED;
+		}
+
 		send_job_update(&current_fota);
 		send_event(NRF_FOTA_EVT_ERROR,&current_fota);
 		cleanup_job(&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
-		/* Only if CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT is enabled */
+		/* CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT must be enabled */
 		current_fota.status = NRF_FOTA_DOWNLOADING;
 		current_fota.dl_progress = evt->progress;
 		send_job_update(&current_fota);
@@ -459,6 +467,8 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	default:
 		break;
 	}
+
+	last_fota_dl_evt = evt->id;
 }
 
 static int parse_job(struct nrf_cloud_fota_job * const job)
