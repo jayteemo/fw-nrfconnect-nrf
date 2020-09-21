@@ -157,6 +157,8 @@ struct download_client {
 		struct coap_block_context block_ctx;
 	} coap;
 
+	const char *auth_bearer;
+
 	/** Internal thread ID. */
 	k_tid_t tid;
 	/** Internal download thread. */

@@ -475,18 +475,19 @@ void main(void)
 
 	struct download_client_cfg config = {
 		.port = 0,
-		.sec_tag = -1,
+		.sec_tag = 16842753,
 		.apn = NULL
 	};
 
 	// "https://agps-test.s3.amazonaws.com/agps-payload.bin"
-	err = download_client_connect(&dlc, "agps-test.s3.amazonaws.com", &config);
+	// https://api.coha.nrfcloud.com/v1/location/agps\?deviceIdentifier\=3 -H "Authorization: Bearer xxx" -H "Range: bytes=0-1400" -v
+	err = download_client_connect(&dlc, "api.coha.nrfcloud.com", &config);
 	if (err != 0) {
 		LOG_ERR("download_client_connect error: %d", err);
 		return;
 	}
 
-	err = download_client_start(&dlc, "agps-payload2.bin", 0);
+	err = download_client_start(&dlc, "v1/location/agps\?deviceIdentifier\\=3", 0);
 	if (err != 0) {
 		LOG_ERR("download_client_start error: %d", err);
 		download_client_disconnect(&dlc);
