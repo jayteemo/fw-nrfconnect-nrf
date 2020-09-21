@@ -87,9 +87,13 @@ static int download_client_callback(const struct download_client_evt *event)
 			return err;
 		}
 
-		process_agps_data(agps_file, agps_file_rcvd_size);
-
 		first_fragment = true;
+
+		err = gps_process_agps_data(agps_file, agps_file_rcvd_size);
+		if (err != 0) {
+			LOG_ERR("gps_process_agps_data err: %d", err);
+			return err;
+		}
 		break;
 
 	case DOWNLOAD_CLIENT_EVT_ERROR: {
@@ -474,9 +478,9 @@ void main(void)
 	err = download_client_init(&dlc, download_client_callback);
 
 	struct download_client_cfg config = {
-		.port = 0,
 		.sec_tag = 16842753,
-		.apn = NULL
+		.apn = NULL,
+		.frag_size_override = 1792
 	};
 
 	// "https://agps-test.s3.amazonaws.com/agps-payload.bin"

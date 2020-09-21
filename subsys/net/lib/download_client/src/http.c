@@ -31,6 +31,16 @@ LOG_MODULE_DECLARE(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 	"Connection: keep-alive\r\n"                                           \
 	"\r\n"
 
+#define GET_TEMPLATE_W_AUTH                                                    \
+	"GET /%s HTTP/1.1\r\n"                                                 \
+	"Host: %s\r\n"                                                         \
+	"Connection: keep-alive\r\n"                                           \
+	"Authorization: Bearer %s\r\n"                                         \
+	"Range: bytes=%u-%u\r\n"                                               \
+	"\r\n"
+
+static const char * const auth_token = "";
+
 int url_parse_host(const char *url, char *host, size_t len);
 int url_parse_file(const char *url, char *file, size_t len);
 int socket_send(const struct download_client *client, size_t len);
@@ -74,9 +84,18 @@ int http_get_request_send(struct download_client *client)
 	 * network usage (only one request/response are sent).
 	 */
 	if (client->proto == IPPROTO_TLS_1_2) {
-		len = snprintf(client->buf,
+
+		if (strlen(auth_token)) {
+        		len = snprintf(client->buf,
+			CONFIG_DOWNLOAD_CLIENT_BUF_SIZE,
+			GET_TEMPLATE_W_AUTH, client->file, client->host,
+			auth_token, client->progress, off);
+        	} else {
+        		len = snprintf(client->buf,
 			CONFIG_DOWNLOAD_CLIENT_BUF_SIZE,
 			GET_HTTPS_TEMPLATE, file, host, client->progress, off);
+        	}
+
 	} else {
 		len = snprintf(client->buf,
 			CONFIG_DOWNLOAD_CLIENT_BUF_SIZE,
