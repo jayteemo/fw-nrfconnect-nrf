@@ -20,7 +20,22 @@ LOG_MODULE_REGISTER(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 #define SIN6(A) ((struct sockaddr_in6 *)(A))
 #define SIN(A) ((struct sockaddr_in *)(A))
 
+<<<<<<< HEAD
 #define HOSTNAME_SIZE CONFIG_DOWNLOAD_CLIENT_MAX_HOSTNAME_SIZE
+=======
+#define GET_TEMPLATE_W_AUTH                                                    \
+	"GET /%s HTTP/1.1\r\n"                                                 \
+	"Host: %s\r\n"                                                         \
+	"Connection: keep-alive\r\n"                                           \
+	"Authorization: Bearer %s\r\n"                                         \
+	"Range: bytes=%u-%u\r\n"                                               \
+	"\r\n"
+
+
+BUILD_ASSERT(CONFIG_DOWNLOAD_CLIENT_MAX_FRAGMENT_SIZE <=
+		 CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE,
+		 "The response buffer must accommodate for a full non-TLS fragment");
+>>>>>>> auth header test
 
 int url_parse_port(const char *url, uint16_t *port);
 int url_parse_proto(const char *url, int *proto, int *type);
@@ -45,6 +60,8 @@ static const char *str_family(int family)
 		return NULL;
 	}
 }
+
+const char * const auth_token = "";
 
 static int socket_timeout_set(int fd)
 {
@@ -293,6 +310,7 @@ int socket_send(const struct download_client *client, size_t len)
 
 static int request_send(struct download_client *dl)
 {
+<<<<<<< HEAD
 	switch (dl->proto) {
 	case IPPROTO_TCP:
 	case IPPROTO_TLS_1_2:
@@ -301,6 +319,92 @@ static int request_send(struct download_client *dl)
 	case IPPROTO_DTLS_1_2:
 		if (IS_ENABLED(CONFIG_COAP)) {
 			return coap_request_send(dl);
+=======
+	int err;
+	int len;
+	size_t off;
+
+	__ASSERT_NO_MSG(client);
+	__ASSERT_NO_MSG(client->host);
+	__ASSERT_NO_MSG(client->file);
+
+	/* Offset of last byte in range (Content-Range) */
+	off = client->progress + client->fragment_size - 1;
+
+	if (client->file_size != 0) {
+		/* Don't request bytes past the end of file */
+		off = MIN(off, client->file_size);
+	}
+	client->auth_bearer = auth_token;
+
+	if (client->auth_bearer) {
+		len = snprintf(client->buf,
+			       CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE,
+			       GET_TEMPLATE_W_AUTH, client->file, client->host,
+			       client->auth_bearer, client->progress, off);
+	} else {
+		len = snprintf(client->buf,
+			       CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE,
+			       GET_TEMPLATE, client->file, client->host,
+			       client->progress, off);
+	}
+
+	if (len < 0 || len > CONFIG_DOWNLOAD_CLIENT_MAX_RESPONSE_SIZE) {
+		LOG_ERR("Cannot create GET request, buffer too small");
+		return -ENOMEM;
+	}
+
+	if (IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_LOG_HEADERS)) {
+		LOG_HEXDUMP_DBG(client->buf, len, "HTTP request");
+	}
+
+	LOG_DBG("Sending HTTP request");
+	err = socket_send(client, len);
+	if (err) {
+		LOG_ERR("Failed to send HTTP request, errno %d", errno);
+		return err;
+	}
+
+	return 0;
+}
+
+/* Returns:
+ *  1 while the header is being received
+ *  0 if the header has been fully received
+ * -1 on error
+ */
+static int header_parse(struct download_client *client)
+{
+	char *p;
+	size_t hdr;
+
+	p = strstr(client->buf, "\r\n\r\n");
+	if (!p) {
+		/* Awaiting full GET response */
+		LOG_DBG("Awaiting full header in response");
+		return 1;
+	}
+
+	/* Offset of the end of the HTTP header in the buffer */
+	hdr = p + strlen("\r\n\r\n") - client->buf;
+
+	__ASSERT(hdr < sizeof(client->buf), "Buffer overflow");
+
+	LOG_DBG("GET header size: %u", hdr);
+
+	if (IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_LOG_HEADERS)) {
+		LOG_HEXDUMP_DBG(client->buf, hdr, "GET");
+	}
+
+	/* If file size is not known, read it from the header */
+	if (client->file_size == 0) {
+		p = strstr(client->buf, "content-range: bytes");
+		if (!p) {
+			/* Cannot continue */
+			LOG_ERR("Server did not send "
+				"\"Content-Range\" in response");
+			return -1;
+>>>>>>> auth header test
 		}
 	}
 
