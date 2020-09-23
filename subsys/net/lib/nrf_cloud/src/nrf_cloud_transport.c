@@ -692,7 +692,8 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt * const ev
 	}
 	case NRF_FOTA_EVT_DONE:
 	{
-		LOG_DBG("NRF_FOTA_EVT_DONE");
+		LOG_DBG("NRF_FOTA_EVT_DONE: rebooting");
+		nct_apply_update();
 		break;
 	}
 	case NRF_FOTA_EVT_ERROR:
