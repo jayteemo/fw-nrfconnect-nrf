@@ -1892,8 +1892,6 @@ void main(void)
 
 #if defined(CONFIG_LWM2M_CARRIER)
 	k_sem_take(&bsdlib_initialized, K_FOREVER);
-#else
-	handle_bsdlib_init_ret();
 #endif
 
 	cloud_api_init();

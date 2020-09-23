@@ -20,6 +20,7 @@
 #include <logging/log.h>
 #include <sys/util.h>
 #include <settings/settings.h>
+#include <power/reboot.h>
 
 #if defined(CONFIG_BOOTLOADER_MCUBOOT)
 #include <dfu/mcuboot.h>
@@ -155,12 +156,14 @@ enum fota_validate_status get_modem_update_status(void)
 	/* Handle return values relating to modem firmware update */
 	switch (modem_dfu_res) {
 	case MODEM_DFU_RESULT_OK:
+		LOG_DBG("Modem FOTA OK");
 		ret = NRF_FOTA_VALIDATE_PASS;
 		break;
 	case MODEM_DFU_RESULT_UUID_ERROR:
 	case MODEM_DFU_RESULT_AUTH_ERROR:
 	case MODEM_DFU_RESULT_HARDWARE_ERROR:
 	case MODEM_DFU_RESULT_INTERNAL_ERROR:
+		LOG_DBG("Modem FOTA error: %d", modem_dfu_res);
 		ret = NRF_FOTA_VALIDATE_FAIL;
 		break;
 	default:
@@ -207,7 +210,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 			 */
 			validate = NRF_FOTA_VALIDATE_FAIL;
 		} else {
-			LOG_ERR("FOTA update confirmed");
+			LOG_DBG("FOTA update confirmed");
 			validate = NRF_FOTA_VALIDATE_PASS;
 		}
 	}
@@ -221,6 +224,14 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 
 		/* save status and update when cloud connection is ready */
 		save_job_status(saved_job.id, saved_job.type, validate);
+
+		if ((saved_job.type == NRF_FOTA_MODEM) &&
+		    (validate == NRF_FOTA_VALIDATE_PASS ||
+		     validate == NRF_FOTA_VALIDATE_FAIL)) {
+			/* Reboot is required */
+			LOG_INF("Rebooting to complete modem FOTA");
+			sys_reboot(SYS_REBOOT_COLD);
+		}
 	}
 
 	initialized = true;
@@ -317,9 +328,9 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 
 	/* Report status of saved job now that the endpoint is available */
 	if (saved_job.type != NRF_FOTA_TYPE__INVALID) {
-		struct nrf_cloud_fota_job job = { .type = saved_job.type };
 
-		strncpy(job.id, saved_job.id, JOB_ID_STRING_SIZE);
+		struct nrf_cloud_fota_job job = { .type = saved_job.type,
+						  .id = saved_job.id };
 
 		switch (saved_job.status) {
 		case NRF_FOTA_VALIDATE_PASS:
@@ -342,7 +353,10 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 		}
 
 		if (job.type != NRF_FOTA_TYPE__INVALID) {
-			send_job_update(&current_fota);
+			int err = send_job_update(&job);
+			if (err) {
+				LOG_ERR("Error sending job update: %d", err);
+			}
 		}
 	}
 
@@ -393,15 +407,20 @@ static int save_job_status(const char * const job_id,
 
 	int ret;
 
+	LOG_DBG("%s() - %s, %d, %d",
+		log_strdup(__func__), log_strdup(job_id), job_type, status);
+
 	if (status == NRF_FOTA_VALIDATE_DONE) {
 		/* Saved FOTA job has been validated, clear it */
 		saved_job.type = NRF_FOTA_TYPE__INVALID;
 		saved_job.status = NRF_FOTA_VALIDATE_NONE;
-		memcpy(saved_job.id, 0, sizeof(saved_job.id));
+		memset(saved_job.id, 0, sizeof(saved_job.id));
 	} else {
 		saved_job.type = job_type;
 		saved_job.status = status;
-		strncpy(saved_job.id, job_id, sizeof(saved_job.id));
+		if (job_id != saved_job.id) {
+			strncpy(saved_job.id, job_id, sizeof(saved_job.id));
+		}
 	}
 
 	ret = settings_save_one(SETTINGS_FULL_FOTA_JOB, &saved_job,
@@ -417,14 +436,15 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 {
 	__ASSERT_NO_MSG(evt != NULL);
 
+	LOG_DBG("%s() - evt %d", log_strdup(__func__), evt->id);
+
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		/* MCUBOOT: download finished, update job status and reboot */
-		current_fota.dl_progress = DOWNLOAD_COMPLETE_VAL;
+		current_fota.status = NRF_FOTA_IN_PROGRESS;
 		save_job_status(current_fota.id, current_fota.type,
 				NRF_FOTA_VALIDATE_PENDING);
 		send_job_update(&current_fota);
-		send_event(NRF_FOTA_EVT_DL_PROGRESS,&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
@@ -437,10 +457,9 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
-		/* TODO */
-		/* MODEM: this event can be received when the initial
+		/* MODEM: this event is received when the initial
 		 * fragment is downloaded and dfu_target_modem_init() is
-		 * called.  TBD if anything should be done with this
+		 * called.  TBD if anything else should be done with this
 		 * status.
 		 */
 		send_event(NRF_FOTA_EVT_ERASE_DONE,&current_fota);
@@ -452,7 +471,8 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		} else {
 			current_fota.status = NRF_FOTA_FAILED;
 		}
-
+		save_job_status(current_fota.id, current_fota.type,
+				NRF_FOTA_VALIDATE_DONE);
 		send_job_update(&current_fota);
 		send_event(NRF_FOTA_EVT_ERROR,&current_fota);
 		cleanup_job(&current_fota);
@@ -799,35 +819,28 @@ send_ack:
 		LOG_DBG("MQTT_EVT_PUBACK: msg id %d",
 			evt->param.puback.message_id);
 
-		if (saved_job.type != NRF_FOTA_TYPE__INVALID) {
-			save_job_status(saved_job.id, saved_job.type, NRF_FOTA_VALIDATE_DONE);
-			return 0;
+		if (evt->param.puback.message_id ==
+		    NRF_CLOUD_FOTA_REQUEST_ID) {
+			    /* Nothing to do */
+			    break;
 		}
 
-		if (!is_fota_active()) {
-			return 0;
-		}
-
-		bool apply = false;
-
-		switch (current_fota.status)
-		{
-		case NRF_FOTA_SUCCEEDED:
-			apply = true;
-			/* fall-through */
-		case NRF_FOTA_FAILED:
-		case NRF_FOTA_REJECTED:
-		case NRF_FOTA_CANCELED:
-		case NRF_FOTA_TIMED_OUT:
+		switch (saved_job.status) {
+		case NRF_FOTA_VALIDATE_PASS:
+		case NRF_FOTA_VALIDATE_UNKNOWN:
+		case NRF_FOTA_VALIDATE_FAIL:
+			save_job_status(saved_job.id,saved_job.type,
+					NRF_FOTA_VALIDATE_DONE);
+			break;
+		case NRF_FOTA_VALIDATE_PENDING:
+			/* this event should cause reboot */
+			send_event(NRF_FOTA_EVT_DONE,&current_fota);
 			cleanup_job(&current_fota);
 			break;
 		default:
 			break;
 		}
 
-		if (apply) {
-			nct_apply_update();
-		}
 		break;
 	}
 	case MQTT_EVT_CONNACK:
