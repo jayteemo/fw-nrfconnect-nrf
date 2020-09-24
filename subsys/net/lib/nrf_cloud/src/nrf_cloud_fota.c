@@ -816,6 +816,8 @@ send_ack:
 	}
 	case MQTT_EVT_PUBACK:
 	{
+		bool do_update_check = false;
+
 		if ((evt->param.puback.message_id !=
 		    NRF_CLOUD_FOTA_UPDATE_ID) &&
 		    (evt->param.puback.message_id !=
@@ -832,6 +834,8 @@ send_ack:
 			    break;
 		}
 
+		do_update_check = !is_fota_active();
+
 		switch (saved_job.status) {
 		case NRF_FOTA_VALIDATE_PASS:
 		case NRF_FOTA_VALIDATE_UNKNOWN:
@@ -843,9 +847,14 @@ send_ack:
 			/* this event should cause reboot */
 			send_event(NRF_FOTA_EVT_DONE,&current_fota);
 			cleanup_job(&current_fota);
+			do_update_check = false;
 			break;
 		default:
 			break;
+		}
+
+		if (do_update_check) {
+			nrf_cloud_fota_update_check();
 		}
 
 		break;
