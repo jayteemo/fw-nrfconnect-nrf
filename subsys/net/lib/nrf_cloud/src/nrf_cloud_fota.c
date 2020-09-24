@@ -787,6 +787,7 @@ send_ack:
 			(void)send_job_update(&current_fota);
 			if (ret) {
 				cleanup_job(&current_fota);
+				ret = 0;
 			}
 		}
 
