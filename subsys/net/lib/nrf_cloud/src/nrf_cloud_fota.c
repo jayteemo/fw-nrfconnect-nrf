@@ -545,6 +545,7 @@ static int parse_job(struct nrf_cloud_fota_job * const job)
 	}
 
 	/* Get file path */
+	/* TODO: BOOTLOADER updates will have 2 files */
 	job->path = strtok_r(NULL, "\",]", &save_ptr);
 	if (!job->path) {
 		goto handle_error;
@@ -615,12 +616,14 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 static void cleanup_job(struct nrf_cloud_fota_job * const job)
 {
 	__ASSERT_NO_MSG(job != NULL);
+	LOG_DBG("%s() - ID: %s", log_strdup(__func__),
+		job->id ? log_strdup(job->id) : "N/A");
 
 	if (job->mqtt_payload) {
 		nrf_cloud_free(job->mqtt_payload);
-		job->mqtt_payload = NULL;
 	}
 	memset(job,0,sizeof(*job));
+	job->type = NRF_FOTA_TYPE__INVALID;
 }
 
 static int publish(const struct mqtt_publish_param * const pub)
@@ -739,7 +742,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 			p->message.payload.len);
 
 		if (is_fota_active()) {
-			LOG_DBG("Job in progress... skipping");
+			LOG_INF("Job in progress... skipping");
 			goto send_ack;
 		}
 
@@ -780,8 +783,11 @@ send_ack:
 		}
 
 		if (start) {
-			(void)start_job(&current_fota);
+			ret = start_job(&current_fota);
 			(void)send_job_update(&current_fota);
+			if (ret) {
+				cleanup_job(&current_fota);
+			}
 		}
 
 		return (err ? err : ret);
