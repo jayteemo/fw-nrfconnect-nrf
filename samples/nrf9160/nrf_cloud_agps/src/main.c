@@ -27,7 +27,6 @@ static struct k_delayed_work gps_start_work;
 static struct k_delayed_work reboot_work;
 
 static void gps_start_work_fn(struct k_work *work);
-static void process_agps_data(char *buf, size_t len);
 
 static struct download_client dlc;
 static char * agps_file;
@@ -75,7 +74,7 @@ static int download_client_callback(const struct download_client_evt *event)
 
 		memcpy(&agps_file[agps_file_rcvd_size],event->fragment.buf, event->fragment.len);
 		agps_file_rcvd_size += event->fragment.len;
-		LOG_INF("Rcvd %d/%d", agps_file_total_size, agps_file_total_size );
+		LOG_INF("Rcvd %d/%d", agps_file_rcvd_size, agps_file_total_size );
 	break;
 	}
 
@@ -479,8 +478,7 @@ void main(void)
 
 	struct download_client_cfg config = {
 		.sec_tag = 16842753,
-		.apn = NULL,
-		.frag_size_override = 1792
+		.apn = NULL
 	};
 
 	// "https://agps-test.s3.amazonaws.com/agps-payload.bin"
@@ -491,7 +489,7 @@ void main(void)
 		return;
 	}
 
-	err = download_client_start(&dlc, "v1/location/agps\?deviceIdentifier\\=3", 0);
+	err = download_client_start(&dlc, "v1/location/agps\?deviceIdentifier=3", 0);
 	if (err != 0) {
 		LOG_ERR("download_client_start error: %d", err);
 		download_client_disconnect(&dlc);
