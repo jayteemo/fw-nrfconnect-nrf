@@ -595,9 +595,10 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 	int ret;
 	int sec_tag = -1;
 
-#if defined(DOWNLOAD_CLIENT_TLS)
-	sec_tag = CONFIG_NRF_CLOUD_SEC_TAG
+#if IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_TLS)
+	sec_tag = CONFIG_NRF_CLOUD_SEC_TAG;
 #endif
+
 	ret = fota_download_start(job->host, job->path, sec_tag, 0, NULL);
 	if (ret) {
 		LOG_ERR("Failed to start FOTA download: %d", ret);
