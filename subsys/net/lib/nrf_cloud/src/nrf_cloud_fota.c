@@ -138,8 +138,9 @@ static int fota_settings_set(const char *key, size_t len_rd,
 	if (!strncmp(key, SETTINGS_FOTA_JOB, strlen(SETTINGS_FOTA_JOB)) &&
 	    (len_rd == sizeof(saved_job))) {
 		if (read_cb(cb_arg, (void *)&saved_job, len_rd) == len_rd) {
-			LOG_DBG("Saved job: %s, type: %d",
-				log_strdup(saved_job.id), saved_job.type);
+			LOG_DBG("Saved job: %s, type: %d, validate: %d",
+				log_strdup(saved_job.id), saved_job.type,
+				saved_job.status);
 			return 0;
 		}
 	}
@@ -163,10 +164,11 @@ enum fota_validate_status get_modem_update_status(void)
 	case MODEM_DFU_RESULT_AUTH_ERROR:
 	case MODEM_DFU_RESULT_HARDWARE_ERROR:
 	case MODEM_DFU_RESULT_INTERNAL_ERROR:
-		LOG_DBG("Modem FOTA error: %d", modem_dfu_res);
+		LOG_ERR("Modem FOTA error: %d", modem_dfu_res);
 		ret = NRF_FOTA_VALIDATE_FAIL;
 		break;
 	default:
+		LOG_DBG("Modem FOTA result unknown: %d", modem_dfu_res);
 		break;
 	}
 #endif /* CONFIG_BSD_LIBRARY */
@@ -225,9 +227,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		/* save status and update when cloud connection is ready */
 		save_job_status(saved_job.id, saved_job.type, validate);
 
-		if ((saved_job.type == NRF_FOTA_MODEM) &&
-		    (validate == NRF_FOTA_VALIDATE_PASS ||
-		     validate == NRF_FOTA_VALIDATE_FAIL)) {
+		if (saved_job.type == NRF_FOTA_MODEM) {
 			/* Reboot is required */
 			LOG_INF("Rebooting to complete modem FOTA");
 			sys_reboot(SYS_REBOOT_COLD);
