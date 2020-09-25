@@ -601,7 +601,8 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 	ret = fota_download_start(job->host, job->path, sec_tag, 0, NULL);
 	if (ret) {
 		LOG_ERR("Failed to start FOTA download: %d", ret);
-		job->status = NRF_FOTA_FAILED;
+		/* TODO: change back to failed when supported by backend */
+		job->status = NRF_FOTA_REJECTED; /*NRF_FOTA_FAILED*/
 		job->error = NRF_FOTA_ERROR_DOWNLOAD_START;
 		send_event(NRF_FOTA_EVT_ERROR, job);
 	} else {
