@@ -125,6 +125,16 @@ static const char nw_mode_preferred[] = "AT%XSYSTEMMODE=1,0,1,0";
 static const char nw_mode_fallback[] = "AT%XSYSTEMMODE=0,1,1,0";
 #endif
 
+#if defined(CONFIG_LWM2M_CARRIER) && !defined(CONFIG_GPS_USE_SIM)
+#if defined(CONFIG_BOARD_NRF9160_PCA20035NS)
+	const char *const lwm2m_ant_cfg[] = {
+			"AT%XMAGPIO=1,1,1,7,1,746,803,2,698,748,"
+			"2,1710,2200,3,824,894,4,880,960,5,791,849,"
+			"7,1565,1586",
+			"AT%XCOEX0=1,1,1565,1586"};
+#endif
+#endif
+
 static struct k_sem link;
 
 #if defined(CONFIG_LTE_PDP_CMD) && defined(CONFIG_LTE_PDP_CONTEXT)
@@ -166,6 +176,18 @@ static int w_lte_lc_init(void)
 	if (at_cmd_write(nw_mode_preferred, NULL, 0, NULL) != 0) {
 		return -EIO;
 	}
+
+#if defined(CONFIG_LWM2M_CARRIER) && !defined(CONFIG_GPS_USE_SIM) && \
+	(defined(CONFIG_BOARD_NRF9160_PCA20035NS))
+	/* Configuring MAGPIO/COEX, so that the correct antenna
+	 * matching network is used for each LTE band and GPS.
+	 */
+	for (size_t i = 0; i < ARRAY_SIZE(lwm2m_ant_cfg); i++) {
+		if (at_cmd_write(lwm2m_ant_cfg[i], NULL, 0, NULL) != 0) {
+			return -EIO;
+		}
+	}
+#endif
 
 #if defined(CONFIG_LTE_EDRX_REQ)
 	/* Request configured eDRX settings to save power */
