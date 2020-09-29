@@ -33,6 +33,10 @@ config MQTT_PAYLOAD_BUFFER_SIZE
 	int "MQTT payload buffer size"
 	default 128
 
+config MQTT_RECONNECT_DELAY_S
+	int "Time in seconds to delay before attempting to reconnect."
+	default 300
+
 endmenu
 
 menu "Zephyr Kernel"
