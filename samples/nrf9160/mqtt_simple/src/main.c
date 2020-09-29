@@ -75,7 +75,7 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		LOG_INF("LWM2M_CARRIER_EVENT_DISCONNECTED");
 		break;
 	case LWM2M_CARRIER_EVENT_READY:
-		LOG_DBG("LWM2M_CARRIER_EVENT_READY");
+		LOG_INF("LWM2M_CARRIER_EVENT_READY");
 		k_sem_give(&carrier_registered);
 		break;
 	case LWM2M_CARRIER_EVENT_FOTA_START:
