@@ -12,9 +12,14 @@
 #include <net/mqtt.h>
 #include <net/socket.h>
 #include <lte_lc.h>
+#include <logging/log.h>
 #if defined(CONFIG_LWM2M_CARRIER)
 #include <lwm2m_carrier.h>
 #endif
+
+LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
+
+#define DISCONNECT_STR "disconnect"
 
 /* Buffers for MQTT client. */
 static u8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
@@ -38,37 +43,63 @@ static struct pollfd fds;
 /**@brief Recoverable BSD library error. */
 void bsd_recoverable_error_handler(uint32_t err)
 {
-	printk("bsdlib recoverable error: %u\n", (unsigned int)err);
+	LOG_ERR("bsdlib recoverable error: %u", (unsigned int)err);
 }
 
 #endif /* defined(CONFIG_BSD_LIBRARY) */
 
 #if defined(CONFIG_LWM2M_CARRIER)
 K_SEM_DEFINE(carrier_registered, 0, 1);
-
-void lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
+#if defined(CONFIG_MQTT_LIB_TLS)
+static atomic_t carrier_requested_disconnect;
+#endif
+int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 {
 	switch (event->type) {
 	case LWM2M_CARRIER_EVENT_BSDLIB_INIT:
-		printk("LWM2M_CARRIER_EVENT_BSDLIB_INIT\n");
+		LOG_INF("LWM2M_CARRIER_EVENT_BSDLIB_INIT");
 		break;
-	case LWM2M_CARRIER_EVENT_CONNECT:
-		printk("LWM2M_CARRIER_EVENT_CONNECT\n");
+	case LWM2M_CARRIER_EVENT_CONNECTING:
+		LOG_INF("LWM2M_CARRIER_EVENT_CONNECTING");
 		break;
-	case LWM2M_CARRIER_EVENT_DISCONNECT:
-		printk("LWM2M_CARRIER_EVENT_DISCONNECT\n");
+	case LWM2M_CARRIER_EVENT_CONNECTED:
+		LOG_INF("LWM2M_CARRIER_EVENT_CONNECTED");
+		break;
+	case LWM2M_CARRIER_EVENT_DISCONNECTING:
+		LOG_INF("LWM2M_CARRIER_EVENT_DISCONNECTING");
+		break;
+	case LWM2M_CARRIER_EVENT_BOOTSTRAPPED:
+		LOG_INF("LWM2M_CARRIER_EVENT_BOOTSTRAPPED");
+		break;
+	case LWM2M_CARRIER_EVENT_DISCONNECTED:
+		LOG_INF("LWM2M_CARRIER_EVENT_DISCONNECTED");
 		break;
 	case LWM2M_CARRIER_EVENT_READY:
-		printk("LWM2M_CARRIER_EVENT_READY\n");
+		LOG_INF("LWM2M_CARRIER_EVENT_READY");
 		k_sem_give(&carrier_registered);
 		break;
 	case LWM2M_CARRIER_EVENT_FOTA_START:
-		printk("LWM2M_CARRIER_EVENT_FOTA_START\n");
+		LOG_INF("LWM2M_CARRIER_EVENT_FOTA_START");
+#if defined(CONFIG_MQTT_LIB_TLS)
+		/* Due to limitations in the number of secure sockets,
+		 * the cloud socket has to be closed when the carrier
+		 * library initiates firmware upgrade download.
+		 */
+		atomic_set(&carrier_requested_disconnect, 1);
+		mqtt_disconnect(&client);
+#endif
 		break;
 	case LWM2M_CARRIER_EVENT_REBOOT:
-		printk("LWM2M_CARRIER_EVENT_REBOOT\n");
+		LOG_INF("LWM2M_CARRIER_EVENT_REBOOT");
+		break;
+	case LWM2M_CARRIER_EVENT_ERROR:
+		LOG_ERR("LWM2M_CARRIER_EVENT_ERROR: code %d, value %d",
+			((lwm2m_carrier_event_error_t *)event->data)->code,
+			((lwm2m_carrier_event_error_t *)event->data)->value);
 		break;
 	}
+
+	return 0;
 }
 #endif /* defined(CONFIG_LWM2M_CARRIER) */
 
@@ -80,7 +111,7 @@ static void data_print(u8_t *prefix, u8_t *data, size_t len)
 
 	memcpy(buf, data, len);
 	buf[len] = 0;
-	printk("%s%s\n", prefix, buf);
+	LOG_INF("%s%s", log_strdup(prefix), log_strdup(buf));
 }
 
 /**@brief Function to publish data on the configured topic
@@ -100,7 +131,7 @@ static int data_publish(struct mqtt_client *c, enum mqtt_qos qos,
 	param.retain_flag = 0;
 
 	data_print("Publishing: ", data, len);
-	printk("to topic: %s len: %u\n",
+	LOG_INF("to topic: %s len: %u",
 		CONFIG_MQTT_PUB_TOPIC,
 		(unsigned int)strlen(CONFIG_MQTT_PUB_TOPIC));
 
@@ -125,7 +156,7 @@ static int subscribe(void)
 		.message_id = 1234
 	};
 
-	printk("Subscribing to: %s len %u\n", CONFIG_MQTT_SUB_TOPIC,
+	LOG_INF("Subscribing to: %s len %u", CONFIG_MQTT_SUB_TOPIC,
 		(unsigned int)strlen(CONFIG_MQTT_SUB_TOPIC));
 
 	return mqtt_subscribe(&client, &subscription_list);
@@ -135,41 +166,11 @@ static int subscribe(void)
  */
 static int publish_get_payload(struct mqtt_client *c, size_t length)
 {
-	u8_t *buf = payload_buf;
-	u8_t *end = buf + length;
-
 	if (length > sizeof(payload_buf)) {
 		return -EMSGSIZE;
 	}
 
-	while (buf < end) {
-		int ret = mqtt_read_publish_payload(c, buf, end - buf);
-
-		if (ret < 0) {
-			int err;
-
-			if (ret != -EAGAIN) {
-				return ret;
-			}
-
-			printk("mqtt_read_publish_payload: EAGAIN\n");
-
-			err = poll(&fds, 1, K_SECONDS(CONFIG_MQTT_KEEPALIVE));
-			if (err > 0 && (fds.revents & POLLIN) == POLLIN) {
-				continue;
-			} else {
-				return -EIO;
-			}
-		}
-
-		if (ret == 0) {
-			return -EIO;
-		}
-
-		buf += ret;
-	}
-
-	return 0;
+	return mqtt_readall_publish_payload(c, payload_buf, length);
 }
 
 /**@brief MQTT client event handler
@@ -182,68 +183,72 @@ void mqtt_evt_handler(struct mqtt_client *const c,
 	switch (evt->type) {
 	case MQTT_EVT_CONNACK:
 		if (evt->result != 0) {
-			printk("MQTT connect failed %d\n", evt->result);
+			LOG_ERR("MQTT connect failed %d", evt->result);
 			break;
 		}
 
 		connected = true;
-		printk("[%s:%d] MQTT client connected!\n", __func__, __LINE__);
+		LOG_INF("MQTT client connected");
 		subscribe();
 		break;
 
 	case MQTT_EVT_DISCONNECT:
-		printk("[%s:%d] MQTT client disconnected %d\n", __func__,
-		       __LINE__, evt->result);
+		LOG_INF("MQTT client disconnected %d", evt->result);
 
 		connected = false;
 		break;
 
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &evt->param.publish;
+		bool disconnect = false;
 
-		printk("[%s:%d] MQTT PUBLISH result=%d len=%d\n", __func__,
-		       __LINE__, evt->result, p->message.payload.len);
+		LOG_INF("MQTT PUBLISH result=%d len=%d",
+			evt->result, p->message.payload.len);
 		err = publish_get_payload(c, p->message.payload.len);
 		if (err >= 0) {
 			data_print("Received: ", payload_buf,
 				p->message.payload.len);
+
+			if (strncmp(payload_buf, DISCONNECT_STR,
+			    strlen(DISCONNECT_STR)) == 0) {
+				disconnect = true;
+			    }
 			/* Echo back received data */
 			data_publish(&client, MQTT_QOS_1_AT_LEAST_ONCE,
 				payload_buf, p->message.payload.len);
 		} else {
-			printk("mqtt_read_publish_payload: Failed! %d\n", err);
-			printk("Disconnecting MQTT client...\n");
-
+			LOG_ERR("mqtt_read_publish_payload: Failed! %d", err);
+			disconnect = true;
+		}
+		if (disconnect) {
+			LOG_INF("Disconnecting MQTT client...");
 			err = mqtt_disconnect(c);
 			if (err) {
-				printk("Could not disconnect: %d\n", err);
+				LOG_ERR("Could not disconnect: %d", err);
 			}
 		}
 	} break;
 
 	case MQTT_EVT_PUBACK:
 		if (evt->result != 0) {
-			printk("MQTT PUBACK error %d\n", evt->result);
+			LOG_ERR("MQTT PUBACK error %d", evt->result);
 			break;
 		}
 
-		printk("[%s:%d] PUBACK packet id: %u\n", __func__, __LINE__,
-				evt->param.puback.message_id);
+		LOG_INF("PUBACK packet id: %u", evt->param.puback.message_id);
 		break;
 
 	case MQTT_EVT_SUBACK:
 		if (evt->result != 0) {
-			printk("MQTT SUBACK error %d\n", evt->result);
+			LOG_ERR("MQTT SUBACK error %d", evt->result);
 			break;
 		}
 
-		printk("[%s:%d] SUBACK packet id: %u\n", __func__, __LINE__,
-				evt->param.suback.message_id);
+		LOG_INF("SUBACK packet id: %u", evt->param.suback.message_id);
 		break;
 
 	default:
-		printk("[%s:%d] default: %d\n", __func__, __LINE__,
-				evt->type);
+		LOG_INF("Unhandled MQTT event type: %d", evt->type);
 		break;
 	}
 }
@@ -263,8 +268,7 @@ static void broker_init(void)
 
 	err = getaddrinfo(CONFIG_MQTT_BROKER_HOSTNAME, NULL, &hints, &result);
 	if (err) {
-		printk("ERROR: getaddrinfo failed %d\n", err);
-
+		LOG_ERR("getaddrinfo failed %d", err);
 		return;
 	}
 
@@ -287,11 +291,11 @@ static void broker_init(void)
 
 			inet_ntop(AF_INET, &broker4->sin_addr.s_addr,
 				  ipv4_addr, sizeof(ipv4_addr));
-			printk("IPv4 Address found %s\n", ipv4_addr);
+			LOG_INF("IPv4 Address found %s", log_strdup(ipv4_addr));
 
 			break;
 		} else {
-			printk("ai_addrlen = %u should be %u or %u\n",
+			LOG_ERR("ai_addrlen = %u should be %u or %u",
 				(unsigned int)addr->ai_addrlen,
 				(unsigned int)sizeof(struct sockaddr_in),
 				(unsigned int)sizeof(struct sockaddr_in6));
@@ -329,7 +333,16 @@ static void client_init(struct mqtt_client *client)
 	client->tx_buf_size = sizeof(tx_buffer);
 
 	/* MQTT transport configuration */
+#if defined(CONFIG_MQTT_LIB_TLS)
+	client->transport.type = MQTT_TRANSPORT_SECURE;
+
+	/* TODO: add TLS config if secure transport is needed
+	 * struct mqtt_sec_config *tls_config;
+	 */
+#else
 	client->transport.type = MQTT_TRANSPORT_NON_SECURE;
+#endif
+
 }
 
 /**@brief Initialize the file descriptor structure used by poll.
@@ -366,79 +379,101 @@ static void modem_configure(void)
 		/* Wait for the LWM2M_CARRIER to configure the modem and
 		 * start the connection.
 		 */
-		printk("Waitng for carrier registration...\n");
+		LOG_INF("Waitng for carrier registration...");
 		k_sem_take(&carrier_registered, K_FOREVER);
-		printk("Registered!\n");
+		LOG_INF("Registered!");
 #else /* defined(CONFIG_LWM2M_CARRIER) */
 		int err;
 
-		printk("LTE Link Connecting ...\n");
+		LOG_INF("LTE Link Connecting ...");
 		err = lte_lc_init_and_connect();
 		__ASSERT(err == 0, "LTE link could not be established.");
-		printk("LTE Link Connected!\n");
+		LOG_INF("LTE Link Connected!");
 #endif /* defined(CONFIG_LWM2M_CARRIER) */
 	}
 #endif /* defined(CONFIG_LTE_LINK_CONTROL) */
 }
 
+#define POLL_TIMEOUT_MS 500
 void main(void)
 {
 	int err;
+	uint32_t connect_attempt = 0;
 
-	printk("The MQTT simple sample started\n");
+	LOG_INF("The MQTT simple sample started");
 
 	modem_configure();
 
 	client_init(&client);
 
+do_connect:
+
+#if defined(CONFIG_MQTT_LIB_TLS)
+	if (atomic_get(&carrier_requested_disconnect)) {
+		/* A disconnect was requested to free up the TLS socket
+		 * used by the cloud.  If enabled, the carrier library
+		 * (CONFIG_LWM2M_CARRIER) will perform FOTA updates in
+		 * the background and reboot the device when complete.
+		 */
+		return;
+	}
+#endif
+
+	if (connect_attempt > 0) {
+		LOG_INF("Reconnecting in %d seconds...",
+			CONFIG_MQTT_RECONNECT_DELAY_S);
+		k_sleep(K_SECONDS(CONFIG_MQTT_RECONNECT_DELAY_S));
+	}
 	err = mqtt_connect(&client);
 	if (err != 0) {
-		printk("ERROR: mqtt_connect %d\n", err);
-		return;
+		LOG_ERR("mqtt_connect %d", err);
+		goto do_connect;
 	}
 
 	err = fds_init(&client);
 	if (err != 0) {
-		printk("ERROR: fds_init %d\n", err);
+		LOG_ERR("fds_init %d", err);
 		return;
 	}
 
 	while (1) {
 		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
 		if (err < 0) {
-			printk("ERROR: poll %d\n", errno);
+			LOG_ERR("poll %d", errno);
 			break;
 		}
 
-		err = mqtt_live(&client);
-		if ((err != 0) && (err != -EAGAIN)) {
-			printk("ERROR: mqtt_live %d\n", err);
-			break;
+		err = poll(&fds, 1, POLL_TIMEOUT_MS);
+
+		if (err == 0) {
+			if (mqtt_keepalive_time_left(&client) <
+			    POLL_TIMEOUT_MS) {
+				mqtt_live(&client);
+			}
+			continue;
 		}
 
 		if ((fds.revents & POLLIN) == POLLIN) {
 			err = mqtt_input(&client);
 			if (err != 0) {
-				printk("ERROR: mqtt_input %d\n", err);
+				LOG_ERR("mqtt_input %d", err);
 				break;
 			}
 		}
 
 		if ((fds.revents & POLLERR) == POLLERR) {
-			printk("POLLERR\n");
+			LOG_ERR("POLLERR");
 			break;
 		}
 
 		if ((fds.revents & POLLNVAL) == POLLNVAL) {
-			printk("POLLNVAL\n");
+			LOG_ERR("POLLNVAL");
 			break;
 		}
 	}
 
-	printk("Disconnecting MQTT client...\n");
+	(void)mqtt_disconnect(&client);
 
-	err = mqtt_disconnect(&client);
-	if (err) {
-		printk("Could not disconnect MQTT client. Error: %d\n", err);
-	}
+	++connect_attempt;
+	goto do_connect;
 }
