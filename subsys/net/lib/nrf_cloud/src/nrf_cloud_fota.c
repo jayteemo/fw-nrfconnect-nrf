@@ -202,23 +202,23 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		LOG_ERR("Cannot load settings: %d", err);
 	}
 
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
-	if (!boot_is_img_confirmed()) {
-		err = boot_write_img_confirmed();
-		if (err) {
-			LOG_ERR("FOTA update confirmation failed: %d", err);
-			/* If this fails then MCUBOOT will revert
-			 * to the previous image on reboot
-			 */
-			validate = NRF_FOTA_VALIDATE_FAIL;
-		} else {
-			LOG_DBG("FOTA update confirmed");
-			validate = NRF_FOTA_VALIDATE_PASS;
-		}
-	}
-#endif
-
 	if (saved_job.status == NRF_FOTA_VALIDATE_PENDING) {
+#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+		if (!boot_is_img_confirmed()) {
+			err = boot_write_img_confirmed();
+			if (err) {
+				LOG_ERR("FOTA update confirmation failed: %d",
+					err);
+				/* If this fails then MCUBOOT will revert
+				* to the previous image on reboot
+				*/
+				validate = NRF_FOTA_VALIDATE_FAIL;
+			} else {
+				LOG_DBG("FOTA update confirmed");
+				validate = NRF_FOTA_VALIDATE_PASS;
+			}
+		}
+#endif
 
 		if (saved_job.type == NRF_FOTA_MODEM) {
 			validate = get_modem_update_status();
@@ -602,8 +602,7 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 	ret = fota_download_start(job->host, job->path, sec_tag, 0, NULL);
 	if (ret) {
 		LOG_ERR("Failed to start FOTA download: %d", ret);
-		/* TODO: change back to failed when supported by backend */
-		job->status = NRF_FOTA_REJECTED; /*NRF_FOTA_FAILED*/
+		job->status = NRF_FOTA_FAILED;
 		job->error = NRF_FOTA_ERROR_DOWNLOAD_START;
 		send_event(NRF_FOTA_EVT_ERROR, job);
 	} else {
@@ -856,7 +855,11 @@ send_ack:
 		}
 
 		if (do_update_check) {
-			nrf_cloud_fota_update_check();
+			/* this shouldn't be needed as the
+			 * backend will send jobs automatically
+			 * when one completes
+			 */
+			//nrf_cloud_fota_update_check();
 		}
 
 		break;
