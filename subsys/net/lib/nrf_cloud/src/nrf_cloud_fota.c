@@ -46,7 +46,6 @@ LOG_MODULE_REGISTER(nrf_cloud_fota, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #define UPDATE_PAYLOAD_SIZE 255
 
-#define DOWNLOAD_COMPLETE_VAL 100
 // Version 4 UUID: 32 bytes, 4 hyphens, NULL
 #define JOB_ID_STRING_SIZE (32 + 4 + 1)
 
@@ -73,6 +72,8 @@ struct nrf_cloud_fota_job {
 
 	enum nrf_cloud_fota_error error;
 	int dl_progress;
+	/* tracking for CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT */
+	int sent_dl_progress;
 };
 
 struct settings_fota_job {
@@ -479,9 +480,30 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
-		/* CONFIG_FOTA_DOWNLOAD_PROGRESS_EVT must be enabled */
 		current_fota.status = NRF_FOTA_DOWNLOADING;
 		current_fota.dl_progress = evt->progress;
+
+		/* Do not send complete status more than once */
+		if ((current_fota.sent_dl_progress == 100) &&
+		    (current_fota.dl_progress == 100)) {
+			break;
+		}
+
+		/* Reset if new progress is less than previous */
+		if (current_fota.sent_dl_progress >
+		    current_fota.dl_progress) {
+			current_fota.sent_dl_progress = 0;
+		}
+
+		/* Always finished progress */
+		if (current_fota.dl_progress != 100 &&
+		    ((current_fota.dl_progress -
+		      current_fota.sent_dl_progress) <
+		     CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT)) {
+			break;
+		}
+
+		current_fota.sent_dl_progress = current_fota.dl_progress;
 		send_job_update(&current_fota);
 		break;
 	default:
@@ -607,6 +629,7 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 		send_event(NRF_FOTA_EVT_ERROR, job);
 	} else {
 		job->dl_progress = 0;
+		job->sent_dl_progress = 0;
 		job->status = NRF_FOTA_DOWNLOADING;
 		send_event(NRF_FOTA_EVT_START, job);
 	}
@@ -678,18 +701,6 @@ static int send_job_update(struct nrf_cloud_fota_job * const job)
 	param.message.payload.len = ret;
 
 	return publish(&param);
-	LOG_DBG("Topic: %s",
-		log_strdup(param.message.topic.topic.utf8));
-	LOG_DBG("Payload (%d bytes): %s",
-		param.message.payload.len,
-		log_strdup(param.message.payload.data));
-
-	ret = mqtt_publish(client_mqtt, &param);
-	if (ret) {
-		LOG_ERR("Publish failed: %d", ret);
-	}
-
-	return ret;
 }
 
 int nrf_cloud_fota_update_check(void)
