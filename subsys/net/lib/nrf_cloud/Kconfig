@@ -9,13 +9,7 @@ menuconfig NRF_CLOUD
 	select MQTT_LIB
 	select MQTT_LIB_TLS
 	select SETTINGS if !MQTT_CLEAN_SESSION
-	select FOTA_DOWNLOAD
-	select FOTA_DOWNLOAD_PROGRESS_EVT
-	select DOWNLOAD_CLIENT
-	select DOWNLOAD_CLIENT_TLS
-	select DFU_TARGET
-	select SETTINGS
-#TODO add NRF_FOTA kconfig opts
+
 if NRF_CLOUD
 
 config NRF_CLOUD_STATIC_IPV4
@@ -83,13 +77,27 @@ config NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN
 	int "Size of the buffer for MQTT PUBLISH payload."
 	default 2048
 
+menu "nRF Cloud FOTA"
+config NRF_CLOUD_FOTA
+	bool "Enable FOTA through nRF Cloud"
+	select FOTA_DOWNLOAD
+	select FOTA_DOWNLOAD_PROGRESS_EVT
+	select DFU_TARGET
+	select DOWNLOAD_CLIENT
+	select SETTINGS
+	default y
+
+if NRF_CLOUD_FOTA
 config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	int "Percentage increment at which FOTA download progress is reported"
-	depends on FOTA_DOWNLOAD_PROGRESS_EVT
+	depends on NRF_CLOUD_FOTA
 	range 0 100
 	default 10
 	help
 		0 disables progress report.
+endif #NRF_CLOUD_FOTA
+endmenu
+
 menu "nRF Cloud A-GPS"
 
 config NRF_CLOUD_AGPS
