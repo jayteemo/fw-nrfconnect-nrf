@@ -495,7 +495,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 			current_fota.sent_dl_progress = 0;
 		}
 
-		/* Always finished progress */
+		/* Always send finished progress */
 		if (current_fota.dl_progress != 100 &&
 		    ((current_fota.dl_progress -
 		      current_fota.sent_dl_progress) <
