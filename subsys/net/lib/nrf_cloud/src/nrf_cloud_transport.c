@@ -540,6 +540,7 @@ static int nct_settings_init(void)
 #endif
 
 	return ret;
+}
 
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt * const evt)
@@ -758,10 +759,10 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			if (err) {
 				LOG_ERR("Failed to save session state: %d",
 					err);
+			}
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 			err = nrf_cloud_fota_subscribe();
-			if (err)
-			{
+			if (err){
 				LOG_ERR("nrf_cloud_fota_subscribe() failed: %d", err);
 			}
 #endif
