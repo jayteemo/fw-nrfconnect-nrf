@@ -48,6 +48,7 @@ enum nrf_cloud_fota_error {
 	NRF_FOTA_ERROR_NONE = 0,
 	NRF_FOTA_ERROR_DOWNLOAD_START,
 	NRF_FOTA_ERROR_DOWNLOAD,
+	NRF_FOTA_ERROR_UNABLE_TO_VALIDATE,
 };
 
 struct nrf_cloud_fota_evt {
@@ -67,13 +68,12 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
 
+void nrf_cloud_fota_endpoint_clear(void);
 int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 				const char * const client_id,
 				const struct mqtt_utf8 * const endpoint);
 
 int nrf_cloud_fota_update_check(void);
-
-void nrf_cloud_fota_endpoint_clear(void);
 
 int nrf_cloud_fota_subscribe(void);
 int nrf_cloud_fota_unsubscribe(void);
