@@ -95,6 +95,11 @@ config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	default 10
 	help
 		0 disables progress report.
+
+config NRF_CLOUD_FOTA_HTTPS_DOWNLOADS
+	bool "Use https for firmware downloads"
+	depends on NRF_CLOUD_FOTA
+
 endif #NRF_CLOUD_FOTA
 endmenu
 
