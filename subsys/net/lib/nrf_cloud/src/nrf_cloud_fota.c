@@ -618,9 +618,9 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 
 	int ret;
 	int sec_tag = -1;
-	int fragment_size = 2048;
+	int fragment_size = 0;
 
-#if IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_TLS)
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_HTTPS_DOWNLOADS)
 	sec_tag = CONFIG_NRF_CLOUD_SEC_TAG;
 	fragment_size = 1024;
 #endif
