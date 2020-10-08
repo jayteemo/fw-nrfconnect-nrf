@@ -277,7 +277,7 @@ static int connection_handler(const struct nct_evt *nct_evt)
 	nfsm_set_current_state_and_notify(STATE_CONNECTED, &evt);
 
 	/* Connect the control channel now. */
-	//persistent_session = nct_evt->param.flag;
+	persistent_session = nct_evt->param.flag;
 	if (!persistent_session) {
 		err = nct_cc_connect();
 		if (err) {
