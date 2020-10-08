@@ -1,0 +1,13 @@
+# Target labels
+ spm_subimage
+# Source files and their labels
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/CMakeFiles/spm_subimage
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/CMakeFiles/spm_subimage.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/CMakeFiles/spm_subimage-complete.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-install.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-mkdir.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-download.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-update.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-patch.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-configure.rule
+/Users/justin/Github/FORKS/fota_v2/nrf/_build_asset_tracker_DK/modules/nrf/samples/spm_subimage-prefix/src/spm_subimage-stamp/spm_subimage-build.rule

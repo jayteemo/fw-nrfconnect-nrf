@@ -1,0 +1,2 @@
+"BOARD_ROOT":"/Users/justin/Github/FORKS/fota_v2/nrf"
+"DTS_ROOT":"/Users/justin/Github/FORKS/fota_v2/nrf"
