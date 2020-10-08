@@ -999,8 +999,6 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 			 const struct nrf_cloud_data *rx_endp,
 			 const struct nrf_cloud_data *m_endp)
 {
-	int ret;
-
 	LOG_DBG("nct_dc_endpoint_set");
 
 	/* In case the endpoint was previous set, free and reset
@@ -1018,8 +1016,9 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 		nct.dc_m_endp.utf8 = (const uint8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
-		ret = nrf_cloud_fota_endpoint_set(&nct.client, client_id_buf,
+		int ret = nrf_cloud_fota_endpoint_set(&nct.client, client_id_buf,
 						  &nct.dc_m_endp);
+
 		if (ret) {
 			LOG_ERR("Failed to set fota endpoint: %d", ret);
 		}
