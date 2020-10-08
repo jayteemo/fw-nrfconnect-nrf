@@ -1,6 +1,0 @@
-osource "/Users/justin/Github/FORKS/fota_v2/nrf/Kconfig.nrf"
-
-osource "/Users/justin/Github/FORKS/fota_v2/bootloader/mcuboot/zephyr/Kconfig"
-
-osource "/Users/justin/Github/FORKS/fota_v2/nrfxlib/Kconfig.nrfxlib"
-
