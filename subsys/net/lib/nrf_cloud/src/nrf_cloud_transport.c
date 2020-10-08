@@ -1047,8 +1047,6 @@ void nct_dc_endpoint_get(struct nrf_cloud_data *const tx_endp,
 
 int nct_dc_connect(void)
 {
-	int ret;
-
 	LOG_DBG("nct_dc_connect");
 
 	struct mqtt_topic subscribe_topic = {
@@ -1065,9 +1063,7 @@ int nct_dc_connect(void)
 		.message_id = NCT_DC_SUBSCRIBE_ID
 	};
 
-	ret = mqtt_subscribe(&nct.client, &subscription_list);
-
-	return ret;
+	return mqtt_subscribe(&nct.client, &subscription_list);
 }
 
 int nct_dc_send(const struct nct_dc_data *dc_data)
@@ -1095,8 +1091,12 @@ int nct_dc_disconnect(void)
 	ret = mqtt_unsubscribe(&nct.client, &subscription_list);
 
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
-	if (ret == 0) {
-		ret = nrf_cloud_fota_unsubscribe();
+	int err = nrf_cloud_fota_unsubscribe();
+	if (err) {
+		LOG_ERR("Failed to unsubscribe from FOTA topics: %d", err);
+		if (ret == 0) {
+			ret = err;
+		}
 	}
 #endif
 
