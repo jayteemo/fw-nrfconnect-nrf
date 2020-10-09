@@ -543,8 +543,8 @@ static int parse_job(struct nrf_cloud_fota_job * const job)
 	if (errno) {
 		goto handle_error;
 	}
-	if (job->type < NRF_FOTA_TYPE__BEGIN &&
-	    job->type >= NRF_FOTA_TYPE__END) {
+	if (job->type < NRF_FOTA_TYPE__FIRST ||
+	    job->type >= NRF_FOTA_TYPE__INVALID) {
 		LOG_ERR("Invalid FOTA type: %d", job->type);
 		goto handle_error;
 	}
