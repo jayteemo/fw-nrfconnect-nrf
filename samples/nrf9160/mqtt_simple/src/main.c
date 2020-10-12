@@ -15,6 +15,10 @@
 #include <logging/log.h>
 #if defined(CONFIG_LWM2M_CARRIER)
 #include <lwm2m_carrier.h>
+#else
+#include <at_cmd.h>
+#include <at_notif.h>
+#include <dk_buttons_and_leds.h>
 #endif
 
 LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
@@ -364,6 +368,81 @@ static int fds_init(struct mqtt_client *c)
 	return 0;
 }
 
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+static void sms_receiver_notif_parse(void *ctx, const char *notif)
+{
+	int err;
+	int length = strlen(notif);
+
+	if ((length < 12) || (strncmp(notif, "+CMT:", 5) != 0)) {
+		return;
+	}
+
+	err = at_cmd_write("AT+CNMA=1", NULL, 0, NULL);
+	if (err) {
+		LOG_ERR("Unable to ACK SMS notification");
+	} else {
+		LOG_INF("SMS ACKed");
+	}
+}
+
+static int init_sms(void)
+{
+	int err = at_notif_register_handler(NULL, sms_receiver_notif_parse);
+	if (err) {
+		LOG_ERR("Failed to register AT handler, err %d", err);
+		return err;
+	}
+
+	return at_cmd_write("AT+CNMI=3,2,0,1", NULL, 0, NULL);
+}
+
+static void send_sms(void)
+{
+	int err;
+	char sms[] = "AT+CMGS=<n>\r<SMS content>_";
+
+	sms[sizeof(sms) - 2] = '\x1a';
+
+	LOG_INF("Sending SMS...");
+	err = at_cmd_write(sms, NULL, 0, NULL);
+	if (err < 0) {
+		LOG_ERR("Failed to send SMS, error: %d", err);
+		return;
+	}
+
+	LOG_INF("SMS sent");
+}
+
+static void button_handler(u32_t button_states, u32_t has_changed)
+{
+	u8_t btn_num;
+
+	while (has_changed) {
+		btn_num = 0;
+
+		/* Get bit position for next button that changed state. */
+		for (u8_t i = 0; i < 32; i++) {
+			if (has_changed & BIT(i)) {
+				btn_num = i + 1;
+				break;
+			}
+		}
+
+		/* Button number has been stored, remove from bitmask. */
+		has_changed &= ~(1UL << (btn_num - 1));
+
+		LOG_DBG("Button num: %u, state: %lu",
+			btn_num, (button_states & BIT(btn_num - 1)));
+
+		/* button one, pressed */
+		if (btn_num == 1 &&button_states == 1) {
+			send_sms();
+		}
+	}
+}
+#endif
+
 /**@brief Configures modem to provide LTE link. Blocks until link is
  * successfully established.
  */
@@ -385,7 +464,15 @@ static void modem_configure(void)
 #else /* defined(CONFIG_LWM2M_CARRIER) */
 		int err;
 
-		LOG_INF("LTE Link Connecting ...");
+		err = init_sms();
+		if (err) {
+			LOG_ERR("Could not enable SMS");
+			return;
+		} else {
+			LOG_INF("SMS enabled");
+		}
+
+		LOG_INF("LTE Link Connecting...");
 		err = lte_lc_init_and_connect();
 		__ASSERT(err == 0, "LTE link could not be established.");
 		LOG_INF("LTE Link Connected!");
@@ -399,11 +486,16 @@ void main(void)
 {
 	int err;
 	uint32_t connect_attempt = 0;
+	s64_t start_time;
 
 	LOG_INF("The MQTT simple sample started");
 
-	modem_configure();
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+	dk_buttons_init(button_handler);
+#endif
 
+	modem_configure();
+	start_time = k_uptime_get();
 	client_init(&client);
 
 do_connect:
@@ -437,17 +529,26 @@ do_connect:
 	}
 
 	while (1) {
-		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
+
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+		s64_t time = start_time;
+		if (start_time &&
+		    (k_uptime_delta(&time) >= K_SECONDS(30))) {
+			send_sms();
+			/* only once */
+			start_time = 0;
+		}
+#endif
+
+		err = poll(&fds, 1, POLL_TIMEOUT_MS);
 		if (err < 0) {
 			LOG_ERR("poll %d", errno);
 			break;
 		}
 
-		err = poll(&fds, 1, POLL_TIMEOUT_MS);
-
 		if (err == 0) {
 			if (mqtt_keepalive_time_left(&client) <
-			    POLL_TIMEOUT_MS) {
+			    (POLL_TIMEOUT_MS + 5000)) {
 				mqtt_live(&client);
 			}
 			continue;
