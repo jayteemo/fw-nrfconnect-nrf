@@ -103,13 +103,35 @@ config NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN
 	int "Size of the buffer for MQTT PUBLISH payload."
 	default 2048
 
+menuconfig NRF_CLOUD_FOTA
+	bool "Enable FOTA through nRF Cloud"
+	select FOTA_DOWNLOAD
+	select FOTA_DOWNLOAD_PROGRESS_EVT
+	select DFU_TARGET
+	select DOWNLOAD_CLIENT
+	select REBOOT
+	depends on SETTINGS
+	default y
+
+if NRF_CLOUD_FOTA
 config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	int "Percentage increment at which FOTA download progress is reported"
-	depends on FOTA_DOWNLOAD_PROGRESS_EVT
 	range 0 100
 	default 10
 	help
 		0 disables progress report.
+
+config NRF_CLOUD_FOTA_DOWNLOAD_FRAGMENT_SIZE
+	int "Fragment size for FOTA downloads."
+	range 128 2000
+	default 1024
+
+config NRF_CLOUD_FOTA_BLE_DEVICES
+	bool "Enable API for FOTA of BLE devices"
+	depends on BT
+
+endif # NRF_CLOUD_FOTA
+
 menu "nRF Cloud A-GPS"
 
 config NRF_CLOUD_AGPS
@@ -126,7 +148,7 @@ module = NRF_CLOUD_AGPS
 module-str = nRF Cloud A-GPS
 source "subsys/logging/Kconfig.template.log_config"
 
-endif # NRF_CLOUD_AGPS"
+endif # NRF_CLOUD_AGPS
 endmenu
 
 config NRF_CLOUD_CONNECTION_POLL_THREAD
