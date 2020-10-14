@@ -52,7 +52,7 @@ enum nrf_cloud_fota_evt_id {
 /**@brief FOTA error detail. */
 enum nrf_cloud_fota_error {
 	/** No error. */
-	NRF_FOTA_ERROR_NONE = 0,
+	NRF_FOTA_ERROR_NONE,
 	/** Unable to connect to file server/start the download. */
 	NRF_FOTA_ERROR_DOWNLOAD_START,
 	/** Error during file download. */
@@ -80,7 +80,8 @@ struct nrf_cloud_fota_evt {
  *
  * @param[in]  evt The FOTA event and any associated parameters.
  */
-typedef void (*nrf_cloud_fota_callback_t)(const struct nrf_cloud_fota_evt * const evt);
+typedef void (*nrf_cloud_fota_callback_t)(const struct nrf_cloud_fota_evt *
+					  const evt);
 
 /**
  * @brief Initialize the nRF Cloud FOTA module.
@@ -104,6 +105,19 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
  * @return   A negative value on error.
  */
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
+
+/**@brief Set the information required for MQTT transactions and
+ *        report status of saved job (if present) to nRF Cloud.
+ *        This should be used during initialization.
+ * @param client      Pointer to the MQTT client instance.
+ * @param client_id   Client id of this device.
+ * @param endpoint    User and device specific MQTT endpoint.
+ *
+ * @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
+int nrf_cloud_fota_endpoint_set_and_report(struct mqtt_client *const client,
+	const char * const client_id, const struct mqtt_utf8 * const endpoint);
 
 /**@brief Set the information required for MQTT transactions.
  *

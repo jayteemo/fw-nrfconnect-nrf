@@ -176,6 +176,7 @@ enum fota_validate_status get_modem_update_status(void)
 
 	return ret;
 }
+
 int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 {
 	int err;
@@ -293,6 +294,51 @@ static int build_topic(const char * const client_id,
 	return 0;
 }
 
+int nrf_cloud_fota_endpoint_set_and_report(struct mqtt_client *const client,
+	const char * const client_id, const struct mqtt_utf8 * const endpoint)
+{
+	int ret = nrf_cloud_fota_endpoint_set(client, client_id, endpoint);
+
+	if (ret) {
+		LOG_ERR("Failed to set FOTA endpoint: %d", ret);
+		return ret;
+	}
+
+	/* Report status of saved job now that the endpoint is available */
+	if (saved_job.type != NRF_FOTA_TYPE__INVALID) {
+
+		struct nrf_cloud_fota_job job = { .type = saved_job.type,
+						  .id = saved_job.id };
+
+		switch (saved_job.validate) {
+		case NRF_FOTA_VALIDATE_UNKNOWN:
+			job.error = NRF_FOTA_ERROR_UNABLE_TO_VALIDATE;
+			/* fall-through */
+		case NRF_FOTA_VALIDATE_PASS:
+			job.status = NRF_FOTA_SUCCEEDED;
+			break;
+		case NRF_FOTA_VALIDATE_FAIL:
+			job.status = NRF_FOTA_FAILED;
+			break;
+		default:
+			LOG_ERR("Unexpected job validation status: %d",
+				saved_job.validate);
+			save_validate_status(job.id, job.type, NRF_FOTA_VALIDATE_DONE);
+			job.type = NRF_FOTA_TYPE__INVALID;
+			break;
+		}
+
+		if (job.type != NRF_FOTA_TYPE__INVALID) {
+			ret = send_job_update(&job);
+			if (ret) {
+				LOG_ERR("Error sending job update: %d", ret);
+			}
+		}
+	}
+
+	return ret;
+}
+
 int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 				const char * const client_id,
 				const struct mqtt_utf8 * const endpoint)
@@ -325,38 +371,6 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 			  &topic_req.topic);
 	if (ret) {
 		goto error_cleanup;
-	}
-
-	/* Report status of saved job now that the endpoint is available */
-	if (saved_job.type != NRF_FOTA_TYPE__INVALID) {
-
-		struct nrf_cloud_fota_job job = { .type = saved_job.type,
-						  .id = saved_job.id };
-
-		switch (saved_job.validate) {
-		case NRF_FOTA_VALIDATE_UNKNOWN:
-			job.error = NRF_FOTA_ERROR_UNABLE_TO_VALIDATE;
-			/* fall-through */
-		case NRF_FOTA_VALIDATE_PASS:
-			job.status = NRF_FOTA_SUCCEEDED;
-			break;
-		case NRF_FOTA_VALIDATE_FAIL:
-			job.status = NRF_FOTA_FAILED;
-			break;
-		default:
-			LOG_ERR("Unexpected job validation status: %d",
-				saved_job.validate);
-			save_validate_status(job.id, job.type, NRF_FOTA_VALIDATE_DONE);
-			job.type = NRF_FOTA_TYPE__INVALID;
-			break;
-		}
-
-		if (job.type != NRF_FOTA_TYPE__INVALID) {
-			int err = send_job_update(&job);
-			if (err) {
-				LOG_ERR("Error sending job update: %d", err);
-			}
-		}
 	}
 
 	return 0;
@@ -609,7 +623,10 @@ static void send_event(const enum nrf_cloud_fota_evt_id id,
 		break;
 	}
 
-	event_cb(&evt);
+	if (event_cb) {
+		event_cb(&evt);
+	}
+
 }
 
 static int start_job(struct nrf_cloud_fota_job * const job)
@@ -792,7 +809,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt * evt)
 				current_fota.mqtt_payload,
 				p->message.payload.len);
 		if (ret) {
-			LOG_ERR("Error reading MQTTT payload: %d", ret);
+			LOG_ERR("Error reading MQTT payload: %d", ret);
 			err = ret;
 			goto send_ack;
 		}
@@ -886,9 +903,12 @@ send_ack:
 		}
 
 		if (do_update_check) {
-			/* this shouldn't be needed as the
+			/* TODO:
+			 * This shouldn't be needed as the
 			 * backend will send jobs automatically
-			 * when one completes
+			 * when one completes. Verify backend
+			 * implementation works as expected and
+			 * then remove this.
 			 */
 			//nrf_cloud_fota_update_check();
 		}
