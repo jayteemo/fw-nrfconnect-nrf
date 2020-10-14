@@ -103,13 +103,32 @@ config NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN
 	int "Size of the buffer for MQTT PUBLISH payload."
 	default 2048
 
+menu "nRF Cloud FOTA"
+config NRF_CLOUD_FOTA
+	bool "Enable FOTA through nRF Cloud"
+	select FOTA_DOWNLOAD
+	select FOTA_DOWNLOAD_PROGRESS_EVT
+	select DFU_TARGET
+	select DOWNLOAD_CLIENT
+	depends on SETTINGS
+	default y
+
+if NRF_CLOUD_FOTA
 config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	int "Percentage increment at which FOTA download progress is reported"
-	depends on FOTA_DOWNLOAD_PROGRESS_EVT
+	depends on NRF_CLOUD_FOTA
 	range 0 100
 	default 10
 	help
 		0 disables progress report.
+
+config NRF_CLOUD_FOTA_HTTPS_DOWNLOADS
+	bool "Use https for firmware downloads"
+	depends on NRF_CLOUD_FOTA
+
+endif #NRF_CLOUD_FOTA
+endmenu
+
 menu "nRF Cloud A-GPS"
 
 config NRF_CLOUD_AGPS
