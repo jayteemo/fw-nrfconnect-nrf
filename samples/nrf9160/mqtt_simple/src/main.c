@@ -24,6 +24,7 @@
 LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
 
 #define DISCONNECT_STR "disconnect"
+#define LTE_CONNECT_RETRY_DELAY_S 480
 
 /* Buffers for MQTT client. */
 static u8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
@@ -446,7 +447,7 @@ static void button_handler(u32_t button_states, u32_t has_changed)
 /**@brief Configures modem to provide LTE link. Blocks until link is
  * successfully established.
  */
-static void modem_configure(void)
+static int modem_configure(void)
 {
 #if defined(CONFIG_LTE_LINK_CONTROL)
 	if (IS_ENABLED(CONFIG_LTE_AUTO_INIT_AND_CONNECT)) {
@@ -467,18 +468,23 @@ static void modem_configure(void)
 		err = init_sms();
 		if (err) {
 			LOG_ERR("Could not enable SMS");
-			return;
+			return err;
 		} else {
 			LOG_INF("SMS enabled");
 		}
 
 		LOG_INF("LTE Link Connecting...");
 		err = lte_lc_init_and_connect();
-		__ASSERT(err == 0, "LTE link could not be established.");
+		if (err) {
+			LOG_INF("Failed to establish LTE connection: %d", err);
+			return err;
+		}
 		LOG_INF("LTE Link Connected!");
 #endif /* defined(CONFIG_LWM2M_CARRIER) */
 	}
 #endif /* defined(CONFIG_LTE_LINK_CONTROL) */
+
+	return 0;
 }
 
 #define POLL_TIMEOUT_MS 500
@@ -494,7 +500,15 @@ void main(void)
 	dk_buttons_init(button_handler);
 #endif
 
-	modem_configure();
+	do {
+		err = modem_configure();
+		if (err) {
+			LOG_INF("Retrying in %d seconds.\n",
+				LTE_CONNECT_RETRY_DELAY_S);
+			k_sleep(K_SECONDS(LTE_CONNECT_RETRY_DELAY_S));
+		}
+	} while (err);
+
 	start_time = k_uptime_get();
 	client_init(&client);
 
