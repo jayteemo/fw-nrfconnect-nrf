@@ -525,7 +525,7 @@ do_connect:
 	}
 #endif
 
-	if (connect_attempt > 0) {
+	if (connect_attempt++ > 0) {
 		LOG_INF("Reconnecting in %d seconds...",
 			CONFIG_MQTT_RECONNECT_DELAY_S);
 		k_sleep(K_SECONDS(CONFIG_MQTT_RECONNECT_DELAY_S));
@@ -589,6 +589,5 @@ do_connect:
 
 	(void)mqtt_disconnect(&client);
 
-	++connect_attempt;
 	goto do_connect;
 }
