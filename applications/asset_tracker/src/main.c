@@ -1377,7 +1377,7 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 		LOG_INF("CLOUD_EVT_READY");
 		ui_led_set_pattern(UI_CLOUD_CONNECTED);
 
-#if defined(CONFIG_BOOTLOADER_MCUBOOT)
+#if defined(CONFIG_BOOTLOADER_MCUBOOT) && !IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 		/* Mark image as good to avoid rolling back after update */
 		boot_write_img_confirmed();
 #endif
@@ -1750,7 +1750,7 @@ static void ui_evt_handler(struct ui_evt evt)
 
 void handle_bsdlib_init_ret(void)
 {
-#if defined(CONFIG_BSD_LIBRARY)
+#if defined(CONFIG_BSD_LIBRARY) && !IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 	int ret = bsdlib_get_init_ret();
 
 	/* Handle return values relating to modem firmware update */
