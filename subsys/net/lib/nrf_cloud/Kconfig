@@ -126,6 +126,10 @@ config NRF_CLOUD_FOTA_HTTPS_DOWNLOADS
 	bool "Use https for firmware downloads"
 	depends on NRF_CLOUD_FOTA
 
+config NRF_CLOUD_FOTA_BLE_DEVICES
+	bool "Enable API for FOTA of BLE devices"
+	depends on NRF_CLOUD_FOTA
+
 endif #NRF_CLOUD_FOTA
 endmenu
 

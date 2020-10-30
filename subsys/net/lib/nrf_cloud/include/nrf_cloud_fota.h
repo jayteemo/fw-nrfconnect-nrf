@@ -8,6 +8,7 @@
 #define NRF_CLOUD_FOTA_H__
 
 #include <net/mqtt.h>
+#include <bluetooth/bluetooth.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +48,7 @@ enum nrf_cloud_fota_evt_id {
 	NRF_FOTA_EVT_ERASE_PENDING,
 	NRF_FOTA_EVT_ERASE_DONE,
 	NRF_FOTA_EVT_DL_PROGRESS,
+	NRF_FOTA_EVT_BLE_JOB_RCVD,
 };
 
 /**@brief FOTA error detail. */
@@ -61,6 +63,21 @@ enum nrf_cloud_fota_error {
 	NRF_FOTA_ERROR_UNABLE_TO_VALIDATE,
 };
 
+struct nrf_cloud_fota_job_info {
+	enum nrf_cloud_fota_type type;
+	char *id;
+	char *host;
+	char *path;
+	int file_size;
+};
+
+struct nrf_cloud_fota_ble_job {
+	bt_addr_t ble_id;
+	struct nrf_cloud_fota_job_info info;
+	enum nrf_cloud_fota_error error;
+	const int dl_progress; /* Download progress percent, 0-100. */
+};
+
  /**@brief FOTA event data provided to @ref nrf_cloud_fota_callback_t */
 struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_evt_id id;
@@ -68,9 +85,9 @@ struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_status status;
 	enum nrf_cloud_fota_type type;
 	union {
+		struct nrf_cloud_fota_job_info * ble_job;
 		enum nrf_cloud_fota_error error;
-		/** Download progress percent, 0-100. */
-		int dl_progress;
+		int dl_progress; /* Download progress percent, 0-100. */
 	} evt_data;
 };
 
@@ -82,6 +99,9 @@ struct nrf_cloud_fota_evt {
  */
 typedef void (*nrf_cloud_fota_callback_t)(const struct nrf_cloud_fota_evt *
 					  const evt);
+
+typedef void (*nrf_cloud_fota_ble_callback_t)(const struct nrf_cloud_fota_ble_job *
+const ble_job);
 
 /**
  * @brief Initialize the nRF Cloud FOTA module.
@@ -143,6 +163,14 @@ int nrf_cloud_fota_unsubscribe(void);
 
 /**@brief Check for pending FOTA updates. */
 int nrf_cloud_fota_update_check(void);
+
+int nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_callback_t cb);
+
+int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id);
+
+int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
+				  * const ble_job,
+				  const enum nrf_cloud_fota_status status);
 
 #ifdef __cplusplus
 }
