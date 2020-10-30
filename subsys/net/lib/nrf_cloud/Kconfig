@@ -129,6 +129,7 @@ config NRF_CLOUD_FOTA_HTTPS_DOWNLOADS
 config NRF_CLOUD_FOTA_BLE_DEVICES
 	bool "Enable API for FOTA of BLE devices"
 	depends on NRF_CLOUD_FOTA
+	depends on BT
 
 endif #NRF_CLOUD_FOTA
 endmenu
