@@ -84,6 +84,14 @@ struct settings_fota_job {
 	char id[JOB_ID_STRING_SIZE];
 };
 
+enum subscription_topic_index {
+	SUB_TOPIC_IDX_RCV,
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+	SUB_TOPIC_IDX_BLE_RCV,
+#endif
+	SUB_TOPIC_IDX__COUNT,
+};
+
 static void http_fota_handler(const struct fota_download_evt *evt);
 static void send_event(const enum nrf_cloud_fota_evt_id id,
 		       const struct nrf_cloud_fota_job * const job);
@@ -105,28 +113,20 @@ static int fota_settings_set(const char *key, size_t len_rd,
 static struct mqtt_client *client_mqtt;
 static nrf_cloud_fota_callback_t event_cb;
 
-static struct mqtt_topic topic_rcv = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_updt = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_req = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
-#if IS_ENABLED(NRF_CLOUD_FOTA_BLE_DEVICES)
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 static nrf_cloud_fota_ble_callback_t ble_cb;
-static struct mqtt_topic topic_ble_rcv = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_ble_updt = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_ble_req = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
-static const struct mqtt_subscription_list sub_list = {
-	.list = { &topic_rcv, &topic_ble_rcv },
-	.list_count = 2,
-	.message_id = NRF_CLOUD_FOTA_SUBSCRIBE_ID,
-};
-#else
-static const struct mqtt_subscription_list sub_list = {
-	.list = &topic_rcv,
-	.list_count = 1,
-	.message_id = NRF_CLOUD_FOTA_SUBSCRIBE_ID,
-};
 #endif
 
-
+static struct mqtt_topic sub_topics[SUB_TOPIC_IDX__COUNT] = {
+	{.qos = MQTT_QOS_1_AT_LEAST_ONCE},
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+	{.qos = MQTT_QOS_1_AT_LEAST_ONCE},
+#endif
+};
 
 static enum fota_download_evt_id last_fota_dl_evt = FOTA_DOWNLOAD_EVT_ERROR;
 static struct nrf_cloud_fota_job current_fota;
@@ -274,9 +274,14 @@ static void reset_topic(struct mqtt_utf8 * const topic)
 
 static void reset_topics(void)
 {
-	reset_topic(&topic_rcv.topic);
+	reset_topic(&sub_topics[SUB_TOPIC_IDX_RCV].topic);
 	reset_topic(&topic_updt.topic);
 	reset_topic(&topic_req.topic);
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+	reset_topic(&sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic);
+	reset_topic(&topic_ble_updt.topic);
+	reset_topic(&topic_ble_req.topic);
+#endif
 }
 
 static int build_topic(const char * const client_id,
@@ -379,7 +384,7 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 	reset_topics();
 
 	ret = build_topic(client_id, endpoint, TOPIC_FOTA_RCV,
-			  &topic_rcv.topic);
+			  &sub_topics[SUB_TOPIC_IDX_RCV].topic);
 	if (ret) {
 		goto error_cleanup;
 	}
@@ -396,9 +401,9 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 		goto error_cleanup;
 	}
 
-#if IS_ENABLED(NRF_CLOUD_FOTA_BLE_DEVICES)
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	ret = build_topic(client_id, endpoint, BLE_TOPIC_FOTA_RCV,
-			  &topic_ble_rcv.topic);
+			  &sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic);
 	if (ret) {
 		goto error_cleanup;
 	}
@@ -431,6 +436,12 @@ void nrf_cloud_fota_endpoint_clear(void)
 
 int nrf_cloud_fota_subscribe(void)
 {
+	struct mqtt_subscription_list sub_list = {
+		.list = sub_topics,
+		.list_count = ARRAY_SIZE(sub_topics),
+		.message_id = NRF_CLOUD_FOTA_SUBSCRIBE_ID
+	};
+
 	for (int i = 0; i < sub_list.list_count; ++i) {
 		if (sub_list.list[i].topic.size == 0 ||
 		    sub_list.list[i].topic.utf8 == NULL) {
@@ -445,6 +456,12 @@ int nrf_cloud_fota_subscribe(void)
 
 int nrf_cloud_fota_unsubscribe(void)
 {
+	struct mqtt_subscription_list sub_list = {
+		.list = sub_topics,
+		.list_count = ARRAY_SIZE(sub_topics),
+		.message_id = NRF_CLOUD_FOTA_SUBSCRIBE_ID
+	};
+
 	for (int i = 0; i < sub_list.list_count; ++i) {
 		if (sub_list.list[i].topic.size == 0 ||
 		    sub_list.list[i].topic.utf8 == NULL) {
@@ -822,7 +839,8 @@ int nrf_cloud_fota_update_check(void)
 
 int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 {
-	if (topic_rcv.topic.utf8 == NULL || topic_rcv.topic.size == 0) {
+	if (sub_topics[SUB_TOPIC_IDX_RCV].topic.utf8 == NULL ||
+	    sub_topics[SUB_TOPIC_IDX_RCV].topic.size == 0) {
 		/* Ignore MQTT until a topic has been set */
 		return 1;
 	}
@@ -832,7 +850,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 	switch (evt->type) {
 	case MQTT_EVT_PUBLISH: {
 		int err = 0;
-		bool start = false;
+		bool valid_job = false;
 		char * payload = NULL;
 		size_t payload_size = 0;
 		bt_addr_t * ble_id = NULL;
@@ -845,15 +863,14 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 		struct nrf_cloud_fota_ble_job ble_job;
 
-		if (strstr(topic_ble_rcv.topic.utf8,
+		if (strstr(sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic.utf8,
 			   p->message.topic.topic.utf8) != NULL) {
-			ble_fota = true;
 			job_info = &ble_job.info;
 			ble_id = &ble_job.ble_id;
 		}
 #endif
-		if (strstr(topic_rcv.topic.utf8, p->message.topic.topic.utf8)
-		    == NULL && !ble_id) {
+		if (strstr(sub_topics[SUB_TOPIC_IDX_RCV].topic.utf8,
+			   p->message.topic.topic.utf8) == NULL && !ble_id) {
 			return 1;
 		}
 
@@ -885,7 +902,6 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 
 		ret = parse_job_info(job_info, ble_id, payload, payload_size);
 		if (ret) {
-			nrf_cloud_free(payload);
 			if (job_info == &current_fota.info) {
 				memset(&current_fota, 0, sizeof(current_fota));
 			}
@@ -893,7 +909,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 			goto send_ack;
 		}
 
-		start = true;
+		valid_job = true;
 send_ack:
 		if (p->message.topic.qos == MQTT_QOS_0_AT_MOST_ONCE) {
 			LOG_DBG("No ack required");
@@ -904,34 +920,31 @@ send_ack:
 			}
 		}
 
-		if (start) {
-			if (ble_id) {
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
-				ble_cb(ble_job);
+		if (!valid_job) {
+			if (payload) {
 				nrf_cloud_free(payload);
+			}
+			return (err ? err : ret);
+		}
+
+		if (ble_id) {
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+			if (ble_cb) {
+				ble_cb(&ble_job);
+			}
+			nrf_cloud_free(payload);
 #endif
-			} else {
-				current_fota.mqtt_payload = payload;
-				current_fota.mqtt_payload_size = payload_size;
-				ret = start_job(&current_fota);
-				(void)send_job_update(&current_fota);
-				if (ret) {
-					cleanup_job(&current_fota);
-					ret = 0;
-				}
+		} else {
+			current_fota.mqtt_payload = payload;
+			current_fota.mqtt_payload_size = payload_size;
+			ret = start_job(&current_fota);
+			(void)send_job_update(&current_fota);
+			if (ret) {
+				cleanup_job(&current_fota);
 			}
 		}
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
-		struct nrf_cloud_fota_ble_job ble_job;
-		if (strstr(topic_ble_rcv.topic.utf8,
-			   p->message.topic.topic.utf8) != NULL) {
-
-			goto send_ack;
-		}
-#endif
-
-		return (err ? err : ret);
+		return 0;
 	}
 	case MQTT_EVT_SUBACK:
 	{
@@ -1034,7 +1047,7 @@ int nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_callback_t cb)
 int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id)
 {
 	if (ble_id == NULL) {
-		return -EINVAL
+		return -EINVAL;
 	} else if (client_mqtt == NULL) {
 		return -ENXIO;
 	} else if (topic_req.topic.utf8 == NULL) {
@@ -1049,7 +1062,8 @@ int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id)
 		.retain_flag = 0,
 	};
 
-	ret = bt_addr_to_str(ble_id, ble_id_str, BT_ADDR_LE_STR_LEN);
+	int ret = bt_addr_to_str(ble_id, ble_id_str, BT_ADDR_LE_STR_LEN);
+
 	if (ret != sizeof(ble_id->val)) {
 		return -EADDRNOTAVAIL;
 	}
@@ -1061,7 +1075,7 @@ int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id)
 		return -E2BIG;
 	}
 
-	param.message.topic = topic_req;
+	param.message.topic = topic_ble_req;
 	param.message.payload.data = payload;
 	param.message.payload.len = ret;
 
@@ -1071,7 +1085,7 @@ int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id)
 int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 				  * const ble_job,
 				  const enum nrf_cloud_fota_status status)
-}
+{
 	if (ble_job == NULL) {
 		return -EINVAL;
 	} else if (topic_ble_updt.topic.utf8 == NULL) {
@@ -1089,8 +1103,8 @@ int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 		.retain_flag = 0,
 	};
 
-	ret = bt_addr_to_str(ble_job->ble_id, ble_id_str, BT_ADDR_LE_STR_LEN);
-	if (ret != sizeof(ble_job->ble_id->val)) {
+	ret = bt_addr_to_str(&ble_job->ble_id, ble_id_str, BT_ADDR_LE_STR_LEN);
+	if (ret != sizeof(ble_job->ble_id.val)) {
 		return -EADDRNOTAVAIL;
 	}
 

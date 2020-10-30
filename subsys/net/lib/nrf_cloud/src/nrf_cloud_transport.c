@@ -70,10 +70,10 @@ LOG_MODULE_REGISTER(nrf_cloud_transport, CONFIG_NRF_CLOUD_LOG_LEVEL);
 #define NCT_REJECTED_TOPIC AWS "%s/shadow/get/rejected"
 #define NCT_REJECTED_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
 
-//#define NCT_UPDATE_DELTA_TOPIC AWS "%s/shadow/update/delta"
-//#define NCT_UPDATE_DELTA_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
-#define NCT_UPDATE_DELTA_TOPIC "%s/shadow/update/delta"
-#define NCT_UPDATE_DELTA_TOPIC_LEN (NRF_CLOUD_CLIENT_ID_LEN + 20)
+#define NCT_UPDATE_DELTA_TOPIC AWS "%s/shadow/update/delta"
+#define NCT_UPDATE_DELTA_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 20)
+//#define NCT_UPDATE_DELTA_TOPIC "%s/shadow/update/delta"
+//#define NCT_UPDATE_DELTA_TOPIC_LEN (NRF_CLOUD_CLIENT_ID_LEN + 20)
 
 #define NCT_UPDATE_TOPIC AWS "%s/shadow/update"
 #define NCT_UPDATE_TOPIC_LEN (AWS_LEN + NRF_CLOUD_CLIENT_ID_LEN + 14)
@@ -683,6 +683,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 		return;
 	} else if (err < 0) {
 		LOG_ERR("nrf_cloud_fota_mqtt_evt_handler: Failed! %d", err);
+		return;
 	}
 #endif
 
