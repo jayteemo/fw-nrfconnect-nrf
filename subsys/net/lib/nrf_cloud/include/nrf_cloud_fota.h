@@ -85,7 +85,6 @@ struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_status status;
 	enum nrf_cloud_fota_type type;
 	union {
-		struct nrf_cloud_fota_job_info * ble_job;
 		enum nrf_cloud_fota_error error;
 		int dl_progress; /* Download progress percent, 0-100. */
 	} evt_data;
