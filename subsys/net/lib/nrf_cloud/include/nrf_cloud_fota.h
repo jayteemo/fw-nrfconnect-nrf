@@ -63,6 +63,7 @@ enum nrf_cloud_fota_error {
 	NRF_FOTA_ERROR_UNABLE_TO_VALIDATE,
 };
 
+/**@brief Common FOTA job info */
 struct nrf_cloud_fota_job_info {
 	enum nrf_cloud_fota_type type;
 	char *id;
@@ -71,6 +72,7 @@ struct nrf_cloud_fota_job_info {
 	int file_size;
 };
 
+/**@brief FOTA info for a BLE job */
 struct nrf_cloud_fota_ble_job {
 	bt_addr_t ble_id;
 	struct nrf_cloud_fota_job_info info;
@@ -78,7 +80,7 @@ struct nrf_cloud_fota_ble_job {
 	const int dl_progress; /* Download progress percent, 0-100. */
 };
 
- /**@brief FOTA event data provided to @ref nrf_cloud_fota_callback_t */
+/**@brief FOTA event data provided to @ref nrf_cloud_fota_callback_t */
 struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_evt_id id;
 
@@ -163,10 +165,35 @@ int nrf_cloud_fota_unsubscribe(void);
 /**@brief Check for pending FOTA updates. */
 int nrf_cloud_fota_update_check(void);
 
+/**
+ * @brief Set callback for BLE FOTA.
+ *
+ * @param[in] cb BLE FOTA event handler.
+ *
+ * @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
 int nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_callback_t cb);
 
+/**
+ * @brief Check for a pending FOTA update for the specified BLE device.
+ *
+ * @param[in] ble_id BLE device ID.
+ *
+ * @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
 int nrf_cloud_fota_ble_update_check(const bt_addr_t * const ble_id);
 
+/**
+ * @brief Update the status of a BLE FOTA job.
+ *
+ * @param[in] ble_job BLE job info.
+ * @param[in] status BLE job.
+ *
+ * @retval 0 If successful.
+ *           Otherwise, a (negative) error code is returned.
+ */
 int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 				  * const ble_job,
 				  const enum nrf_cloud_fota_status status);

@@ -543,10 +543,10 @@ static int nct_settings_init(void)
 }
 
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+/* TODO: remove after testing */
 static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 					  const ble_job)
 {
-	/* TODO: remove after testing */
 	LOG_INF("FOTA for BLE ID: %X:%X:%X:%X:%X:%X",
 		ble_job->ble_id.val[5],
 		ble_job->ble_id.val[4],
@@ -563,6 +563,7 @@ static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 		log_strdup(ble_job->info.path));
 	nrf_cloud_fota_ble_job_update(ble_job, NRF_FOTA_SUCCEEDED);
 }
+/* ^ remove ^ */
 
 static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 				      * const evt)
@@ -862,6 +863,7 @@ int nct_init(void)
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_cb_handler);
 #endif
+/* ^ remove ^ */
 
 #endif
 
