@@ -621,7 +621,7 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	/* Get BLE ID */
 	if (ble_id) {
-		tok = strtok_r(payload, "[\",]", &save_ptr);
+		tok = strtok_r(NULL, "[\",]", &save_ptr);
 		if (!tok) {
 			return -ENOMSG;
 		}
@@ -1089,7 +1089,7 @@ int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 	if (ble_job == NULL) {
 		return -EINVAL;
 	} else if (topic_ble_updt.topic.utf8 == NULL) {
-		return -EADDRNOTAVAIL;
+		return -ENODEV;
 	} else if (client_mqtt == NULL) {
 		return -ENXIO;
 	}
@@ -1104,7 +1104,7 @@ int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 	};
 
 	ret = bt_addr_to_str(&ble_job->ble_id, ble_id_str, BT_ADDR_LE_STR_LEN);
-	if (ret != sizeof(ble_job->ble_id.val)) {
+	if (ret < 0 || ret >= BT_ADDR_LE_STR_LEN) {
 		return -EADDRNOTAVAIL;
 	}
 
