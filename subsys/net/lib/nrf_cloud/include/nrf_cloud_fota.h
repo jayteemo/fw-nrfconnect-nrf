@@ -101,6 +101,15 @@ struct nrf_cloud_fota_evt {
 typedef void (*nrf_cloud_fota_callback_t)(const struct nrf_cloud_fota_evt *
 					  const evt);
 
+/**
+ * @brief  BLE FOTA handler registered with the nRF Cloud FOTA module to handle
+ *  asynchronous events.
+ *
+ * @warning The memory pointed to by ble_job will be freed after the handler
+ * has returned.
+ *
+ * @param[in]  ble_job The BLE FOTA job.
+ */
 typedef void (*nrf_cloud_fota_ble_callback_t)(const struct nrf_cloud_fota_ble_job *
 const ble_job);
 
