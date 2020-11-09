@@ -544,6 +544,7 @@ static int nct_settings_init(void)
 
 #if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
 /* TODO: remove after testing */
+#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 					  const ble_job)
 {
@@ -563,6 +564,7 @@ static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 		log_strdup(ble_job->info.path));
 	nrf_cloud_fota_ble_job_update(ble_job, NRF_FOTA_SUCCEEDED);
 }
+#endif
 /* ^ remove ^ */
 
 static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
