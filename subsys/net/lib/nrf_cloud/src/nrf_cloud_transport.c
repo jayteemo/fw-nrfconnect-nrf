@@ -496,7 +496,7 @@ static int nct_settings_set(const char *key, size_t len_rd,
 		     strlen(SETTINGS_KEY_PERSISTENT_SESSION)) &&
 	    (len_rd == sizeof(read_val))) {
 		if (read_cb(cb_arg, (void *)&read_val, len_rd) == len_rd) {
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)
+#if !defined(CONFIG_MQTT_CLEAN_SESSION)
 			persistent_session = (bool)read_val;
 #endif
 			LOG_DBG("Read setting val: %d", read_val);
@@ -510,7 +510,7 @@ int save_session_state(const int session_valid)
 {
 	int ret = 0;
 
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)
+#if !defined(CONFIG_MQTT_CLEAN_SESSION)
 	LOG_DBG("Setting session state: %d", session_valid);
 	persistent_session = (bool)session_valid;
 	ret = settings_save_one(SETTINGS_FULL_PERSISTENT_SESSION,
@@ -523,13 +523,13 @@ static int nct_settings_init(void)
 {
 	int ret = 0;
 
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION) || defined(CONFIG_NRF_CLOUD_FOTA)
+#if !defined(CONFIG_MQTT_CLEAN_SESSION) || defined(CONFIG_NRF_CLOUD_FOTA)
 	ret = settings_subsys_init();
 	if (ret) {
 		LOG_ERR("Settings init failed: %d", ret);
 		return ret;
 	}
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION)
+#if !defined(CONFIG_MQTT_CLEAN_SESSION)
 	ret = settings_load_subtree(settings_handler_nrf_cloud.name);
 	if (ret) {
 		LOG_ERR("Cannot load settings: %d", ret);
