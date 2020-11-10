@@ -6,7 +6,7 @@
 
 #include "nrf_cloud_transport.h"
 #include "nrf_cloud_mem.h"
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 #include "nrf_cloud_fota.h"
 #endif
 
@@ -226,7 +226,7 @@ static void dc_endpoint_free(void)
 		nrf_cloud_free((void *)nct.job_status_endp.utf8);
 	}
 	dc_endpoint_reset();
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 	nrf_cloud_fota_endpoint_clear();
 #endif
 }
@@ -523,7 +523,7 @@ static int nct_settings_init(void)
 {
 	int ret = 0;
 
-#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION) || IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if !IS_ENABLED(CONFIG_MQTT_CLEAN_SESSION) || defined(CONFIG_NRF_CLOUD_FOTA)
 	ret = settings_subsys_init();
 	if (ret) {
 		LOG_ERR("Settings init failed: %d", ret);
@@ -542,9 +542,9 @@ static int nct_settings_init(void)
 	return ret;
 }
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 /* TODO: remove after testing */
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 					  const ble_job)
 {
@@ -699,7 +699,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	struct nct_dc_data dc;
 	bool event_notify = false;
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 	err = nrf_cloud_fota_mqtt_evt_handler(_mqtt_evt);
 	if (err == 0) {
 		return;
@@ -799,7 +799,7 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 				LOG_ERR("Failed to save session state: %d",
 					err);
 			}
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 			err = nrf_cloud_fota_subscribe();
 			if (err) {
 				LOG_ERR("FOTA MQTT subscribe failed: %d", err);
@@ -855,14 +855,14 @@ int nct_init(void)
 		return err;
 	}
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 	err = nrf_cloud_fota_init(nrf_cloud_fota_cb_handler);
 	if (err) {
 		return err;
 	}
 
 /* TODO: remove after testing */
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_cb_handler);
 #endif
 /* ^ remove ^ */
@@ -1061,7 +1061,7 @@ void nct_dc_endpoint_set(const struct nrf_cloud_data *tx_endp,
 	if (m_endp != NULL) {
 		nct.dc_m_endp.utf8 = (const uint8_t *)m_endp->ptr;
 		nct.dc_m_endp.size = m_endp->len;
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 		(void)nrf_cloud_fota_endpoint_set_and_report(&nct.client,
 			client_id_buf, &nct.dc_m_endp);
 #endif
@@ -1131,7 +1131,7 @@ int nct_dc_disconnect(void)
 
 	ret = mqtt_unsubscribe(&nct.client, &subscription_list);
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA)
+#if defined(CONFIG_NRF_CLOUD_FOTA)
 	int err = nrf_cloud_fota_unsubscribe();
 
 	if (err) {

@@ -102,7 +102,7 @@ struct settings_fota_job {
 
 enum subscription_topic_index {
 	SUB_TOPIC_IDX_RCV,
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	SUB_TOPIC_IDX_BLE_RCV,
 #endif
 	SUB_TOPIC_IDX__COUNT,
@@ -131,7 +131,7 @@ static nrf_cloud_fota_callback_t event_cb;
 
 static struct mqtt_topic topic_updt = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_req = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 static nrf_cloud_fota_ble_callback_t ble_cb;
 static struct mqtt_topic topic_ble_updt = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 static struct mqtt_topic topic_ble_req = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
@@ -139,7 +139,7 @@ static struct mqtt_topic topic_ble_req = { .qos = MQTT_QOS_1_AT_LEAST_ONCE };
 
 static struct mqtt_topic sub_topics[SUB_TOPIC_IDX__COUNT] = {
 	{.qos = MQTT_QOS_1_AT_LEAST_ONCE},
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	{.qos = MQTT_QOS_1_AT_LEAST_ONCE},
 #endif
 };
@@ -293,7 +293,7 @@ static void reset_topics(void)
 	reset_topic(&sub_topics[SUB_TOPIC_IDX_RCV].topic);
 	reset_topic(&topic_updt.topic);
 	reset_topic(&topic_req.topic);
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	reset_topic(&sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic);
 	reset_topic(&topic_ble_updt.topic);
 	reset_topic(&topic_ble_req.topic);
@@ -417,7 +417,7 @@ int nrf_cloud_fota_endpoint_set(struct mqtt_client *const client,
 		goto error_cleanup;
 	}
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	ret = build_topic(client_id, endpoint, BLE_TOPIC_FOTA_RCV,
 			  &sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic);
 	if (ret) {
@@ -741,7 +741,7 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 	int sec_tag = -1;
 	int fragment_size = 0;
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_HTTPS_DOWNLOADS)
+#if defined(CONFIG_NRF_CLOUD_FOTA_HTTPS_DOWNLOADS)
 	sec_tag = CONFIG_NRF_CLOUD_SEC_TAG;
 	fragment_size = 1024;
 #endif
@@ -878,7 +878,7 @@ static int handle_mqtt_evt_publish(const struct mqtt_evt *evt)
 		.message_id = p->message_id
 	};
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 	struct nrf_cloud_fota_ble_job ble_job;
 
 	if (strstr(sub_topics[SUB_TOPIC_IDX_BLE_RCV].topic.utf8,
@@ -944,7 +944,7 @@ send_ack:
 	}
 
 	if (ble_id) {
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 		if (ble_cb) {
 			ble_cb(&ble_job);
 		}
@@ -1065,7 +1065,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 	return 0;
 }
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
 int nrf_cloud_fota_ble_set_handler(nrf_cloud_fota_ble_callback_t cb)
 {
 	if (!cb) {
