@@ -562,7 +562,7 @@ static void nrf_cloud_fota_ble_cb_handler(const struct nrf_cloud_fota_ble_job *
 	LOG_INF("File path: %s/%s",
 		log_strdup(ble_job->info.host),
 		log_strdup(ble_job->info.path));
-	nrf_cloud_fota_ble_job_update(ble_job, NRF_FOTA_SUCCEEDED);
+	nrf_cloud_fota_ble_job_update(ble_job, NRF_CLOUD_FOTA_SUCCEEDED);
 }
 #endif
 /* ^ remove ^ */
@@ -571,33 +571,33 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 				      * const evt)
 {
 	switch (evt->id) {
-	case NRF_FOTA_EVT_START:
+	case NRF_CLOUD_FOTA_EVT_START:
 	{
-		LOG_DBG("NRF_FOTA_EVT_START");
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_START");
 		break;
 	}
-	case NRF_FOTA_EVT_DONE:
+	case NRF_CLOUD_FOTA_EVT_DONE:
 	{
-		LOG_DBG("NRF_FOTA_EVT_DONE: rebooting");
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_DONE: rebooting");
 		nct_apply_update();
 		break;
 	}
-	case NRF_FOTA_EVT_ERROR:
+	case NRF_CLOUD_FOTA_EVT_ERROR:
 	{
-		LOG_ERR("NRF_FOTA_EVT_ERROR");
+		LOG_ERR("NRF_CLOUD_FOTA_EVT_ERROR");
 		break;
 	}
-	case NRF_FOTA_EVT_ERASE_PENDING:
+	case NRF_CLOUD_FOTA_EVT_ERASE_PENDING:
 	{
-		LOG_DBG("NRF_FOTA_EVT_ERASE_PENDING");
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_ERASE_PENDING");
 		break;
 	}
-	case NRF_FOTA_EVT_ERASE_DONE:
+	case NRF_CLOUD_FOTA_EVT_ERASE_DONE:
 	{
-		LOG_DBG("NRF_FOTA_EVT_ERASE_DONE");
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_ERASE_DONE");
 		break;
 	}
-	case NRF_FOTA_EVT_DL_PROGRESS:
+	case NRF_CLOUD_FOTA_EVT_DL_PROGRESS:
 	{
 		break;
 	}

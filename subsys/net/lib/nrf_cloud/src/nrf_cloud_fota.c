@@ -76,12 +76,12 @@ enum rcv_item_idx {
 };
 
 enum fota_validate_status {
-	NRF_FOTA_VALIDATE_NONE = 0,
-	NRF_FOTA_VALIDATE_PENDING,
-	NRF_FOTA_VALIDATE_PASS,
-	NRF_FOTA_VALIDATE_FAIL,
-	NRF_FOTA_VALIDATE_UNKNOWN,
-	NRF_FOTA_VALIDATE_DONE
+	NRF_CLOUD_FOTA_VALIDATE_NONE = 0,
+	NRF_CLOUD_FOTA_VALIDATE_PENDING,
+	NRF_CLOUD_FOTA_VALIDATE_PASS,
+	NRF_CLOUD_FOTA_VALIDATE_FAIL,
+	NRF_CLOUD_FOTA_VALIDATE_UNKNOWN,
+	NRF_CLOUD_FOTA_VALIDATE_DONE
 };
 
 struct nrf_cloud_fota_job {
@@ -146,7 +146,7 @@ static struct mqtt_topic sub_topics[SUB_TOPIC_IDX__COUNT] = {
 
 static enum fota_download_evt_id last_fota_dl_evt = FOTA_DOWNLOAD_EVT_ERROR;
 static struct nrf_cloud_fota_job current_fota;
-static struct settings_fota_job saved_job = { .type = NRF_FOTA_TYPE__INVALID };
+static struct settings_fota_job saved_job = { .type = NRF_CLOUD_FOTA_TYPE__INVALID };
 static bool initialized;
 
 #define SETTINGS_KEY_FOTA "fota"
@@ -185,7 +185,7 @@ static int fota_settings_set(const char *key, size_t len_rd,
 
 enum fota_validate_status get_modem_update_status(void)
 {
-	enum fota_validate_status ret = NRF_FOTA_VALIDATE_UNKNOWN;
+	enum fota_validate_status ret = NRF_CLOUD_FOTA_VALIDATE_UNKNOWN;
 
 #if defined(CONFIG_BSD_LIBRARY)
 	int modem_dfu_res = bsdlib_get_init_ret();
@@ -194,14 +194,14 @@ enum fota_validate_status get_modem_update_status(void)
 	switch (modem_dfu_res) {
 	case MODEM_DFU_RESULT_OK:
 		LOG_DBG("Modem FOTA OK");
-		ret = NRF_FOTA_VALIDATE_PASS;
+		ret = NRF_CLOUD_FOTA_VALIDATE_PASS;
 		break;
 	case MODEM_DFU_RESULT_UUID_ERROR:
 	case MODEM_DFU_RESULT_AUTH_ERROR:
 	case MODEM_DFU_RESULT_HARDWARE_ERROR:
 	case MODEM_DFU_RESULT_INTERNAL_ERROR:
 		LOG_ERR("Modem FOTA error: %d", modem_dfu_res);
-		ret = NRF_FOTA_VALIDATE_FAIL;
+		ret = NRF_CLOUD_FOTA_VALIDATE_FAIL;
 		break;
 	default:
 		LOG_DBG("Modem FOTA result unknown: %d", modem_dfu_res);
@@ -215,7 +215,7 @@ enum fota_validate_status get_modem_update_status(void)
 int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 {
 	int err;
-	enum fota_validate_status validate = NRF_FOTA_VALIDATE_UNKNOWN;
+	enum fota_validate_status validate = NRF_CLOUD_FOTA_VALIDATE_UNKNOWN;
 
 	if (cb == NULL) {
 		LOG_ERR("Invalid parameter");
@@ -239,7 +239,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		LOG_ERR("Cannot load settings: %d", err);
 	}
 
-	if (saved_job.validate == NRF_FOTA_VALIDATE_PENDING) {
+	if (saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_PENDING) {
 #if defined(CONFIG_BOOTLOADER_MCUBOOT)
 		if (!boot_is_img_confirmed()) {
 			err = boot_write_img_confirmed();
@@ -249,22 +249,22 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 				/* If this fails then MCUBOOT will revert
 				 * to the previous image on reboot
 				 */
-				validate = NRF_FOTA_VALIDATE_FAIL;
+				validate = NRF_CLOUD_FOTA_VALIDATE_FAIL;
 			} else {
 				LOG_DBG("FOTA update confirmed");
-				validate = NRF_FOTA_VALIDATE_PASS;
+				validate = NRF_CLOUD_FOTA_VALIDATE_PASS;
 			}
 		}
 #endif
 
-		if (saved_job.type == NRF_FOTA_MODEM) {
+		if (saved_job.type == NRF_CLOUD_FOTA_MODEM) {
 			validate = get_modem_update_status();
 		}
 
 		/* save status and update when cloud connection is ready */
 		save_validate_status(saved_job.id, saved_job.type, validate);
 
-		if (saved_job.type == NRF_FOTA_MODEM) {
+		if (saved_job.type == NRF_CLOUD_FOTA_MODEM) {
 			/* Reboot is required */
 			LOG_INF("Rebooting to complete modem FOTA");
 			sys_reboot(SYS_REBOOT_COLD);
@@ -345,7 +345,7 @@ int nrf_cloud_fota_endpoint_set_and_report(struct mqtt_client *const client,
 	}
 
 	/* Report status of saved job now that the endpoint is available */
-	if (saved_job.type != NRF_FOTA_TYPE__INVALID) {
+	if (saved_job.type != NRF_CLOUD_FOTA_TYPE__INVALID) {
 
 		struct nrf_cloud_fota_job job = {
 			.info = { .type = saved_job.type,
@@ -354,25 +354,25 @@ int nrf_cloud_fota_endpoint_set_and_report(struct mqtt_client *const client,
 			};
 
 		switch (saved_job.validate) {
-		case NRF_FOTA_VALIDATE_UNKNOWN:
-			job.error = NRF_FOTA_ERROR_UNABLE_TO_VALIDATE;
+		case NRF_CLOUD_FOTA_VALIDATE_UNKNOWN:
+			job.error = NRF_CLOUD_FOTA_ERROR_UNABLE_TO_VALIDATE;
 			/* fall-through */
-		case NRF_FOTA_VALIDATE_PASS:
-			job.status = NRF_FOTA_SUCCEEDED;
+		case NRF_CLOUD_FOTA_VALIDATE_PASS:
+			job.status = NRF_CLOUD_FOTA_SUCCEEDED;
 			break;
-		case NRF_FOTA_VALIDATE_FAIL:
-			job.status = NRF_FOTA_FAILED;
+		case NRF_CLOUD_FOTA_VALIDATE_FAIL:
+			job.status = NRF_CLOUD_FOTA_FAILED;
 			break;
 		default:
 			LOG_ERR("Unexpected job validation status: %d",
 				saved_job.validate);
 			save_validate_status(job.info.id, job.info.type,
-					     NRF_FOTA_VALIDATE_DONE);
-			job.info.type = NRF_FOTA_TYPE__INVALID;
+					     NRF_CLOUD_FOTA_VALIDATE_DONE);
+			job.info.type = NRF_CLOUD_FOTA_TYPE__INVALID;
 			break;
 		}
 
-		if (job.info.type != NRF_FOTA_TYPE__INVALID) {
+		if (job.info.type != NRF_CLOUD_FOTA_TYPE__INVALID) {
 			ret = send_job_update(&job);
 			if (ret) {
 				LOG_ERR("Error sending job update: %d", ret);
@@ -504,10 +504,10 @@ static int save_validate_status(const char * const job_id,
 	LOG_DBG("%s() - %s, %d, %d",
 		log_strdup(__func__), log_strdup(job_id), job_type, validate);
 
-	if (validate == NRF_FOTA_VALIDATE_DONE) {
+	if (validate == NRF_CLOUD_FOTA_VALIDATE_DONE) {
 		/* Saved FOTA job has been validated, clear it */
-		saved_job.type = NRF_FOTA_TYPE__INVALID;
-		saved_job.validate = NRF_FOTA_VALIDATE_NONE;
+		saved_job.type = NRF_CLOUD_FOTA_TYPE__INVALID;
+		saved_job.validate = NRF_CLOUD_FOTA_VALIDATE_NONE;
 		memset(saved_job.id, 0, sizeof(saved_job.id));
 	} else {
 		saved_job.type = job_type;
@@ -535,21 +535,21 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		/* MCUBOOT: download finished, update job status and reboot */
-		current_fota.status = NRF_FOTA_IN_PROGRESS;
+		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
-				     NRF_FOTA_VALIDATE_PENDING);
+				     NRF_CLOUD_FOTA_VALIDATE_PENDING);
 		send_job_update(&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
 		/* MODEM: update job status and reboot */
-		current_fota.status = NRF_FOTA_IN_PROGRESS;
+		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
-				     NRF_FOTA_VALIDATE_PENDING);
+				     NRF_CLOUD_FOTA_VALIDATE_PENDING);
 		send_job_update(&current_fota);
-		send_event(NRF_FOTA_EVT_ERASE_PENDING, &current_fota);
+		send_event(NRF_CLOUD_FOTA_EVT_ERASE_PENDING, &current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
@@ -557,26 +557,26 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		 * fragment is downloaded and dfu_target_modem_init() is
 		 * called.
 		 */
-		send_event(NRF_FOTA_EVT_ERASE_DONE, &current_fota);
+		send_event(NRF_CLOUD_FOTA_EVT_ERASE_DONE, &current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERROR:
 		if (last_fota_dl_evt == FOTA_DOWNLOAD_EVT_ERASE_DONE) {
-			current_fota.status = NRF_FOTA_REJECTED;
+			current_fota.status = NRF_CLOUD_FOTA_REJECTED;
 		} else {
-			current_fota.status = NRF_FOTA_FAILED;
-			current_fota.error = NRF_FOTA_ERROR_DOWNLOAD;
+			current_fota.status = NRF_CLOUD_FOTA_FAILED;
+			current_fota.error = NRF_CLOUD_FOTA_ERROR_DOWNLOAD;
 		}
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
-				     NRF_FOTA_VALIDATE_DONE);
+				     NRF_CLOUD_FOTA_VALIDATE_DONE);
 		send_job_update(&current_fota);
-		send_event(NRF_FOTA_EVT_ERROR, &current_fota);
+		send_event(NRF_CLOUD_FOTA_EVT_ERROR, &current_fota);
 		cleanup_job(&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
-		current_fota.status = NRF_FOTA_DOWNLOADING;
+		current_fota.status = NRF_CLOUD_FOTA_DOWNLOADING;
 		current_fota.dl_progress = evt->progress;
 
 		/* Do not send complete status more than once */
@@ -611,6 +611,28 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	last_fota_dl_evt = evt->id;
 }
 
+static bool get_string_from_array(const cJSON * const array, const int index,
+				  char ** string_out)
+{
+	cJSON * item = cJSON_GetArrayItem(array, index);
+	if(!cJSON_IsString(item)) {
+		return false;
+	}
+	*string_out = item->valuestring;
+	return true;
+}
+
+static bool get_number_from_array(const cJSON * const array, const int index,
+				  int * number_out)
+{
+	cJSON * item = cJSON_GetArrayItem(array, index);
+	if(!cJSON_IsNumber(item)) {
+		return false;
+	}
+	*number_out = item->valueint;
+	return true;
+}
+
 static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 			  bt_addr_t * const ble_id, char * const payload_in,
 			  cJSON ** array_out)
@@ -619,14 +641,13 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 		return -EINVAL;
 	}
 
-	int ret;
-	cJSON *item ;
+	int err = -ENOMSG;
 	int idx_offset = !ble_id ? 1 : 0;
 	cJSON * payload_array = cJSON_Parse(payload_in);
 
 	if (!payload_array || !cJSON_IsArray(payload_array)) {
 		LOG_ERR("Invalid JSON array");
-		ret = -EINVAL;
+		err = -EINVAL;
 		goto cleanup;
 	}
 
@@ -634,61 +655,54 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 	if (ble_id) {
 		char * ble_str;
 
-		item = cJSON_GetArrayItem(payload_array, RCV_ITEM_IDX_BLE_ID);
-		ble_str = cJSON_GetStringValue(item);
-		if(!ble_str) {
+		if (!get_string_from_array(payload_array,
+					   RCV_ITEM_IDX_BLE_ID,
+					   &ble_str)) {
 			goto cleanup;
 		}
 
 		if (bt_addr_from_str(ble_str, ble_id) != 0) {
-			ret = -EADDRNOTAVAIL;
+			err = -EADDRNOTAVAIL;
 			goto cleanup;
 		}
 	}
 #endif
 
-	item = cJSON_GetArrayItem(payload_array,
-				  RCV_ITEM_IDX_JOB_ID);
-	job_info->id = cJSON_GetStringValue(item);
-
-	item = cJSON_GetArrayItem(payload_array,
-				  RCV_ITEM_IDX_FILE_HOST - idx_offset);
-	job_info->host = cJSON_GetStringValue(item);
-
-	item = cJSON_GetArrayItem(payload_array,
-				  RCV_ITEM_IDX_FILE_PATH - idx_offset);
-	job_info->path = cJSON_GetStringValue(item);
-
-	if(!job_info->id || !job_info->host || !job_info->path) {
+	if (!get_string_from_array(payload_array,
+				   RCV_ITEM_IDX_JOB_ID,
+				   &job_info->id) ||
+	    !get_string_from_array(payload_array,
+				   RCV_ITEM_IDX_FILE_HOST - idx_offset,
+				   &job_info->host) ||
+	    !get_string_from_array(payload_array,
+				   RCV_ITEM_IDX_FILE_PATH - idx_offset,
+				   &job_info->path) ||
+	    !get_number_from_array(payload_array,
+				   RCV_ITEM_IDX_FW_TYPE - idx_offset,
+				   (int*)&job_info->type) ||
+	    !get_number_from_array(payload_array,
+				   RCV_ITEM_IDX_FILE_SIZE - idx_offset,
+				   &job_info->file_size)) {
 		goto cleanup;
 	}
 
-	item = cJSON_GetArrayItem(payload_array,
-				  RCV_ITEM_IDX_FW_TYPE - idx_offset);
-	if(!cJSON_IsNumber(item)) {
+	if (job_info->type < NRF_CLOUD_FOTA_TYPE__FIRST ||
+	    job_info->type >= NRF_CLOUD_FOTA_TYPE__INVALID) {
+		LOG_ERR("Invalid FOTA type: %d", job_info->type);
 		goto cleanup;
 	}
-	job_info->type = item->valueint;
-
-	item = cJSON_GetArrayItem(payload_array,
-				  RCV_ITEM_IDX_FILE_SIZE - idx_offset);
-	if(!cJSON_IsNumber(item)) {
-		goto cleanup;
-	}
-	job_info->file_size = item->valueint;
 
 	*array_out = payload_array;
 	return 0;
 
 cleanup:
-	ret = -ENOMSG;
 	*array_out = NULL;
 	memset(job_info,0,sizeof(*job_info));
-	job_info->type = NRF_FOTA_TYPE__INVALID;
+	job_info->type = NRF_CLOUD_FOTA_TYPE__INVALID;
 	if (payload_array) {
 		cJSON_free(payload_array);
 	}
-	return ret;
+	return err;
 }
 
 static void send_event(const enum nrf_cloud_fota_evt_id id,
@@ -703,10 +717,10 @@ static void send_event(const enum nrf_cloud_fota_evt_id id,
 	};
 
 	switch (id) {
-	case NRF_FOTA_EVT_ERROR:
+	case NRF_CLOUD_FOTA_EVT_ERROR:
 		evt.evt_data.error = job->error;
 		break;
-	case NRF_FOTA_EVT_DL_PROGRESS:
+	case NRF_CLOUD_FOTA_EVT_DL_PROGRESS:
 		evt.evt_data.dl_progress = job->dl_progress;
 		break;
 	default:
@@ -736,14 +750,14 @@ static int start_job(struct nrf_cloud_fota_job * const job)
 				  NULL, fragment_size);
 	if (ret) {
 		LOG_ERR("Failed to start FOTA download: %d", ret);
-		job->status = NRF_FOTA_FAILED;
-		job->error = NRF_FOTA_ERROR_DOWNLOAD_START;
-		send_event(NRF_FOTA_EVT_ERROR, job);
+		job->status = NRF_CLOUD_FOTA_FAILED;
+		job->error = NRF_CLOUD_FOTA_ERROR_DOWNLOAD_START;
+		send_event(NRF_CLOUD_FOTA_EVT_ERROR, job);
 	} else {
 		job->dl_progress = 0;
 		job->sent_dl_progress = 0;
-		job->status = NRF_FOTA_DOWNLOADING;
-		send_event(NRF_FOTA_EVT_START, job);
+		job->status = NRF_CLOUD_FOTA_DOWNLOADING;
+		send_event(NRF_CLOUD_FOTA_EVT_START, job);
 	}
 
 	return ret;
@@ -759,7 +773,7 @@ static void cleanup_job(struct nrf_cloud_fota_job * const job)
 		cJSON_free(job->parsed_payload);
 	}
 	memset(job, 0, sizeof(*job));
-	job->info.type = NRF_FOTA_TYPE__INVALID;
+	job->info.type = NRF_CLOUD_FOTA_TYPE__INVALID;
 }
 
 static int publish(const struct mqtt_publish_param * const pub)
@@ -784,13 +798,13 @@ static int publish(const struct mqtt_publish_param * const pub)
 static const char * const get_error_string(const enum nrf_cloud_fota_error err)
 {
 	switch (err) {
-	case NRF_FOTA_ERROR_DOWNLOAD_START:
+	case NRF_CLOUD_FOTA_ERROR_DOWNLOAD_START:
 		return "\"Failed to start download\"";
-	case NRF_FOTA_ERROR_DOWNLOAD:
+	case NRF_CLOUD_FOTA_ERROR_DOWNLOAD:
 		return "\"Error during download\"";
-	case NRF_FOTA_ERROR_UNABLE_TO_VALIDATE:
+	case NRF_CLOUD_FOTA_ERROR_UNABLE_TO_VALIDATE:
 		return "\"FOTA update not validated\"";
-	case NRF_FOTA_ERROR_NONE:
+	case NRF_CLOUD_FOTA_ERROR_NONE:
 	default:
 		return "\"\"";
 	}
@@ -812,7 +826,7 @@ static int send_job_update(struct nrf_cloud_fota_job * const job)
 	param.message.payload.data = payload;
 	param.message.topic = topic_updt;
 
-	if (job->status == NRF_FOTA_DOWNLOADING) {
+	if (job->status == NRF_CLOUD_FOTA_DOWNLOADING) {
 		ret = snprintf(payload, UPDATE_PAYLOAD_SIZE,
 			 JOB_UPDATE_PROGRESS_TEMPLATE,
 			 job->info.id, job->status, job->dl_progress);
@@ -924,7 +938,7 @@ send_ack:
 		}
 	}
 
-	if (job_info->type == NRF_FOTA_TYPE__INVALID) {
+	if (job_info->type == NRF_CLOUD_FOTA_TYPE__INVALID) {
 		cJSON_free(payload_array);
 		return ret;
 	}
@@ -1009,15 +1023,15 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 		do_update_check = !is_fota_active();
 
 		switch (saved_job.validate) {
-		case NRF_FOTA_VALIDATE_PASS:
-		case NRF_FOTA_VALIDATE_UNKNOWN:
-		case NRF_FOTA_VALIDATE_FAIL:
+		case NRF_CLOUD_FOTA_VALIDATE_PASS:
+		case NRF_CLOUD_FOTA_VALIDATE_UNKNOWN:
+		case NRF_CLOUD_FOTA_VALIDATE_FAIL:
 			save_validate_status(saved_job.id, saved_job.type,
-					NRF_FOTA_VALIDATE_DONE);
+					NRF_CLOUD_FOTA_VALIDATE_DONE);
 			break;
-		case NRF_FOTA_VALIDATE_PENDING:
+		case NRF_CLOUD_FOTA_VALIDATE_PENDING:
 			/* this event should cause reboot */
-			send_event(NRF_FOTA_EVT_DONE, &current_fota);
+			send_event(NRF_CLOUD_FOTA_EVT_DONE, &current_fota);
 			cleanup_job(&current_fota);
 			do_update_check = false;
 			break;
@@ -1127,7 +1141,7 @@ int nrf_cloud_fota_ble_job_update(const struct nrf_cloud_fota_ble_job
 		return -EADDRNOTAVAIL;
 	}
 
-	if (status == NRF_FOTA_DOWNLOADING) {
+	if (status == NRF_CLOUD_FOTA_DOWNLOADING) {
 		ret = snprintf(payload, UPDATE_PAYLOAD_SIZE,
 			 BLE_JOB_UPDATE_PROGRESS_TEMPLATE,
 			 ble_id_str, ble_job->info.id,
