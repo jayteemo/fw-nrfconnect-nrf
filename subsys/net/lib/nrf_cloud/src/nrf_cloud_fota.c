@@ -66,8 +66,8 @@ LOG_MODULE_REGISTER(nrf_cloud_fota, CONFIG_NRF_CLOUD_LOG_LEVEL);
 * [“abcd1234”,0,1234,”nrfcloud.com”,"v1/firmwares/appfw.bin"]
 */
 enum rcv_item_idx {
-	RCV_ITEM_IDX_JOB_ID,
 	RCV_ITEM_IDX_BLE_ID,
+	RCV_ITEM_IDX_JOB_ID,
 	RCV_ITEM_IDX_FW_TYPE,
 	RCV_ITEM_IDX_FILE_SIZE,
 	RCV_ITEM_IDX_FILE_HOST,
@@ -645,26 +645,26 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 	last_fota_dl_evt = evt->id;
 }
 
-static bool get_string_from_array(const cJSON * const array, const int index,
+static int get_string_from_array(const cJSON * const array, const int index,
 				  char ** string_out)
 {
 	cJSON * item = cJSON_GetArrayItem(array, index);
 	if(!cJSON_IsString(item)) {
-		return false;
+		return -EINVAL;
 	}
 	*string_out = item->valuestring;
-	return true;
+	return 0;
 }
 
-static bool get_number_from_array(const cJSON * const array, const int index,
+static int get_number_from_array(const cJSON * const array, const int index,
 				  int * number_out)
 {
 	cJSON * item = cJSON_GetArrayItem(array, index);
 	if(!cJSON_IsNumber(item)) {
-		return false;
+		return -EINVAL;
 	}
 	*number_out = item->valueint;
-	return true;
+	return 0;
 }
 
 static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
@@ -676,10 +676,10 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 	}
 
 	int err = -ENOMSG;
-	int idx_offset = !ble_id ? 1 : 0;
-	cJSON * payload_array = cJSON_Parse(payload_in);
+	int offset = !ble_id ? 1 : 0;
+	cJSON * array = cJSON_Parse(payload_in);
 
-	if (!payload_array || !cJSON_IsArray(payload_array)) {
+	if (!array || !cJSON_IsArray(array)) {
 		LOG_ERR("Invalid JSON array");
 		err = -EINVAL;
 		goto cleanup;
@@ -689,34 +689,28 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 	if (ble_id) {
 		char * ble_str;
 
-		if (!get_string_from_array(payload_array,
-					   RCV_ITEM_IDX_BLE_ID,
+		if (get_string_from_array(array, RCV_ITEM_IDX_BLE_ID,
 					   &ble_str)) {
 			goto cleanup;
 		}
 
-		if (bt_addr_from_str(ble_str, ble_id) != 0) {
+		if (bt_addr_from_str(ble_str, ble_id)) {
 			err = -EADDRNOTAVAIL;
 			goto cleanup;
 		}
 	}
 #endif
 
-	if (!get_string_from_array(payload_array,
-				   RCV_ITEM_IDX_JOB_ID,
-				   &job_info->id) ||
-	    !get_string_from_array(payload_array,
-				   RCV_ITEM_IDX_FILE_HOST - idx_offset,
-				   &job_info->host) ||
-	    !get_string_from_array(payload_array,
-				   RCV_ITEM_IDX_FILE_PATH - idx_offset,
-				   &job_info->path) ||
-	    !get_number_from_array(payload_array,
-				   RCV_ITEM_IDX_FW_TYPE - idx_offset,
-				   (int*)&job_info->type) ||
-	    !get_number_from_array(payload_array,
-				   RCV_ITEM_IDX_FILE_SIZE - idx_offset,
-				   &job_info->file_size)) {
+	if (get_string_from_array(array, RCV_ITEM_IDX_JOB_ID - offset,
+				  &job_info->id) ||
+	    get_string_from_array(array, RCV_ITEM_IDX_FILE_HOST - offset,
+				  &job_info->host) ||
+	    get_string_from_array(array, RCV_ITEM_IDX_FILE_PATH - offset,
+				  &job_info->path) ||
+	    get_number_from_array(array, RCV_ITEM_IDX_FW_TYPE - offset,
+				  (int*)&job_info->type) ||
+	    get_number_from_array(array, RCV_ITEM_IDX_FILE_SIZE - offset,
+				  &job_info->file_size)) {
 		goto cleanup;
 	}
 
@@ -726,15 +720,15 @@ static int parse_job_info(struct nrf_cloud_fota_job_info * const job_info,
 		goto cleanup;
 	}
 
-	*array_out = payload_array;
+	*array_out = array;
 	return 0;
 
 cleanup:
 	*array_out = NULL;
 	memset(job_info,0,sizeof(*job_info));
 	job_info->type = NRF_CLOUD_FOTA_TYPE__INVALID;
-	if (payload_array) {
-		cJSON_free(payload_array);
+	if (array) {
+		cJSON_free(array);
 	}
 	return err;
 }
@@ -857,9 +851,6 @@ static int send_job_update(struct nrf_cloud_fota_job * const job)
 		.retain_flag = 0,
 	};
 
-	param.message.payload.data = payload;
-	param.message.topic = topic_updt;
-
 	if (job->status == NRF_CLOUD_FOTA_DOWNLOADING) {
 		ret = snprintf(payload, UPDATE_PAYLOAD_SIZE,
 			 JOB_UPDATE_PROGRESS_TEMPLATE,
@@ -874,6 +865,8 @@ static int send_job_update(struct nrf_cloud_fota_job * const job)
 		return -E2BIG;
 	}
 
+	param.message.topic = topic_updt;
+	param.message.payload.data = payload;
 	param.message.payload.len = ret;
 
 	return publish(&param);
@@ -893,9 +886,9 @@ int nrf_cloud_fota_update_check(void)
 		.retain_flag = 0,
 	};
 
-	param.message.payload.data = JOB_REQUEST_LATEST_PAYLOAD;
-	param.message.payload.len = strlen(JOB_REQUEST_LATEST_PAYLOAD);
 	param.message.topic = topic_req;
+	param.message.payload.data = JOB_REQUEST_LATEST_PAYLOAD;
+	param.message.payload.len = sizeof(JOB_REQUEST_LATEST_PAYLOAD)-1;
 
 	return publish(&param);
 }
