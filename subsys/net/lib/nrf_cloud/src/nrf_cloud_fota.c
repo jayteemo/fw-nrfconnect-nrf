@@ -183,7 +183,41 @@ static int fota_settings_set(const char *key, size_t len_rd,
 	return -ENOTSUP;
 }
 
-enum fota_validate_status get_modem_update_status(void)
+#if 0
+/* TODO: test modem fota apply w/o reboot */
+static enum fota_validate_status apply_modem_update(void)
+{
+#if defined(CONFIG_BSD_LIBRARY)
+	int modem_dfu_res;
+
+	bsd_shutdown();
+
+check_result:
+	modem_dfu_res = bsd_init();
+
+	/* Handle return values relating to modem firmware update */
+	switch (modem_dfu_res) {
+	case MODEM_DFU_RESULT_OK:
+		LOG_DBG("Modem FOTA OK");
+		ret = NRF_FOTA_VALIDATE_PASS;
+		bsd_shutdown();
+		goto check_result;
+	case MODEM_DFU_RESULT_UUID_ERROR:
+	case MODEM_DFU_RESULT_AUTH_ERROR:
+	case MODEM_DFU_RESULT_HARDWARE_ERROR:
+	case MODEM_DFU_RESULT_INTERNAL_ERROR:
+		LOG_ERR("Modem FOTA error: %d", modem_dfu_res);
+		ret = NRF_FOTA_VALIDATE_FAIL;
+		break;
+	default:
+		break;
+	}
+#else
+	LOG_INF("Modem FOTA result unknown");
+#endif
+}
+#endif
+static enum fota_validate_status get_modem_update_status(void)
 {
 	enum fota_validate_status ret = NRF_CLOUD_FOTA_VALIDATE_UNKNOWN;
 
