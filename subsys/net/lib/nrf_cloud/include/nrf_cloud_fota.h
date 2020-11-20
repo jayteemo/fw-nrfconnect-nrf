@@ -61,6 +61,8 @@ enum nrf_cloud_fota_error {
 	NRF_CLOUD_FOTA_ERROR_DOWNLOAD,
 	/** Unable to validate that the firmware was properly installed. */
 	NRF_CLOUD_FOTA_ERROR_UNABLE_TO_VALIDATE,
+	/** Error applying the update. */
+	NRF_CLOUD_FOTA_ERROR_APPLY_FAIL,
 };
 
 /**@brief Common FOTA job info */
