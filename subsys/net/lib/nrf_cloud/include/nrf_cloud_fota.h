@@ -90,7 +90,8 @@ struct nrf_cloud_fota_evt {
 	enum nrf_cloud_fota_type type;
 	union {
 		enum nrf_cloud_fota_error error;
-		int dl_progress; /* Download progress percent, 0-100. */
+		/** Download progress percent, 0-100. */
+		int dl_progress;
 	} evt_data;
 };
 
@@ -142,7 +143,7 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *_mqtt_evt);
  *        report status of saved job (if present) to nRF Cloud.
  *        This should be used during initialization.
  * @param client      Pointer to the MQTT client instance.
- * @param client_id   Client id of this device.
+ * @param client_id   Null terminated client id of this device.
  * @param endpoint    User and device specific MQTT endpoint.
  *
  * @retval 0 If successful.
@@ -154,7 +155,7 @@ int nrf_cloud_fota_endpoint_set_and_report(struct mqtt_client *const client,
 /**@brief Set the information required for MQTT transactions.
  *
  * @param client      Pointer to the MQTT client instance.
- * @param client_id   Client id of this device.
+ * @param client_id   Null terminated client id of this device.
  * @param endpoint    User and device specific MQTT endpoint.
  *
  * @retval 0 If successful.
