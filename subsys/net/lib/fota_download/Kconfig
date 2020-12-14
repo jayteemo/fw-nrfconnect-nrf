@@ -18,6 +18,11 @@ config FOTA_SOCKET_RETRIES
 config FOTA_DOWNLOAD_PROGRESS_EVT
 	bool "Emit progress event upon receiving a download fragment"
 
+config FOTA_DOWNLOAD_TLS_SNI
+	bool "Enable Server Name Indication TLS extension for https downloads"
+	help
+	  This setting is only valid for FOTA downloads that use https.
+
 module=FOTA_DOWNLOAD
 module-dep=LOG
 module-str=Firmware Over the Air Download
