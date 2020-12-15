@@ -91,6 +91,8 @@ struct settings_fota_job {
 	char id[JOB_ID_STRING_SIZE];
 };
 
+char last_finished_job[JOB_ID_STRING_SIZE];
+
 enum subscription_topic_index {
 	SUB_TOPIC_IDX_RCV,
 #if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
@@ -109,6 +111,7 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 static void cleanup_job(struct nrf_cloud_fota_job *const job);
 static int start_job(struct nrf_cloud_fota_job *const job);
 static int send_job_update(struct nrf_cloud_fota_job *const job);
+static void update_last_finished_job(void);
 static int publish(const struct mqtt_publish_param *const pub);
 static bool is_fota_active(void);
 static int save_validate_status(const char *const job_id,
@@ -269,6 +272,13 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 			/* Indicate that a FOTA update has occurred */
 			ret = 1;
 		}
+	} else if ((saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_PASS ||
+		    saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_FAIL ||
+		    saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_UNKNOWN) &&
+		    saved_job.type == NRF_CLOUD_FOTA_MODEM)
+	{
+		/* Device has just rebooted from a modem FOTA */
+		ret = 1;
 	}
 
 	initialized = true;
@@ -506,6 +516,7 @@ static int save_validate_status(const char *const job_id,
 		log_strdup(__func__), log_strdup(job_id), job_type, validate);
 
 	if (validate == NRF_CLOUD_FOTA_VALIDATE_DONE) {
+		update_last_finished_job();
 		/* Saved FOTA job has been validated, clear it */
 		saved_job.type = NRF_CLOUD_FOTA_TYPE__INVALID;
 		saved_job.validate = NRF_CLOUD_FOTA_VALIDATE_NONE;
@@ -881,6 +892,31 @@ static const char * const get_error_string(const enum nrf_cloud_fota_error err)
 	}
 }
 
+static bool is_terminal_status(const enum nrf_cloud_fota_status status)
+{
+	switch (current_fota.status){
+	case NRF_CLOUD_FOTA_FAILED:
+	case NRF_CLOUD_FOTA_SUCCEEDED:
+	case NRF_CLOUD_FOTA_TIMED_OUT:
+	case NRF_CLOUD_FOTA_CANCELED:
+	case NRF_CLOUD_FOTA_REJECTED:
+		return true;
+	default:
+		return false;
+	}
+}
+
+static void update_last_finished_job(void)
+{
+	if (!is_terminal_status(current_fota.status)) {
+		return;
+	}
+
+	(void)strncpy(last_finished_job,
+		      current_fota.info.id,
+		      sizeof(last_finished_job));
+}
+
 static int send_job_update(struct nrf_cloud_fota_job *const job)
 {
 	if (job == NULL) {
@@ -995,6 +1031,12 @@ static int handle_mqtt_evt_publish(const struct mqtt_evt *evt)
 	}
 
 	ret = parse_job_info(job_info, ble_id, payload, &payload_array);
+
+	if (strncmp(last_finished_job, job_info->id,
+		    sizeof(last_finished_job)) == 0) {
+		LOG_INF("Job has already been processed... skipping");
+		ret = -EAGAIN;
+	}
 
 send_ack:
 	if (payload) {
