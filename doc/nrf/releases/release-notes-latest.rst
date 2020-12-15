@@ -80,6 +80,18 @@ nRF9160
     * Added an option to set the hostname for TLS Server Name Indication (SNI) extension.
       This option is valid only when TLS is enabled.
 
+  * :ref:`lib_fota_download` library:
+
+    * Enabled SNI TLS extension for HTTPS downloads.
+
+  * :ref:`lib_nrf_cloud` library:
+
+    * AWS Jobs replaced by nRF Cloud FOTA as the FOTA mechanism for devices connected to nRF Cloud.
+
+  * :ref:`asset_tracker` application:
+
+    * Updated to use the new FOTA (fota_v2) based on nRF Cloud.
+
 Common
 ======
 
