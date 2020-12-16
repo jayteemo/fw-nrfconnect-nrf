@@ -33,6 +33,8 @@ LOG_MODULE_REGISTER(dfu_target_mcuboot, CONFIG_DFU_TARGET_LOG_LEVEL);
 static uint8_t *stream_buf;
 static size_t stream_buf_len;
 
+static uint8_t dfu_buf[512];
+
 int dfu_ctx_mcuboot_set_b1_file(const char *file, bool s0_active,
 				const char **update)
 {
@@ -93,8 +95,9 @@ int dfu_target_mcuboot_init(size_t file_size, dfu_target_callback_t cb)
 	int err;
 
 	if (stream_buf == NULL) {
-		LOG_ERR("Missing stream_buf, call '..set_buf' before '..init");
-		return -ENODEV;
+		stream_buf = dfu_buf;
+		stream_buf_len = sizeof(dfu_buf);
+		LOG_DBG("Using default buffer, size %d", stream_buf_len);
 	}
 
 	if (file_size > PM_MCUBOOT_SECONDARY_SIZE) {
