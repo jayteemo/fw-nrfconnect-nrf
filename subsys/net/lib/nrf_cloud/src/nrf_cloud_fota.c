@@ -537,16 +537,25 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 {
 	__ASSERT_NO_MSG(evt != NULL);
 
+	int ret = 0;
+
 	LOG_DBG("evt: %d", evt->id);
 
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
+		if (current_fota.status == NRF_CLOUD_FOTA_DOWNLOADING &&
+		    current_fota.sent_dl_progress != 100) {
+			/* Send 100% downloaded update */
+			current_fota.dl_progress = 100;
+			current_fota.sent_dl_progress = 100;
+			(void)send_job_update(&current_fota);
+		}
 		/* MCUBOOT: download finished, update job status and reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
 				     NRF_CLOUD_FOTA_VALIDATE_PENDING);
-		send_job_update(&current_fota);
+		ret = send_job_update(&current_fota);
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
@@ -555,7 +564,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
 				     NRF_CLOUD_FOTA_VALIDATE_PENDING);
-		send_job_update(&current_fota);
+		ret = send_job_update(&current_fota);
 		send_event(NRF_CLOUD_FOTA_EVT_ERASE_PENDING, &current_fota);
 		break;
 
@@ -568,16 +577,18 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERROR:
-		if (last_fota_dl_evt == FOTA_DOWNLOAD_EVT_ERASE_DONE) {
+		if (last_fota_dl_evt == FOTA_DOWNLOAD_EVT_ERASE_DONE ||
+		    evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE) {
 			current_fota.status = NRF_CLOUD_FOTA_REJECTED;
 		} else {
 			current_fota.status = NRF_CLOUD_FOTA_FAILED;
 			current_fota.error = NRF_CLOUD_FOTA_ERROR_DOWNLOAD;
 		}
+
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
 				     NRF_CLOUD_FOTA_VALIDATE_DONE);
-		send_job_update(&current_fota);
+		ret = send_job_update(&current_fota);
 		send_event(NRF_CLOUD_FOTA_EVT_ERROR, &current_fota);
 		cleanup_job(&current_fota);
 		break;
@@ -606,14 +617,19 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		      current_fota.sent_dl_progress) <
 		     CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT) ||
 		     (CONFIG_NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT == 0))) {
+			current_fota.sent_dl_progress,current_fota.dl_progress);
 			break;
 		}
 
 		current_fota.sent_dl_progress = current_fota.dl_progress;
-		send_job_update(&current_fota);
+		ret = send_job_update(&current_fota);
 		break;
 	default:
 		break;
+	}
+
+	if (ret) {
+		LOG_ERR("Failed to send job update to cloud: %d", ret);
 	}
 
 	last_fota_dl_evt = evt->id;
