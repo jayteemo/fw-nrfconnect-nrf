@@ -15,8 +15,8 @@
 #include <net/download_client.h>
 
 #define URL CONFIG_SAMPLE_FILE_URL
-//#define SEC_TAG CONFIG_SAMPLE_SEC_TAG
-#define SEC_TAG 16842753
+#define SEC_TAG CONFIG_SAMPLE_SEC_TAG
+//#define SEC_TAG 16842753
 
 #define PROGRESS_WIDTH 50
 #define STARTING_OFFSET 0
@@ -33,6 +33,7 @@ static struct download_client_cfg config = {
 #if CONFIG_SAMPLE_SECURE_SOCKET
 	.sec_tag = SEC_TAG,
 	.set_tls_hostname = true,
+	.frag_size_override=2048,
 #else
 	.sec_tag = -1,
 #endif
@@ -121,7 +122,7 @@ static void progress_print(size_t downloaded, size_t file_size)
 	for (size_t i = 0; i < rpad; i++) {
 		printk(" ");
 	}
-	printk("| (%d/%d bytes)", downloaded, file_size);
+	printk("| (%d/%d bytes) - ", downloaded, file_size);
 }
 
 static int callback(const struct download_client_evt *event)
