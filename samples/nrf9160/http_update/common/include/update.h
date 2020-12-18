@@ -7,7 +7,8 @@
 #ifndef UPDATE_H__
 #define UPDATE_H__
 
-#define TLS_SEC_TAG 42
+//#define TLS_SEC_TAG 42
+#define TLS_SEC_TAG 16842753
 
 #ifndef CONFIG_USE_HTTPS
 #define SEC_TAG (-1)

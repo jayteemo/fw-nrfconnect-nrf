@@ -166,8 +166,8 @@ static void modem_configure(void)
 	err = at_cmd_init();
 	__ASSERT(err == 0, "AT CMD could not be established.");
 #if defined(CONFIG_USE_HTTPS)
-	err = cert_provision();
-	__ASSERT(err == 0, "Could not provision root CA to %d", TLS_SEC_TAG);
+	//err = cert_provision();
+	//__ASSERT(err == 0, "Could not provision root CA to %d", TLS_SEC_TAG);
 #endif
 #endif
 	printk("LTE Link Connecting ...\n");

@@ -15,7 +15,8 @@
 #include <net/download_client.h>
 
 #define URL CONFIG_SAMPLE_FILE_URL
-#define SEC_TAG CONFIG_SAMPLE_SEC_TAG
+//#define SEC_TAG CONFIG_SAMPLE_SEC_TAG
+#define SEC_TAG 16842753
 
 #define PROGRESS_WIDTH 50
 #define STARTING_OFFSET 0
@@ -31,6 +32,7 @@ static struct download_client downloader;
 static struct download_client_cfg config = {
 #if CONFIG_SAMPLE_SECURE_SOCKET
 	.sec_tag = SEC_TAG,
+	.set_tls_hostname = true,
 #else
 	.sec_tag = -1,
 #endif
@@ -208,10 +210,10 @@ void main(void)
 
 #if CONFIG_SAMPLE_SECURE_SOCKET
 	/* Provision certificates before connecting to the network */
-	err = cert_provision();
-	if (err) {
-		return;
-	}
+	//err = cert_provision();
+	//if (err) {
+//		return;
+	//}
 #endif
 
 	printk("Waiting for network.. ");

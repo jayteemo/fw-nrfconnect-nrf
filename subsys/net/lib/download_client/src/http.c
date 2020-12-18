@@ -218,6 +218,12 @@ int http_parse(struct download_client *client, size_t len)
 			return -1;
 		}
 
+		#if IS_ENABLED(CONFIG_LOG)
+			LOG_INF("HTTP header len: %d", hdr_len);
+		#else
+			printk("HTTP header len: %d\n", hdr_len);
+		#endif
+
 		if (client->offset != hdr_len) {
 			/* The buffer contains some payload bytes,
 			 * copy them at the beginning of the buffer

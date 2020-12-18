@@ -80,8 +80,8 @@ extern "C" {
 
 #else
 
-#define UI_LED_ON_PERIOD_NORMAL		500
-#define UI_LED_OFF_PERIOD_NORMAL	500
+#define UI_LED_ON_PERIOD_NORMAL		100
+#define UI_LED_OFF_PERIOD_NORMAL	100
 
 #endif /* CONFIG_UI_LED_USE_PWM */
 
