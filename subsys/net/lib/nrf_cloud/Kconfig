@@ -173,6 +173,9 @@ if NRF_CLOUD_AGPS
 config NRF_CLOUD_AGPS_AUTO
 	bool "Automatically request A-GPS on bootup"
 
+config NRF_CLOUD_AGPS_SINGLE_CELL_ONLY
+	bool "Obtain approximate location using a single cell tower instead of GPS"
+
 module = NRF_CLOUD_AGPS
 module-str = nRF Cloud A-GPS
 source "subsys/logging/Kconfig.template.log_config"

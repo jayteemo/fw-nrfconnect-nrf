@@ -428,6 +428,14 @@ int gps_agps_request(struct gps_agps_request request, int socket);
  */
 int gps_process_agps_data(const uint8_t *buf, size_t len);
 
+/**@brief Gets most recent location from single-cell request.
+ *
+ * @param lat Pointer where last single cell latitude is to be copied.
+ * @param lon Pointer where last single cell longitude is to be copied.
+ * @return 0 if successful, otherwise a (negative) error code.
+ */
+int gps_get_last_single_cell_location(double * const lat, double * const lon);
+
 #ifdef __cplusplus
 }
 #endif

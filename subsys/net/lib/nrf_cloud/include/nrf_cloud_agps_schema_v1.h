@@ -128,6 +128,10 @@ struct nrf_cloud_agps_system_time {
 	struct nrf_cloud_agps_tow_element sv_tow[NRF_CLOUD_AGPS_MAX_SV_TOW];
 } __packed;
 
+/* Latitude = lat / (2^23 / 90) */
+#define SNGL_CELL_LAT(lat) (lat / 93206.7555556)
+/* Longitude = lon / (2^24 / 360) */
+#define SNGL_CELL_LON(lon) (lon / 46603.3777778)
 struct nrf_cloud_agps_location {
 	int32_t latitude;
 	int32_t longitude;

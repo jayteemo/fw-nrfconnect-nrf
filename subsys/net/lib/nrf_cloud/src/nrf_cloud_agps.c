@@ -25,6 +25,10 @@ extern void agps_print(enum nrf_cloud_agps_type type, void *data);
 static int fd = -1;
 static bool agps_print_enabled;
 static const struct device *gps_dev;
+#if defined(CONFIG_NRF_CLOUD_AGPS_SINGLE_CELL_ONLY)
+static double last_single_cell_lat;
+static double last_single_cell_lon;
+#endif
 
 static enum gps_agps_type type_lookup_socket2gps[] = {
 	[NRF_GNSS_AGPS_UTC_PARAMETERS]	= GPS_AGPS_UTC_PARAMETERS,
@@ -593,6 +597,17 @@ int nrf_cloud_agps_process(const char *buf, size_t buf_len, const int *socket)
 			LOG_DBG("TOWs copied, bitmask: 0x%08x",
 				element.time_and_tow->sv_mask);
 		}
+#if defined(CONFIG_NRF_CLOUD_AGPS_SINGLE_CELL_ONLY)
+		else if (element.type == NRF_CLOUD_AGPS_LOCATION) {
+			last_single_cell_lat =
+				SNGL_CELL_LAT(element.location->latitude);
+
+			last_single_cell_lon =
+				SNGL_CELL_LON(element.location->longitude);
+		}
+		/* Do not send GPS data to the modem */
+		continue;
+#endif
 
 		err = agps_send_to_modem(&element);
 		if (err) {
@@ -603,3 +618,37 @@ int nrf_cloud_agps_process(const char *buf, size_t buf_len, const int *socket)
 
 	return 0;
 }
+
+#if defined(CONFIG_NRF_CLOUD_AGPS_SINGLE_CELL_ONLY)
+int nrf_cloud_agps_request_single_cell(void)
+{
+	struct gps_agps_request request;
+
+	memset(&request, 0, sizeof(struct gps_agps_request));
+	request.position = 1;
+
+	return nrf_cloud_agps_request(request);
+}
+
+int nrf_cloud_agps_get_last_single_cell_location(double * const lat,
+						 double * const lon)
+{
+	if (!lat && !lon) {
+		return -EINVAL;
+	}
+
+	if (!last_single_cell_lat && !last_single_cell_lon) {
+		return -ENODATA;
+	}
+
+	if (lat) {
+		*lat = last_single_cell_lat;
+	}
+
+	if (lon) {
+		*lon = last_single_cell_lon;
+	}
+
+	return 0;
+}
+#endif

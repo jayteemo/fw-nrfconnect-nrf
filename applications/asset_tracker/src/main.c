@@ -393,15 +393,30 @@ static void send_agps_request(struct k_work *work)
 #if defined(CONFIG_AGPS)
 	int err;
 	static int64_t last_request_timestamp;
+	int64_t time_diff = k_uptime_get() - last_request_timestamp;
 
+#if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
+/* Allow more frequent requests for single-cell */
+#define AGPS_UPDATE_PERIOD (5 * 60 * 1000)
+	if ((last_request_timestamp != 0) &&
+	    time_diff < AGPS_UPDATE_PERIOD) {
+		LOG_WRN("Delaying A-GPS single-cell request...");
+		if (!k_delayed_work_pending(&send_agps_request_work)) {
+			k_delayed_work_submit_to_queue(&application_work_q,
+				&send_agps_request_work,
+				K_MSEC(AGPS_UPDATE_PERIOD - time_diff));
+		}
+		return;
+	}
+#else
 /* Request A-GPS data no more often than every hour (time in milliseconds). */
 #define AGPS_UPDATE_PERIOD (60 * 60 * 1000)
-
 	if ((last_request_timestamp != 0) &&
-	    (k_uptime_get() - last_request_timestamp) < AGPS_UPDATE_PERIOD) {
+	    time_diff < AGPS_UPDATE_PERIOD) {
 		LOG_WRN("A-GPS request was sent less than 1 hour ago");
 		return;
 	}
+#endif
 
 	LOG_INF("Sending A-GPS request");
 
@@ -1434,6 +1449,17 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 			LOG_WRN("Data was not valid A-GPS data, err: %d", err);
 			break;
 		}
+#if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
+		double lat;
+		double lon;
+		err = gps_get_last_single_cell_location(&lat,&lon);
+		if(err) {
+			LOG_ERR("Could not get single cell location, err: %d",
+				err);
+		} else {
+			LOG_INF("Single-cell location: %lf, %lf", lat, lon);
+		}
+#endif
 
 		LOG_INF("A-GPS data processed");
 #endif /* defined(CONFIG_AGPS) */
@@ -1732,6 +1758,12 @@ static void sensors_init(void)
 		LOG_ERR("GPS could not be initialized");
 		return;
 	}
+#if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
+	/* Make initial single cell location request */
+	k_delayed_work_submit_to_queue(&application_work_q,
+					&send_agps_request_work,
+					K_SECONDS(1));
+#endif
 }
 
 #if defined(CONFIG_USE_UI_MODULE)
@@ -1878,6 +1910,14 @@ static void lte_handler(const struct lte_lc_evt *const evt)
 	case LTE_LC_EVT_CELL_UPDATE:
 		LOG_INF("LTE cell changed: Cell ID: %d, Tracking area: %d",
 			evt->cell.id, evt->cell.tac);
+#if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
+		/* Request location based on new network info */
+		if (data_send_enabled() && evt->cell.id != -1 ) {
+			k_delayed_work_submit_to_queue(&application_work_q,
+						       &send_agps_request_work,
+						       K_SECONDS(1));
+		}
+#endif
 		break;
 	default:
 		break;
