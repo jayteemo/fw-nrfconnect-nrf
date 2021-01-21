@@ -400,7 +400,7 @@ static void send_agps_request(struct k_work *work)
 #define AGPS_UPDATE_PERIOD (5 * 60 * 1000)
 	if ((last_request_timestamp != 0) &&
 	    time_diff < AGPS_UPDATE_PERIOD) {
-		LOG_WRN("Delaying A-GPS single-cell request...");
+		LOG_WRN("Delaying A-GPS single-cell request");
 		if (!k_delayed_work_pending(&send_agps_request_work)) {
 			k_delayed_work_submit_to_queue(&application_work_q,
 				&send_agps_request_work,
@@ -1437,9 +1437,13 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 
 		LOG_INF("CLOUD_EVT_DATA_RECEIVED");
 		err = cloud_decode_command(evt->data.msg.buf);
-		if (err == 0) {
+		if (err <= 0) {
 			/* Cloud decoder has handled the data */
-			return;
+			if (err < 0) {
+				LOG_ERR("cloud_decode_command() failed: %d",
+					err);
+			}
+			break;
 		}
 
 #if defined(CONFIG_AGPS)
@@ -1450,17 +1454,15 @@ void cloud_event_handler(const struct cloud_backend *const backend,
 			break;
 		}
 #if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
-		double lat;
-		double lon;
-		err = gps_get_last_single_cell_location(&lat,&lon);
-		if(err) {
-			LOG_ERR("Could not get single cell location, err: %d",
+		double lat, lon;
+		err = gps_get_last_cell_location(&lat,&lon);
+		if (err) {
+			LOG_ERR("Could not get cell-based location, err: %d",
 				err);
 		} else {
-			LOG_INF("Single-cell location: %lf, %lf", lat, lon);
+			LOG_INF("Cell-based location: %lf, %lf", lat, lon);
 		}
-#endif
-
+#endif /* defined(CONFIG_AGPS_SINGLE_CELL_ONLY) */
 		LOG_INF("A-GPS data processed");
 #endif /* defined(CONFIG_AGPS) */
 		break;
@@ -1759,7 +1761,7 @@ static void sensors_init(void)
 		return;
 	}
 #if defined(CONFIG_AGPS_SINGLE_CELL_ONLY)
-	/* Make initial single cell location request */
+	/* Make initial cell-based location request */
 	k_delayed_work_submit_to_queue(&application_work_q,
 					&send_agps_request_work,
 					K_SECONDS(1));

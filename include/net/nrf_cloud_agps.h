@@ -22,6 +22,12 @@ extern "C" {
  * @{
  */
 
+enum cell_based_location_type {
+	CELL_LOC_TYPE_INVALID = -1,
+	CELL_LOC_TYPE_SINGLE,
+	CELL_LOC_TYPE_MULTI /* Not yet supported */
+};
+
 /**@brief Requests specified A-GPS data from nRF Cloud.
  *
  * @param request Structure containing specified A-GPS data to be requested.
@@ -36,22 +42,21 @@ int nrf_cloud_agps_request(const struct gps_agps_request request);
  */
 int nrf_cloud_agps_request_all(void);
 
-/**@brief Requests single-cell based location from nRF Cloud.
+/**@brief Requests cell-based location from nRF Cloud.
  *
+ * @param type Type of cell-based location to request.
  * @return 0 if successful, otherwise a (negative) error code.
- * @note Requires CONFIG_NRF_CLOUD_AGPS_SINGLE_CELL_ONLY to be enabled.
  */
-int nrf_cloud_agps_request_single_cell(void);
+int nrf_cloud_agps_request_cell_location(enum cell_based_location_type type);
 
 /**@brief Gets most recent location from single-cell request.
  *
  * @param lat Pointer where last single cell latitude is to be copied.
  * @param lon Pointer where last single cell longitude is to be copied.
  * @return 0 if successful, otherwise a (negative) error code.
- * @note Requires CONFIG_NRF_CLOUD_AGPS_SINGLE_CELL_ONLY to be enabled.
  */
-int nrf_cloud_agps_get_last_single_cell_location(double * const lat,
-						 double * const lon);
+int nrf_cloud_agps_get_last_cell_location(double * const lat,
+					  double * const lon);
 
 /**@brief Processes binary A-GPS data received from nRF Cloud.
  *
