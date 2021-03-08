@@ -72,6 +72,8 @@ struct nrf_cloud_fota_job_info {
 	char *host;
 	char *path;
 	int file_size;
+	char *aux_path;
+	int aux_size;
 };
 
 /**@brief FOTA info for a BLE job */

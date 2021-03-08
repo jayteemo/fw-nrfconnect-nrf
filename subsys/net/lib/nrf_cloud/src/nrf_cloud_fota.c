@@ -56,6 +56,8 @@ LOG_MODULE_REGISTER(nrf_cloud_fota, CONFIG_NRF_CLOUD_FOTA_LOG_LEVEL);
  * [“abcd1234”,0,1234,”nrfcloud.com”,"v1/firmwares/appfw.bin"]
  * ["12:AB:34:CD:56:EF",“efgh5678”,0,321,”nrfcloud.com”,
  *  "v1/firmwares/ble.bin"]
+ * ["12:AB:34:CD:56:EF",“efgh5678”,0,321,”nrfcloud.com”,
+ *  "v1/firmwares/ble.bin",123,"v1/firmwares/ble.dat"]
  */
 enum rcv_item_idx {
 	RCV_ITEM_IDX_BLE_ID,
@@ -64,6 +66,8 @@ enum rcv_item_idx {
 	RCV_ITEM_IDX_FILE_SIZE,
 	RCV_ITEM_IDX_FILE_HOST,
 	RCV_ITEM_IDX_FILE_PATH,
+	RCV_ITEM_IDX_AUX_SIZE,
+	RCV_ITEM_IDX_AUX_PATH,
 	RCV_ITEM_IDX__SIZE,
 };
 
@@ -734,6 +738,14 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 			LOG_ERR("Invalid BLE ID: %s", log_strdup(ble_str));
 			goto cleanup;
 		}
+
+		/* Parse optional BLE specific fields */
+		job_info->aux_size = 0;
+		get_number_from_array(array, RCV_ITEM_IDX_AUX_SIZE,
+				  &job_info->aux_size);
+		job_info->aux_path = NULL;
+		get_string_from_array(array, RCV_ITEM_IDX_AUX_PATH,
+				  &job_info->aux_path);
 	}
 #endif
 
