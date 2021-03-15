@@ -1,0 +1,22 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-BSD-5-Clause-Nordic
+#
+
+menu "Modem Keygen Example"
+
+config SEC_TAG
+	int "Modem slot to store key"
+	default 99
+endmenu
+
+config PARSE_EXAMPLE_KEYGEN_OUTPUT
+	bool "Parse example keygen output instead of generating/saving a new key."
+
+module = MODEM_KEYGEN_EXAMPLE
+module-str = Modem Keygen Example
+
+menu "Zephyr Kernel"
+source "Kconfig.zephyr"
+endmenu
