@@ -7,12 +7,13 @@
 #include "nrf_cloud_codec.h"
 #include "nrf_cloud_mem.h"
 
+#include <net/nrf_cloud_agps.h>
 #include <stdbool.h>
 #include <string.h>
 #include <zephyr.h>
 #include <logging/log.h>
-#include "cJSON.h"
 #include "cJSON_os.h"
+#include "nrf_cloud_fota.h"
 
 LOG_MODULE_REGISTER(nrf_cloud_codec, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
@@ -112,7 +113,7 @@ static void nrf_cloud_decode_desired_obj(cJSON *const root_obj,
 	}
 }
 
-int nrf_codec_init(void)
+int nrf_cloud_codec_init(void)
 {
 	cJSON_Init();
 
@@ -537,4 +538,161 @@ int nrf_cloud_decode_data_endpoint(const struct nrf_cloud_data *input,
 	cJSON_Delete(root_obj);
 
 	return err;
+}
+
+int nrf_cloud_parse_cell_location_json(const cJSON *const cell_loc_obj,
+	const enum cell_based_location_type type,
+	struct cell_based_loc_data *const location_out)
+{
+	if (!cell_loc_obj || !location_out) {
+		return -EINVAL;
+	}
+
+	cJSON *lat, *lon, *unc;
+
+	lat = cJSON_GetObjectItem(cell_loc_obj,
+				  AGPS_JSON_CELL_LOC_KEY_LAT);
+	lon = cJSON_GetObjectItem(cell_loc_obj,
+				  AGPS_JSON_CELL_LOC_KEY_LON);
+	unc = cJSON_GetObjectItem(cell_loc_obj,
+				  AGPS_JSON_CELL_LOC_KEY_UNCERT);
+
+	if (!cJSON_IsNumber(lat) || !cJSON_IsNumber(lon) ||
+	    !cJSON_IsNumber(unc)) {
+		LOG_DBG("Expected items not found in cell-based location msg");
+		return -EBADMSG;
+	}
+
+	location_out->lat = lat->valuedouble;
+	location_out->lon = lon->valuedouble;
+	location_out->unc = unc->valueint;
+	location_out->type = type;
+
+	LOG_DBG("Cell location: (%lf, %lf), unc: %d, type: %d",
+		location_out->lat, location_out->lon,
+		location_out->unc, location_out->type);
+
+	return 0;
+}
+
+int nrf_cloud_parse_cell_location(const char * const response,
+	const enum cell_based_location_type type,
+	struct cell_based_loc_data *const location_out)
+{
+	cJSON * resp_obj = cJSON_Parse(response);
+
+	return nrf_cloud_parse_cell_location_json(resp_obj, type, location_out);
+}
+
+static char * json_strdup(cJSON * const string_obj)
+{
+	if (!cJSON_IsString(string_obj)) {
+		return NULL;
+	}
+
+	char *dest;
+	char *src = cJSON_GetStringValue(string_obj);
+
+	if (!src) {
+		return NULL;
+	}
+
+	dest = k_calloc( strlen(src) + 1, 1);
+	if (dest) {
+		strcpy(dest, src);
+	}
+
+	return dest;
+}
+
+int nrf_cloud_parse_rest_fota_execution(const char * const response,
+	struct nrf_cloud_fota_job_info * const job)
+{
+	if (!response || !job) {
+		return -EINVAL;
+	}
+
+	int ret = 0;
+	char * type;
+	cJSON * path_obj;
+	cJSON * host_obj;
+	cJSON * type_obj;
+	cJSON * size_obj;
+
+	cJSON * resp_obj = cJSON_Parse(response);
+	cJSON * job_doc  = cJSON_GetObjectItem(resp_obj, NRF_CLOUD_FOTA_REST_KEY_JOB_DOC);
+	cJSON * id_obj   = cJSON_GetObjectItem(resp_obj, NRF_CLOUD_FOTA_REST_KEY_JOB_ID);
+
+	memset(job, 0, sizeof(*job));
+
+	if (!job_doc || !id_obj)
+	{
+		ret = -EBADMSG;
+		goto err_cleanup;
+	}
+
+	path_obj = cJSON_GetObjectItem(job_doc, NRF_CLOUD_FOTA_REST_KEY_PATH);
+	host_obj = cJSON_GetObjectItem(job_doc, NRF_CLOUD_FOTA_REST_KEY_HOST);
+	type_obj = cJSON_GetObjectItem(job_doc, NRF_CLOUD_FOTA_REST_KEY_TYPE);
+	size_obj = cJSON_GetObjectItem(job_doc, NRF_CLOUD_FOTA_REST_KEY_SIZE);
+
+	if (!id_obj || !path_obj || !host_obj || !type_obj || !size_obj) {
+		ret = -EFTYPE;
+		goto err_cleanup;
+	}
+
+	if (!cJSON_IsNumber(size_obj)) {
+		ret = -ENOMSG;
+		goto err_cleanup;
+	}
+	job->file_size	= type_obj->valueint;
+
+	job->id		= json_strdup(id_obj);
+	job->path	= json_strdup(path_obj);
+	job->host	= json_strdup(host_obj);
+
+	if (!job->id || !job->path || !job->host) {
+		ret = -ENOSTR;
+		goto err_cleanup;
+	}
+
+	type = cJSON_GetStringValue(type_obj);
+	if (!type) {
+		ret = -ENODATA;
+		goto err_cleanup;
+	}
+
+	if (!strcmp(type, NRF_CLOUD_FOTA_REST_VAL_TYPE_MODEM)) {
+		job->type = NRF_CLOUD_FOTA_MODEM;
+	} else if (!strcmp(type, NRF_CLOUD_FOTA_REST_VAL_TYPE_BOOT)) {
+		job->type = NRF_CLOUD_FOTA_BOOTLOADER;
+	} else if (!strcmp(type, NRF_CLOUD_FOTA_REST_VAL_TYPE_APP)) {
+		job->type = NRF_CLOUD_FOTA_APPLICATION;
+	} else {
+		job->type = NRF_CLOUD_FOTA_TYPE__INVALID;
+	}
+
+	return 0;
+
+err_cleanup:
+	if (resp_obj) {
+		cJSON_free(resp_obj);
+	}
+
+	if (job->id) {
+		k_free(job->id);
+	}
+
+	if (job->host) {
+		k_free(job->host);
+	}
+
+	if (job->path) {
+		k_free(job->path);
+	}
+
+	memset(job, 0, sizeof(*job));
+	job->type	= NRF_CLOUD_FOTA_TYPE__INVALID;
+
+	return ret;
 }

@@ -193,6 +193,24 @@ source "subsys/logging/Kconfig.template.log_config"
 endif # NRF_CLOUD_AGPS
 endmenu
 
+menu "nRF Cloud REST API"
+
+config NRF_CLOUD_REST
+	bool "Enable nRF Cloud REST API"
+
+if NRF_CLOUD_REST
+
+config NRF_CLOUD_REST_HOST_NAME
+	string "nRF Cloud REST API hostname"
+	default "api.nrfcloud.com"
+
+module = NRF_CLOUD_REST
+module-str = nRF Cloud REST
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # NRF_CLOUD_REST
+endmenu
+
 config NRF_CLOUD_CONNECTION_POLL_THREAD
 	bool "Poll cloud connection in a separate thread"
 
