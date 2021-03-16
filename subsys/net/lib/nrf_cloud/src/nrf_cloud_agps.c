@@ -19,29 +19,9 @@
 
 LOG_MODULE_REGISTER(nrf_cloud_agps, CONFIG_NRF_CLOUD_AGPS_LOG_LEVEL);
 
+#include "nrf_cloud_codec.h"
 #include "nrf_cloud_transport.h"
 #include "nrf_cloud_agps_schema_v1.h"
-
-
-#define AGPS_JSON_MSG_TYPE_KEY		"messageType"
-#define AGPS_JSON_MSG_TYPE_VAL_DATA	"DATA"
-
-#define AGPS_JSON_DATA_KEY		"data"
-#define AGPS_JSON_MCC_KEY		"mcc"
-#define AGPS_JSON_MNC_KEY		"mnc"
-#define AGPS_JSON_AREA_CODE_KEY		"tac"
-#define AGPS_JSON_CELL_ID_KEY		"eci"
-#define AGPS_JSON_PHYCID_KEY		"phycid"
-#define AGPS_JSON_TYPES_KEY		"types"
-#define AGPS_JSON_CELL_LOC_KEY_DOREPLY	"doReply"
-
-#define AGPS_JSON_APPID_KEY		"appId"
-#define AGPS_JSON_APPID_VAL_AGPS	"AGPS"
-#define AGPS_JSON_APPID_VAL_SINGLE_CELL	"SCELL"
-#define AGPS_JSON_APPID_VAL_MULTI_CELL	"MCELL"
-#define AGPS_JSON_CELL_LOC_KEY_LAT	"lat"
-#define AGPS_JSON_CELL_LOC_KEY_LON	"lon"
-#define AGPS_JSON_CELL_LOC_KEY_UNCERT	"uncertainty"
 
 extern void agps_print(enum nrf_cloud_agps_type type, void *data);
 
@@ -49,13 +29,6 @@ static int fd = -1;
 static bool agps_print_enabled;
 static const struct device *gps_dev;
 static bool json_initialized;
-
-struct cell_based_loc_data {
-	enum cell_based_location_type type;
-	double lat;
-	double lon;
-	uint32_t unc;
-};
 
 static struct cell_based_loc_data cell_based_loc = {
 	.type = CELL_LOC_TYPE_SINGLE
@@ -345,38 +318,6 @@ bool json_item_string_exists(const cJSON *const obj,
 	return (strcmp(str_val, val) == 0);
 }
 
-static int json_parse_cell_location(const cJSON *const cell_loc_obj,
-				    const enum cell_based_location_type type)
-{
-	__ASSERT_NO_MSG(cell_loc_obj);
-
-	cJSON *lat, *lon, *unc;
-
-	lat = cJSON_GetObjectItem(cell_loc_obj,
-				  AGPS_JSON_CELL_LOC_KEY_LAT);
-	lon = cJSON_GetObjectItem(cell_loc_obj,
-				  AGPS_JSON_CELL_LOC_KEY_LON);
-	unc = cJSON_GetObjectItem(cell_loc_obj,
-				  AGPS_JSON_CELL_LOC_KEY_UNCERT);
-
-	if (!cJSON_IsNumber(lat) || !cJSON_IsNumber(lon) ||
-	    !cJSON_IsNumber(unc)) {
-		LOG_DBG("Expected items not found in cell-based location msg");
-		return -EBADMSG;
-	}
-
-	cell_based_loc.lat = lat->valuedouble;
-	cell_based_loc.lon = lon->valuedouble;
-	cell_based_loc.unc = unc->valueint;
-	cell_based_loc.type = type;
-
-	LOG_DBG("Cell location: (%lf, %lf), unc: %d, type: %d",
-		cell_based_loc.lat, cell_based_loc.lon,
-		cell_based_loc.unc, cell_based_loc.type);
-
-	return 0;
-}
-
 static int parse_cell_location_response(const char *const buf)
 {
 	int ret;
@@ -421,7 +362,8 @@ static int parse_cell_location_response(const char *const buf)
 		goto cleanup;
 	}
 
-	ret = json_parse_cell_location(data_obj, cell_loc_type);
+	ret = nrf_cloud_parse_cell_location_json(data_obj, cell_loc_type,
+						 &cell_based_loc);
 
 cleanup:
 	cJSON_Delete(cell_loc_obj);
