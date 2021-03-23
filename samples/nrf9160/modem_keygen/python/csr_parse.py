@@ -71,7 +71,7 @@ def main():
 
     if csr_obj[0] == 3:
         print("Device UUID: " + csr_obj[1].hex())
-        print("Modem Slot:  " + str(csr_obj[2]))
+        print("Key ID: " + csr_obj[2].hex())
 
         csr_asn1 = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_ASN1, csr_obj[3])
         csr_pem_str = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
