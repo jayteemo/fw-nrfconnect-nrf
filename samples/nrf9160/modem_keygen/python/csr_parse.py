@@ -18,11 +18,15 @@ msg_type_dict = {
     3: 'CSR message v1',
     5: 'Provisioning response v1'
 }
+device_type_dict = {
+    1: 'nRF9160 SIAA',
+    2: 'nRF9160 SIBA',
+    3: 'NRF9160 SIAA'
+}
 
 def parse_args():
     parser = argparse.ArgumentParser(description="CSR parser")
-    parser.add_argument("-c",	"--csr", type=str, help="base64 CSR string", default="")
-    parser.add_argument("-s",	"--scsr", type=str, help="base64 CSR string with COSE signature", default="")
+    parser.add_argument("-d", "--data", type=str, help="base64 string: CSR or attestation token", default="")
     args = parser.parse_args()
     return args
 
@@ -40,21 +44,18 @@ def main():
         raise RuntimeError('No input provided')
 
     args = parse_args()
-
-    csr = ""
-    cose = ""
-
-    if args.scsr:
-        csr_cose = args.scsr.split('.')
-        csr = csr_cose[0]
-        cose = csr_cose[1]
-    elif args.csr:
-        csr = args.csr
-    else:
+    if len(args.data) <= 0:
         raise RuntimeError("No CBOR data provided")
 
-    csr_bytes = base64_decode(csr)
-    csr_obj = loads(csr_bytes)
+    body_cose = args.data.split('.')
+    body = body_cose[0]
+
+    cose = ""
+    if len(body_cose) > 1:
+        cose = body_cose[1]
+
+    body_bytes = base64_decode(body)
+    body_obj = loads(body_bytes)
 
     if len(cose):
         cose_bytes = base64_decode(cose)
@@ -67,13 +68,13 @@ def main():
         print("      " + cose_obj.value[3].hex())
 
     print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
-    print("Msg Type:    " + msg_type_dict[csr_obj[0]])
+    print("Msg Type:    " + msg_type_dict[body_obj[0]])
 
-    if csr_obj[0] == 3:
-        print("Device UUID: " + csr_obj[1].hex())
-        print("Key ID: " + csr_obj[2].hex())
+    if body_obj[0] == 3:
+        print("Device UUID: " + body_obj[1].hex())
+        print("Key ID: " + body_obj[2].hex())
 
-        csr_asn1 = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_ASN1, csr_obj[3])
+        csr_asn1 = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_ASN1, body_obj[3])
         csr_pem_str = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
 
         print("Full CSR:")
@@ -84,6 +85,11 @@ def main():
         print("Device public key:")
         pub_key_str = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, csr_asn1.get_pubkey())
         print(pub_key_str.decode())
+
+    elif body_obj[0] == 1:
+        print("Device UUID: " + body_obj[1].hex())
+        print("Device Type: " + device_type_dict[body_obj[2]])
+        print("FW UUID:     " + body_obj[3].hex())
 
     print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
 
