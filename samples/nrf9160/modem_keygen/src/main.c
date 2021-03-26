@@ -259,7 +259,6 @@ int parse_cbor_array(CborValue * array)
 	CborValue it_array;
 	CborError err_cbor;
 	int err = 0;
-	int int_count = 0;
 
 	printk("Parsing cbor array...\n");
 
@@ -286,18 +285,19 @@ int parse_cbor_array(CborValue * array)
 			}
 
 			if (bin_sz > 16) {
-				ascii = bin_to_base64url_str(bin_buf, bin_sz);
 				printf("... CSR:\n");
-			} else {
+				ascii = bin_to_base64url_str(bin_buf, bin_sz);
+			} else if (bin_sz == 16) {
 				printf("... UUID:\n");
+				ascii = bin_to_hex_str(bin_buf, bin_sz);
+			} else {
+				printf("... KID:\n");
 				ascii = bin_to_hex_str(bin_buf, bin_sz);
 			}
 
 			if (ascii){
 				printf("%s\n", ascii);
 				k_free(ascii);
-			} else {
-				printf("Error!\n");
 			}
 
 			if (bin_buf) {
@@ -310,13 +310,7 @@ int parse_cbor_array(CborValue * array)
 		{
 			int val = 0;
 			cbor_value_get_int(&it_array, &val);
-
-			int_count++;
-			if (int_count == 1) {
-				printk("... Msg Type: %d\n", val);
-			} else {
-				printk("... Modem Slot: %d\n", val);
-			}
+			printk("... Msg Type: %d\n", val);
 			break;
 		}
 		default:
@@ -476,7 +470,7 @@ void main(void)
 	char * sig = NULL;
 	char * key = NULL;
 
-	err = nrf_modem_lib_init();
+	err = nrf_modem_lib_init(NORMAL_MODE);
 	if (err) {
 		printk("Failed to initialize modem library: %d\n", err);
 		return;
@@ -492,7 +486,7 @@ void main(void)
 	err = at_cmd_write(AT_KEYGEN_CMD, at_cmd_buf, sizeof(at_cmd_buf), &state);
 	if (err == -8){
 		/* delete and retry */
-		printk("Deleting existing key in slot %d\n", CONFIG_SEC_TAG);
+		printk("Deleting existing key in slot %d\n", MODEM_SLOT);
 		err = at_cmd_write(AT_DELETE_KEY_CMD, NULL, 0, &state);
 		if (err) {
 			printk("Failed to delete key, err: %d\n", err);
@@ -504,7 +498,7 @@ void main(void)
 			printk("Could not generate key\n");
 			return;
 		}
-	} else {
+	} else if (err) {
 		printk("AT cmd err: %d\n", err);
 		return;
 	}
