@@ -31,3 +31,4 @@ doc/*_doc.log
 
 ext/lib/bin/supl
 ext/lib/bin/libsupl.zip
+.DS_Store
