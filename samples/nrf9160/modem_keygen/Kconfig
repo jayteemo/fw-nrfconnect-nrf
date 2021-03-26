@@ -9,10 +9,11 @@ menu "Modem Keygen Example"
 config SEC_TAG
 	int "Modem slot to store key"
 	default 99
-endmenu
 
 config PARSE_EXAMPLE_KEYGEN_OUTPUT
 	bool "Parse example keygen output instead of generating/saving a new key."
+
+endmenu
 
 module = MODEM_KEYGEN_EXAMPLE
 module-str = Modem Keygen Example
