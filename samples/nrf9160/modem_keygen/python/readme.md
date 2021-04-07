@@ -1,7 +1,6 @@
 CSR Parse Example
 
-Parse modem keygen output; CSR with or without COSE.
+Parse modem keygen output; with or without COSE portion.
 
-`python3 csr_parse.py -c <base64 CSR string>`
+`python3 csr_parse.py -d <base64url keygen output>`
 
-`python3 csr_parse.py -s <base64 CSR string with COSE signature>`

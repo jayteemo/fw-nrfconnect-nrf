@@ -45,7 +45,7 @@ def main():
 
     args = parse_args()
     if len(args.data) <= 0:
-        raise RuntimeError("No CBOR data provided")
+        raise RuntimeError("No input data provided")
 
     body_cose = args.data.split('.')
     body = body_cose[0]
@@ -55,43 +55,41 @@ def main():
         cose = body_cose[1]
 
     body_bytes = base64_decode(body)
-    body_obj = loads(body_bytes)
+
+    csr_asn1 = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_ASN1, body_bytes)
+    csr_pem_str = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
+
+    csr_pem_list = str(csr_pem_str.decode()).split('\n')
+    for line in csr_pem_list:
+        print(line)
+
+    print("Device public key:")
+    pub_key_str = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, csr_asn1.get_pubkey())
+    print(pub_key_str.decode())
 
     if len(cose):
         cose_bytes = base64_decode(cose)
         cose_obj = loads(cose_bytes)
         print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
         print("COSE:")
-        print("      " + cose_obj.value[0].hex())
-        print("      " + str(cose_obj.value[1]))
-        print("      " + str(cose_obj.value[2]))
-        print("      " + cose_obj.value[3].hex())
+        print("  " + cose_obj.value[0].hex())
+        print("  " + str(cose_obj.value[1]))
+
+        attest_obj = loads(cose_obj.value[2])
+        print("   ---------------")
+        print("   Attestation:")
+        print("               " + str(attest_obj[0]))
+        print("   Dev. UUID:  " + attest_obj[1].hex())
+        print("   Key ID:     " + attest_obj[2].hex())
+        print("   32 bytes:   " + attest_obj[3].hex())
+        print("   16 bytes:   " + attest_obj[4].hex())
+        print("   ---------------")
+        print("Sig:  ")
+        print("       " + cose_obj.value[3].hex())
 
     print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
-    print("Msg Type:    " + msg_type_dict[body_obj[0]])
 
-    if body_obj[0] == 3:
-        print("Device UUID: " + body_obj[1].hex())
-        print("Key ID: " + body_obj[2].hex())
-
-        csr_asn1 = OpenSSL.crypto.load_certificate_request(OpenSSL.crypto.FILETYPE_ASN1, body_obj[3])
-        csr_pem_str = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
-
-        print("Full CSR:")
-        csr_pem_list = str(csr_pem_str.decode()).split('\n')
-        for line in csr_pem_list:
-            print(line)
-
-        print("Device public key:")
-        pub_key_str = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, csr_asn1.get_pubkey())
-        print(pub_key_str.decode())
-
-    elif body_obj[0] == 1:
-        print("Device UUID: " + body_obj[1].hex())
-        print("Device Type: " + device_type_dict[body_obj[2]])
-        print("FW UUID:     " + body_obj[3].hex())
-
-    print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
+    return
 
 if __name__ == '__main__':
     main()
