@@ -12,6 +12,7 @@
 #include <net/mqtt.h>
 #include <net/socket.h>
 #include <modem/at_cmd.h>
+#include <modem/at_notif.h>
 #include <modem/lte_lc.h>
 #include <logging/log.h>
 #if defined(CONFIG_MODEM_KEY_MGMT)
@@ -25,6 +26,8 @@
 #include "certificates.h"
 
 LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
+
+#define DISCONNECT_STR "disconnect"
 
 /* Buffers for MQTT client. */
 static uint8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
@@ -87,6 +90,9 @@ void nrf_modem_recoverable_error_handler(uint32_t err)
 
 #if defined(CONFIG_LWM2M_CARRIER)
 K_SEM_DEFINE(carrier_registered, 0, 1);
+#if defined(CONFIG_MQTT_LIB_TLS)
+static atomic_t carrier_requested_disconnect;
+#endif
 int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 {
 	switch (event->type) {
@@ -117,6 +123,14 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		break;
 	case LWM2M_CARRIER_EVENT_FOTA_START:
 		LOG_INF("LWM2M_CARRIER_EVENT_FOTA_START");
+#if defined(CONFIG_MQTT_LIB_TLS)
+		/* Due to limitations in the number of secure sockets,
+		 * the cloud socket has to be closed when the carrier
+		 * library initiates firmware upgrade download.
+		 */
+		atomic_set(&carrier_requested_disconnect, 1);
+		mqtt_disconnect(&client);
+#endif
 		break;
 	case LWM2M_CARRIER_EVENT_REBOOT:
 		LOG_INF("LWM2M_CARRIER_EVENT_REBOOT");
@@ -232,6 +246,7 @@ void mqtt_evt_handler(struct mqtt_client *const c,
 
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &evt->param.publish;
+		bool disconnect = false;
 
 		LOG_INF("MQTT PUBLISH result=%d len=%d",
 			evt->result, p->message.payload.len);
@@ -249,11 +264,19 @@ void mqtt_evt_handler(struct mqtt_client *const c,
 		if (err >= 0) {
 			data_print("Received: ", payload_buf,
 				p->message.payload.len);
+
+			if (strncmp(payload_buf, DISCONNECT_STR,
+			    strlen(DISCONNECT_STR)) == 0) {
+				disconnect = true;
+			    }
 			/* Echo back received data */
 			data_publish(&client, MQTT_QOS_1_AT_LEAST_ONCE,
 				payload_buf, p->message.payload.len);
 		} else {
 			LOG_ERR("publish_get_payload failed: %d", err);
+			disconnect = true;
+		}
+		if (disconnect) {
 			LOG_INF("Disconnecting MQTT client...");
 
 			err = mqtt_disconnect(c);
@@ -482,11 +505,61 @@ static int fds_init(struct mqtt_client *c)
 	return 0;
 }
 
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+static void sms_receiver_notif_parse(void *ctx, const char *notif)
+{
+	int err;
+	int length = strlen(notif);
+
+	if ((length < 12) || (strncmp(notif, "+CMT:", 5) != 0)) {
+		return;
+	}
+
+	err = at_cmd_write("AT+CNMA=1", NULL, 0, NULL);
+	if (err) {
+		LOG_ERR("Unable to ACK SMS notification");
+	} else {
+		LOG_INF("SMS ACKed");
+	}
+}
+
+static int init_sms(void)
+{
+	int err = at_notif_register_handler(NULL, sms_receiver_notif_parse);
+	if (err) {
+		LOG_ERR("Failed to register AT handler, err %d", err);
+		return err;
+	}
+
+	return at_cmd_write("AT+CNMI=3,2,0,1", NULL, 0, NULL);
+}
+
+static void send_sms(void)
+{
+	int err;
+	char sms[] = "AT+CMGS=34\r<SMS content>_";
+
+	sms[sizeof(sms) - 2] = '\x1a';
+
+	LOG_INF("Sending SMS...");
+	err = at_cmd_write(sms, NULL, 0, NULL);
+	if (err < 0) {
+		LOG_ERR("Failed to send SMS, error: %d", err);
+		return;
+	}
+
+	LOG_INF("SMS sent");
+}
+#endif
+
 #if defined(CONFIG_DK_LIBRARY)
 static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
 	if (has_changed & button_states &
 	    BIT(CONFIG_BUTTON_EVENT_BTN_NUM - 1)) {
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+		send_sms();
+#else
 		int ret;
 
 		ret = data_publish(&client,
@@ -496,6 +569,7 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 		if (ret) {
 			LOG_ERR("Publish failed: %d", ret);
 		}
+#endif
 	}
 }
 #endif
@@ -530,6 +604,14 @@ static int modem_configure(void)
 #else /* defined(CONFIG_LWM2M_CARRIER) */
 		int err;
 
+		err = init_sms();
+		if (err) {
+			LOG_ERR("Could not enable SMS");
+			return err;
+		} else {
+			LOG_INF("SMS enabled");
+		}
+
 		LOG_INF("LTE Link Connecting...");
 		err = lte_lc_init_and_connect();
 		if (err) {
@@ -548,6 +630,7 @@ void main(void)
 {
 	int err;
 	uint32_t connect_attempt = 0;
+	int64_t start_time;
 
 	LOG_INF("The MQTT simple sample started");
 
@@ -568,6 +651,7 @@ void main(void)
 		}
 	} while (err);
 
+	start_time = k_uptime_get();
 	err = client_init(&client);
 	if (err != 0) {
 		LOG_ERR("client_init: %d", err);
@@ -579,6 +663,17 @@ void main(void)
 #endif
 
 do_connect:
+
+#if defined(CONFIG_MQTT_LIB_TLS)
+	if (atomic_get(&carrier_requested_disconnect)) {
+		/* A disconnect was requested to free up the TLS socket
+		 * used by MQTT.  If enabled, the carrier library
+		 * (CONFIG_LWM2M_CARRIER) will perform FOTA updates in
+		 * the background and reboot the device when complete.
+		 */
+		return;
+	}
+#endif
 	if (connect_attempt++ > 0) {
 		LOG_INF("Reconnecting in %d seconds...",
 			CONFIG_MQTT_RECONNECT_DELAY_S);
@@ -597,6 +692,16 @@ do_connect:
 	}
 
 	while (1) {
+
+#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
+		int64_t time = start_time;
+		if (start_time && (k_uptime_delta(&time) >= 30000)) {
+			send_sms();
+			/* only once */
+			start_time = 0;
+		}
+#endif
+
 		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
 		if (err < 0) {
 			LOG_ERR("poll: %d", errno);
