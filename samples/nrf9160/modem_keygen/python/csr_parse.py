@@ -11,6 +11,7 @@ from cbor2 import loads
 import base64
 import OpenSSL.crypto
 from OpenSSL.crypto import load_certificate_request, FILETYPE_PEM
+import hashlib
 
 msg_type_dict = {
     1: 'Device identity message v1',
@@ -23,6 +24,18 @@ device_type_dict = {
     2: 'nRF9160 SIBA',
     3: 'NRF9160 SIAA'
 }
+payload_id_dict = {
+    8: 'pubkey_msg_v2',
+    9: 'CSR_msg_v1'
+}
+header_key_type_dict = {
+    -7: 'ECDSA w/ SHA-256',
+    -2: 'identity_key',
+    -4: 'nordic_base_production_key',
+    -5: 'nordic_base_rd_key'
+}
+
+payload_digest = ""
 
 def parse_args():
     parser = argparse.ArgumentParser(description="CSR parser")
@@ -52,21 +65,20 @@ def parse_cose(cose_str):
 
     print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
     print("COSE:")
-    # TODO: not sure what this first value is
-    print("  Value: " + cose_obj.value[0].hex())
 
-    # the unprotected header contains a map, where 4 indicates the key id
-    key_id = False
+    # print protected header info
+    phdr_obj = loads(cose_obj.value[0])
+    for key in phdr_obj.keys():
+        print("  Prot Hdr:   " + str(key) + " : " +
+              str(phdr_obj[key]) + " (" +
+              header_key_type_dict.get(phdr_obj[key]) + ")")
+
+    # the unprotected header contains a map (and another cose object)
     for key in cose_obj.value[1].keys():
-        if key == 4:
-            key_id = True
-            break
-
-    # Print key id value if found, otherwise just print the map
-    if key_id:
-        print("  Key ID: " + "0x" + cose_obj.value[1][4].hex())
-    else:
-        print("  " + str(cose_obj.value[1]))
+        unphdr_obj = loads(cose_obj.value[1].get(key))
+        print("  Unprot Hdr: " + str(key)  + " : " +
+              str(unphdr_obj) + " (" +
+              header_key_type_dict.get(unphdr_obj) + ")")
 
     # The COSE payload may contain a cbor attestation payload
     # If present, decode the cbor and print
@@ -74,14 +86,13 @@ def parse_cose(cose_str):
     print("  Attestation:")
     if str(cose_obj.value[2]) != "None":
         attest_obj = loads(cose_obj.value[2])
-        # TODO: not sure what the first value is
-        print("    ???:        " + str(attest_obj[0]))
+        print("    Payload ID: " + payload_id_dict.get(attest_obj[0]))
         print("    Dev. UUID:  " + attest_obj[1].hex())
-        print("    sec_tag:    " + "0x" + attest_obj[2].hex())
-        # TODO: Not sure what the 32 and 16 byte payloads are...
-        #       Hash/signatures of something
-        print("    32 bytes:   " + attest_obj[3].hex())
-        print("    16 bytes:   " + attest_obj[4].hex())
+        # Print the sec_tag byte as an integer
+        print("    sec_tag:    " + str(attest_obj[2][0]))
+        # SHA256 digest of cert/key in the payload
+        print("    SHA256:     " + attest_obj[3].hex())
+        print("    Nonce:      " + attest_obj[4].hex())
     else:
         print("    Not present")
     print("  ---------------")
@@ -89,6 +100,12 @@ def parse_cose(cose_str):
     # Print the 64-bit signature
     print("  Sig:")
     print("      " + cose_obj.value[3].hex())
+
+    if len(payload_digest) > 0:
+        if attest_obj[3].hex() == payload_digest:
+            print("\nCOSE digest matches payload")
+        else:
+            print("\nCOSE digest does NOT match payload")
     print("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *")
 
     return
@@ -130,6 +147,11 @@ def parse_keygen_output(keygen_str):
     print("Device public key:")
     print(pub_key_str.decode())
 
+    global payload_digest
+    payload_digest = hashlib.sha256(body_bytes).hexdigest()
+    print("SHA256 Digest:")
+    print(payload_digest + "\n")
+
     # Get optional cose
     cose = ""
     if len(body_cose) > 1:
@@ -156,7 +178,7 @@ def parse_attesttoken_output(atokout_str):
     print("---------------")
     print("Msg Type:    " + msg_type_dict[body_obj[0]])
     print("Dev UUID:    " + body_obj[1].hex())
-    print("Dev Type:    " + device_type_dict[body_obj[2]])
+    print("Dev Type:    " + device_type_dict.get(body_obj[2]))
     print("FW UUID:     " + body_obj[3].hex())
     print("---------------")
 

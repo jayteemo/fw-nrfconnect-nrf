@@ -46,20 +46,25 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEKg+qTX2tvaPxF58Otm50Fq/PiarD
 Yfx2cUt5N2zA+CmfPqsZ74HqIqkOcwMnBD/1nJs6sqb8Mn96ljK2dlQeWg==
 -----END PUBLIC KEY-----
 
+SHA256 Digest:
+702a3d56f05b2f72531d650825e20041e2e9d9318c34b6853ab9066e5c72e80c
+
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 COSE:
-  Value: a10126
-  Key ID: 0x21
+  Prot Hdr:   1 : -7 (ECDSA w/ SHA-256)
+  Unprot Hdr: 4 : -2 (identity_key)
   ---------------
   Attestation:
-    ???:        9
+    Payload ID: CSR_msg_v1
     Dev. UUID:  50363154393144f08022121b6401627d
-    sec_tag:    0x11
-    32 bytes:   702a3d56f05b2f72531d650825e20041e2e9d9318c34b6853ab9066e5c72e80c
-    16 bytes:   1b8722ee1deb581566e2cb1359b27cd2
+    sec_tag:    17
+    SHA256:     702a3d56f05b2f72531d650825e20041e2e9d9318c34b6853ab9066e5c72e80c
+    Nonce:      1b8722ee1deb581566e2cb1359b27cd2
   ---------------
   Sig:
       d489397bc3016dd2112c0a2110b318fe842b69064f196bc5177dd032729c767da08e3c922b91f9a2492f3e63aff6b5302800c3750625a24ce8a6635c1913751d
+
+COSE digest matches payload
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 ```
 
@@ -75,20 +80,25 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEZKgDx0O0FKa7i1yFoxYngNdV5Csy
 i4rEPHcFTfeBVtkkJX+G0QZs+yesfzIaPs91b4x5xYN/g28k63gkeVMJwA==
 -----END PUBLIC KEY-----
 
+SHA256 Digest:
+e5a2fc2a315a09d56fb1f774eaca9cb6bffd402efdfe18217547d818232d9656
+
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 COSE:
-  Value: a10126
-  Key ID: 0x21
+  Prot Hdr:   1 : -7 (ECDSA w/ SHA-256)
+  Unprot Hdr: 4 : -2 (identity_key)
   ---------------
   Attestation:
-    ???:        8
+    Payload ID: pubkey_msg_v2
     Dev. UUID:  50363154393144f08022121b6401627d
-    sec_tag:    0x10
-    32 bytes:   e5a2fc2a315a09d56fb1f774eaca9cb6bffd402efdfe18217547d818232d9656
-    16 bytes:   505efc4aa80f494ef7858779d5c1c7be
+    sec_tag:    16
+    SHA256:     e5a2fc2a315a09d56fb1f774eaca9cb6bffd402efdfe18217547d818232d9656
+    Nonce:      505efc4aa80f494ef7858779d5c1c7be
   ---------------
   Sig:
       0c96dc124a4561f234813e13fbf677521b41c94ce69317d484c48abe16cb6374b516da29f176f55fab32dad39ae05eac6c84de6f7d022cdb6413facc02b77d21
+
+COSE digest matches payload
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 ```
 
@@ -106,8 +116,8 @@ FW UUID:     1aff3acbf1a64764a2634c2646c1c654
 ---------------
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
 COSE:
-  Value: a10126
-  Key ID: 0x21
+  Prot Hdr:   1 : -7 (ECDSA w/ SHA-256)
+  Unprot Hdr: 4 : -2 (identity_key)
   ---------------
   Attestation:
     Not present
