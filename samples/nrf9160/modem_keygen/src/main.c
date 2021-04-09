@@ -27,15 +27,20 @@
 
 #define AT_KEYGEN_CMD "AT%KEYGEN=" \
 		      XSTR(MODEM_SLOT) \
-		      ",2,\"O=Nordic Semiconductor,L=PDX,C=no\",\"101010000\""
+		      ",2," \
+		      XSTR(CONFIG_KEYGEN_TYPE) \
+		      ",\"O=Nordic Semiconductor,L=PDX,C=no\",\"101010000\""
 
-#define EXAMPLE_RESP	"2dn3hANQUDYxVDkxRPCAIhIbZAFifRhjWQErMIIBJzCBzQIBADA6MR0wGwYDVQQK" \
-			"DBROb3JkaWMgU2VtaWNvbmR1Y3RvcjEMMAoGA1UEBwwDUERYMQswCQYDVQQGEwJu" \
-			"bzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABE0j0XtadQ2EyqxRM5iD_tfCQZyh" \
-			"3UVmZ1OlKbriZTMfG5E-rVGWT9Xcw7AzIgrWHhBfIk-jBH8lAGmw0HxYMFugMTAv" \
-			"BgkqhkiG9w0BCQ4xIjAgMAsGA1UdDwQEAwIDqDARBglghkgBhvhCAQEEBAMCBJAw" \
-			"DAYIKoZIzj0EAwIFAANHADBEAiBdxVKA3Nihuws8stOzEuCU1IHpN7rG96N-zTVY" \
-			"3TOMwwIgVRNW02MjXxhrYh_SnErR63StsVcX-4ovGYnJAQ4-FZ0"
+/* AT%KEYGEN=14,2,0 */
+#define EXAMPLE_RESP  "\"MIIBCjCBrwIBADAvMS0wKwYDVQQDDCQ1MDM2MzE1NC0zOTMxLTQ0ZjAtODAyMi0x" \
+			"MjFiNjQwMTYyN2QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQqD6pNfa29o_EX" \
+			"nw62bnQWr8-JqsNh_HZxS3k3bMD4KZ8-qxnvgeoiqQ5zAycEP_Wcmzqypvwyf3qW" \
+			"MrZ2VB5aoB4wHAYJKoZIhvcNAQkOMQ8wDTALBgNVHQ8EBAMCA-gwDAYIKoZIzj0E" \
+			"AwIFAANIADBFAiEAv7OLZ_dXbszfhhjcLMUT72wTmw-z6GlgWxVhyWgR27ACIAvY" \
+			"_lPu3yfYZY5AL6uYTkUFp4GQkbSOUC_lsHyCxOuG.0oRDoQEmoQRBIVhL2dn3hQl" \
+			"QUDYxVDkxRPCAIhIbZAFifUERWCBwKj1W8FsvclMdZQgl4gBB4unZMYw0toU6uQZ" \
+			"uXHLoDFAbhyLuHetYFWbiyxNZsnzSWEDUiTl7wwFt0hEsCiEQsxj-hCtpBk8Za8U" \
+			"XfdAycpx2faCOPJIrkfmiSS8-Y6_2tTAoAMN1BiWiTOimY1wZE3Ud\""
 
 static char at_cmd_buf[CONFIG_AT_CMD_RESPONSE_MAX_LEN];
 
@@ -465,10 +470,11 @@ void main(void)
 	int err;
 	size_t bin_buf_sz =  0;
 	char * bin_buf = NULL;
-	enum at_cmd_state state;
-#if !defined(CONFIG_PARSE_EXAMPLE_KEYGEN_OUTPUT)
 	char * sig = NULL;
 	char * key = NULL;
+
+#if !IS_ENABLED(CONFIG_PARSE_EXAMPLE_KEYGEN_OUTPUT)
+	enum at_cmd_state state;
 
 	err = nrf_modem_lib_init(NORMAL_MODE);
 	if (err) {
@@ -504,19 +510,20 @@ void main(void)
 	}
 
 	printk("AT cmd resp: %s\n", at_cmd_buf);
+#else
+	strcpy(at_cmd_buf, EXAMPLE_RESP);
+#endif
 
 	err = parse_keygen_resp(at_cmd_buf, &key, &sig);
 	if (err) {
+		printk("parsing failed");
 		return;
 	}
 
-	printk("Key:\n%s\n", key);
-	printk("Sig:\n%s\n", sig);
+	printk("Payload:\n%s\n", key);
+	printk("Cose   :\n%s\n", sig);
 
-	err = base64url_to_binary(key, &bin_buf, &bin_buf_sz);
-#else
-	err = base64url_to_binary(EXAMPLE_RESP, &bin_buf, &bin_buf_sz);
-#endif
+	err = base64url_to_binary(sig, &bin_buf, &bin_buf_sz);
 
 	if (err) {
 		printk("Failed to decode base64 string: %d\n", err);

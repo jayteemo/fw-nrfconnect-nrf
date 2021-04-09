@@ -10,6 +10,10 @@ config SEC_TAG
 	int "Modem slot to store key"
 	default 99
 
+config KEYGEN_TYPE
+	int "Keygen output type, 0 = CSR, 1 = Public key only"
+	default 0
+
 config PARSE_EXAMPLE_KEYGEN_OUTPUT
 	bool "Parse example keygen output instead of generating/saving a new key."
 
