@@ -44,6 +44,18 @@
 
 static char at_cmd_buf[CONFIG_AT_CMD_RESPONSE_MAX_LEN];
 
+struct cbor_payload {
+	char * buf;
+	size_t sz;
+};
+
+/* the first 2 BSTRs in the COSE data are additional CBOR payloads */
+#define CBOR_PAYLOADS_TO_SAVE 3
+struct cbor_payload cbor_payloads[CBOR_PAYLOADS_TO_SAVE];
+static int cbor_cnt = 0;
+
+static int parse_cbor_buffer(const char * const bin_buf, const size_t bin_buf_sz);
+
 /* Initialize AT communications */
 int at_comms_init(void)
 {
@@ -177,31 +189,43 @@ cleanup:
 	return err;
 }
 
-int get_cbor_byte_string(const CborValue * const bstr, char **bin_buf, size_t *bin_buf_sz)
+int get_cbor_string(const CborValue * const str_val, char **buf, size_t *buf_sz)
 {
-	if (!bstr || !bin_buf || !bin_buf_sz) {
+	if (!str_val  || !buf || !buf_sz) {
 		return -EINVAL;
 	}
 
-	*bin_buf_sz = 0;
-	*bin_buf = NULL;
+	CborType type = cbor_value_get_type(str_val );
+	if (type != CborByteStringType && type != CborTextStringType){
+		return -EBADMSG;
+	}
 
-	CborError err_cbor = cbor_value_calculate_string_length(bstr, bin_buf_sz);
+	*buf_sz = 0;
+	*buf = NULL;
+
+	CborError err_cbor = cbor_value_calculate_string_length(str_val , buf_sz);
 
 	if (err_cbor != CborNoError) {
 		printk("cbor_value_calculate_string_length err: %d\n", err_cbor);
 		return -EIO;
 	}
 
-	*bin_buf = k_calloc(*bin_buf_sz, 1);
-	if (!(*bin_buf)) {
+	*buf = k_calloc(*buf_sz, 1);
+	if (!(*buf)) {
 		printk("Out of memory\n");
 		return -ENOMEM;
 	}
 
-	err_cbor = cbor_value_copy_byte_string(bstr, *bin_buf, bin_buf_sz, NULL);
+	if (type == CborByteStringType) {
+		err_cbor = cbor_value_copy_byte_string(str_val , *buf, buf_sz, NULL);
+	} else {
+		err_cbor = cbor_value_copy_text_string(str_val , *buf, buf_sz, NULL);
+	}
 	if (err_cbor != CborNoError) {
-		printk("cbor_value_copy_byte_string err: %d\n", err_cbor);
+		printk("CBOR copy string err: %d\n", err_cbor);
+		k_free(*buf);
+		*buf = NULL;
+		*buf_sz = 0;
 		return -EIO;
 	}
 
@@ -259,53 +283,72 @@ char * bin_to_base64url_str(const char * const bin_buf, const size_t bin_sz)
 	return b64_buf;
 }
 
-int parse_cbor_array(CborValue * array)
+int print_cbor_values(CborValue * cbor_val)
 {
-	CborValue it_array;
-	CborError err_cbor;
 	int err = 0;
+	size_t len = 0;
 
-	printk("Parsing cbor array...\n");
+	while (!cbor_value_at_end(cbor_val)) {
+		switch (cbor_val->type) {
+		case CborTagType:
+		{
+			CborTag tag;
+			cbor_value_get_tag(cbor_val, &tag);
+			printk("... tag: %llu\n", tag);
+			break;
+		}
+		case CborMapType:
+		{
+			cbor_value_get_map_length(cbor_val, &len);
+			printk("... Map: len %u\n", len);
+			/* fall through */
+		}
+		case CborArrayType:
+		{
+			CborValue recursed;
 
-	err_cbor = cbor_value_enter_container(array, &it_array);
-	if (err_cbor != CborNoError) {
-		printk("cbor_value_enter_container err: %d\n", err_cbor);
-		return -EIO;
-	}
+			if (!len) {
+				cbor_value_get_array_length(cbor_val, &len);
+				printk("... Map: len %u\n", len);
+			}
 
-	while (!cbor_value_at_end(&it_array)) {
+			err = cbor_value_enter_container(cbor_val, &recursed);
+			if (err)
+				return err;
 
-		printk("...type = %d\n", it_array.type);
+			err = print_cbor_values(&recursed);
+			if (err)
+				return err;
 
-		switch (it_array.type) {
+			err = cbor_value_leave_container(cbor_val, &recursed);
+			if (err)
+				return err;
+
+			continue;
+		}
 		case CborByteStringType:
 		{
 			size_t bin_sz = 0;
 			char * bin_buf = NULL;
 			char * ascii = NULL;
 
-			err = get_cbor_byte_string(&it_array, &bin_buf, &bin_sz);
+			err = get_cbor_string(cbor_val, &bin_buf, &bin_sz);
 			if (err) {
 				break;
 			}
 
-			if (bin_sz > 16) {
-				printf("... CSR:\n");
-				ascii = bin_to_base64url_str(bin_buf, bin_sz);
-			} else if (bin_sz == 16) {
-				printf("... UUID:\n");
-				ascii = bin_to_hex_str(bin_buf, bin_sz);
+			if (cbor_cnt++ < CBOR_PAYLOADS_TO_SAVE) {
+				printf("... BSTR saved.\n");
+				cbor_payloads[cbor_cnt-1].buf = bin_buf;
+				cbor_payloads[cbor_cnt-1].sz = bin_sz;
 			} else {
-				printf("... KID:\n");
+				printf("... BSTR hex:\n");
 				ascii = bin_to_hex_str(bin_buf, bin_sz);
-			}
+				if (ascii){
+					printf("%s\n", ascii);
+					k_free(ascii);
+				}
 
-			if (ascii){
-				printf("%s\n", ascii);
-				k_free(ascii);
-			}
-
-			if (bin_buf) {
 				k_free(bin_buf);
 			}
 
@@ -314,67 +357,34 @@ int parse_cbor_array(CborValue * array)
 		case CborIntegerType:
 		{
 			int val = 0;
-			cbor_value_get_int(&it_array, &val);
-			printk("... Msg Type: %d\n", val);
+			cbor_value_get_int(cbor_val, &val);
+			printk("... Int: %d\n", val);
+			break;
+		}
+		case CborTextStringType:
+		{
+			char * str = NULL;
+			size_t str_sz = 0;
+			err = get_cbor_string(cbor_val, &str, &str_sz);
+			if (err) {
+				break;
+			}
+
+			printf("... Str:\n%s\n", str);
+			k_free(str);
+
 			break;
 		}
 		default:
 		{
-			printk("Parsing not implemented for type: %d\n", it_array.type);
+			printk("Parsing not implemented for type: %d\n", cbor_val->type);
 			break;
 		}
 		}
-
-		err_cbor = cbor_value_advance(&it_array);
-		if (err_cbor == CborErrorAdvancePastEOF) {
-			break;
-		} else if (err_cbor != CborNoError) {
-			printk("cbor_value_advance err: %d\n", err_cbor);
-			err = -EIO;
+		err = cbor_value_advance_fixed(cbor_val);
+		if (err) {
 			break;
 		}
-	}
-
-	err_cbor = cbor_value_leave_container(array, &it_array);
-	if (err_cbor != CborNoError) {
-		printk("cbor_value_leave_container err: %d\n", err_cbor);
-		return -EIO;
-	}
-
-	printk("... Finished parsing cbor array\n");
-
-	return err;
-}
-
-int parse_cbor_value(CborValue * value)
-{
-	int err = 0;
-
-	if (!value) {
-		return -EINVAL;
-	}
-
-	printk("cbor type: %d\n", value->type);
-
-	switch (value->type) {
-	case CborTagType:
-	{
-		CborTag tag;
-		cbor_value_get_tag(value, &tag);
-		printk("... tag: %llu\n", tag);
-		printk("\n");
-		break;
-	}
-	case CborArrayType:
-	{
-		err = parse_cbor_array(value);
-		printk("\n");
-		break;
-	}
-	default:
-	{
-		break;
-	}
 	}
 
 	return err;
@@ -386,7 +396,6 @@ int parse_cbor_buffer(const char * const bin_buf, const size_t bin_buf_sz)
 	CborError err_cbor;
 	CborParser parser;
 	CborValue value;
-	int err = 0;
 
 	cbor_buf_reader_init(&reader, (uint8_t *)bin_buf, bin_buf_sz);
 	err_cbor = cbor_parser_init(&reader.r, 0, &parser, &value);
@@ -401,23 +410,7 @@ int parse_cbor_buffer(const char * const bin_buf, const size_t bin_buf_sz)
 		return -EINVAL;
 	}
 
-	while (value.type != CborInvalidType) {
-
-		err = parse_cbor_value(&value);
-		if (err) {
-			printk("Error parsing cbor value.\n");
-		}
-
-		err_cbor = cbor_value_advance(&value);
-		if (err_cbor == CborErrorAdvancePastEOF) {
-			break;
-		} else if (err_cbor != CborNoError) {
-			printk("cbor_value_advance err: %d\n", err_cbor);
-			return -EIO;
-		}
-	}
-
-	return 0;
+	return print_cbor_values(&value);
 }
 
 int parse_keygen_resp(char * const resp, char **key, char **sig)
@@ -530,11 +523,28 @@ void main(void)
 		return;
 	}
 
+	char * hex_str = bin_to_hex_str(bin_buf, bin_buf_sz);
+	if (hex_str) {
+		printk("CBOR HEX: \n%s\n", hex_str);
+		k_free(hex_str);
+		hex_str = NULL;
+	}
+
 	err = parse_cbor_buffer(bin_buf, bin_buf_sz);
 
 	if (bin_buf) {
 		k_free(bin_buf);
 	}
 
-	return;
+	for (int cnt = 0; cnt < CBOR_PAYLOADS_TO_SAVE; ++cnt) {
+		if (cbor_payloads[0].buf && cbor_payloads[cnt].sz) {
+			printk("\nParse CBOR %d:\n", cnt);
+			err = parse_cbor_buffer(cbor_payloads[cnt].buf,
+						cbor_payloads[cnt].sz);
+
+			k_free(cbor_payloads[cnt].buf);
+		}
+	}
+
+	printk("Finished!\n");
 }
