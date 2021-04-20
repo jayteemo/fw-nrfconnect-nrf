@@ -30,6 +30,9 @@ There are no entries for this section yet.
 nRF9160
 =======
 
+* Added:
+  * :ref:`lib_modem_attest_token` library, which provides an API get an attestation token from the modem.  Functionality requires modem firmware 1.3 or greater.
+
 * Updated:
 
   * :ref:`lib_nrf_cloud` library:
