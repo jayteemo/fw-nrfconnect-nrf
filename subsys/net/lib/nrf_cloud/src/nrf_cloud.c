@@ -99,7 +99,7 @@ int nrf_cloud_init(const struct nrf_cloud_init_param *param)
 	}
 
 	/* Initialize the transport. */
-	err = nct_init();
+	err = nct_init(param->client_id);
 	if (err) {
 		return err;
 	}
@@ -599,20 +599,47 @@ static void api_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 static int api_init(const struct cloud_backend *const backend,
 		cloud_evt_handler_t handler)
 {
-	const struct nrf_cloud_init_param params = {
+	int ret;
+	struct nrf_cloud_init_param params = {
 		.event_handler = api_event_handler
 	};
+
+#if defined(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_RUNTIME)
+
+	if (!backend->config->user_data){
+		LOG_ERR("Required user data (client ID) has not been set");
+		return -EINVAL;
+	}
+
+	params.client_id = (char*)backend->config->user_data;
+#endif
 
 	backend->config->handler = handler;
 	nrf_cloud_backend = (struct cloud_backend *)backend;
 
-	return nrf_cloud_init(&params);
+	ret = nrf_cloud_init(&params);
+
+#if defined(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_RUNTIME)
+	nrf_cloud_free(backend->config->user_data);
+	backend->config->user_data = NULL;
+#endif
+
+	return ret;
 }
 
 static int api_uninit(const struct cloud_backend *const backend)
 {
-	LOG_INF("uninit() is not implemented");
-
+#if defined(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_RUNTIME)
+	if (!backend) {
+		return -EINVAL;
+	}
+	if (backend->config->user_data) {
+		nrf_cloud_free(backend->config->user_data);
+		backend->config->user_data = NULL;
+	}
+#else
+	LOG_INF("Un-init is not required");
+#endif
 	return 0;
 }
 
@@ -719,8 +746,28 @@ static int api_input(const struct cloud_backend *const backend)
 static int api_user_data_set(const struct cloud_backend *const backend,
 			 void *user_data)
 {
-	backend->config->user_data = user_data;
+#if defined(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_RUNTIME)
+	if (!backend || !user_data) {
+		return -EINVAL;
+	}
 
+	char * id;
+	size_t len = strlen((char *)user_data);
+
+	if (len > NRF_CLOUD_CLIENT_ID_MAX_LEN) {
+		return -ENAMETOOLONG;
+	}
+
+	id = nrf_cloud_calloc(len + 1, 1);
+	if (!id) {
+		return -ENOMEM;
+	}
+
+	memcpy(id, user_data, len);
+	backend->config->user_data = (void*)id;
+#else
+	LOG_WRN("User data is not required, ignoring");
+#endif
 	return 0;
 }
 
