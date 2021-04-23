@@ -4,13 +4,18 @@
 #
 
 menuconfig NRF_CLOUD
-	bool "nRF Cloud library"
+	bool "nRF Cloud Library"
 	select CJSON_LIB
+
+if NRF_CLOUD
+
+menuconfig NRF_CLOUD_MQTT
+	bool "nRF Cloud MQTT"
 	select MQTT_LIB
 	select MQTT_LIB_TLS
 	select SETTINGS if !MQTT_CLEAN_SESSION
 
-if NRF_CLOUD
+if NRF_CLOUD_MQTT
 
 config NRF_CLOUD_STATIC_IPV4
 	bool "Enable use of static IPv4"
@@ -25,17 +30,13 @@ config NRF_CLOUD_PROVISION_CERTIFICATES
 	bool "nRF Cloud library provision of certificate"
 	select MODEM_KEY_MGMT if NRF_MODEM_LIB
 	help
-		Enable run-time provisioning of certificates from the
-		certificates header file selected by using NRF_CLOUD_CERTIFICATES_FILE
+	  Enable run-time provisioning of certificates from the
+	  certificates header file selected by using NRF_CLOUD_CERTIFICATES_FILE
 
 config NRF_CLOUD_CERTIFICATES_FILE
 	string "nRF Cloud certificates"
 	depends on NRF_CLOUD_PROVISION_CERTIFICATES
 	default "certificates.h"
-
-config NRF_CLOUD_SEC_TAG
-	int "Security tag to use for nRF Cloud connection"
-	default 16842753
 
 menu "MQTT Client ID (nRF Cloud Device ID)"
 choice
@@ -80,10 +81,6 @@ config NRF_CLOUD_CLIENT_ID
 	default "my-client-id"
 endif
 endmenu # "MQTT Client ID"
-
-config NRF_CLOUD_HOST_NAME
-	string "nRF Cloud server hostname"
-	default "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com"
 
 config NRF_CLOUD_PORT
 	int "nRF Cloud server port"
@@ -131,8 +128,8 @@ config NRF_CLOUD_MQTT_MESSAGE_BUFFER_LEN
 	int "Size of the buffer for MQTT library."
 	default 256
 	help
-		Specifies maximum message size can be transmitted/received through
-		MQTT (exluding MQTT PUBLISH payload).
+	  Specifies maximum message size can be transmitted/received through
+	  MQTT (exluding MQTT PUBLISH payload).
 
 config NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN
 	int "Size of the buffer for MQTT PUBLISH payload."
@@ -154,7 +151,7 @@ config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	range 0 100
 	default 10
 	help
-		0 disables progress report.
+	  0 disables progress report.
 
 config NRF_CLOUD_FOTA_DOWNLOAD_FRAGMENT_SIZE
 	int "Fragment size for FOTA downloads."
@@ -216,10 +213,10 @@ config NRF_CLOUD_AGPS_REQ_CELL_BASED_LOC
 	depends on NRF_CLOUD_AGPS_SINGLE_CELL_ONLY
 	default y
 	help
-		When disabled, nRF Cloud will obtain and store the approximate
-		cell-based location but will not send it to the device.
-		When enabled, nRF Cloud will also send the location to the
-		device.
+	  When disabled, nRF Cloud will obtain and store the approximate
+	  cell-based location but will not send it to the device.
+	  When enabled, nRF Cloud will also send the location to the
+	  device.
 
 module = NRF_CLOUD_AGPS
 module-str = nRF Cloud A-GPS
@@ -230,6 +227,37 @@ endmenu
 
 config NRF_CLOUD_CONNECTION_POLL_THREAD
 	bool "Poll cloud connection in a separate thread"
+
+endif # NRF_CLOUD_MQTT
+
+menuconfig NRF_CLOUD_REST
+	select HTTP_CLIENT
+	bool "nRF Cloud REST"
+
+if NRF_CLOUD_REST
+
+config NRF_CLOUD_REST_HOST_NAME
+	string "nRF Cloud REST API hostname"
+	default "api.nrfcloud.com"
+
+config NRF_CLOUD_REST_FRAGMENT_SIZE
+	int "Fragment size for REST API downloads"
+	range 128 1700
+	default 1700
+
+module = NRF_CLOUD_REST
+module-str = nRF Cloud REST
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # NRF_CLOUD_REST
+
+config NRF_CLOUD_SEC_TAG
+	int "Security tag to use for nRF Cloud connection"
+	default 16842753
+
+config NRF_CLOUD_HOST_NAME
+	string "nRF Cloud MQTT server hostname"
+	default "a2n7tk1kp18wix-ats.iot.us-east-1.amazonaws.com"
 
 module=NRF_CLOUD
 module-dep=LOG

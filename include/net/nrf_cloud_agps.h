@@ -13,6 +13,7 @@
 
 #include <zephyr.h>
 #include <drivers/gps.h>
+#include <net/nrf_cloud.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,12 +23,25 @@ extern "C" {
  * @{
  */
 
-/** @brief Cell-based location request type */
-enum cell_based_location_type {
-	CELL_LOC_TYPE_INVALID = -1,
-	CELL_LOC_TYPE_SINGLE,
-	CELL_LOC_TYPE_MULTI /* Not yet supported */
-};
+#define AGPS_JSON_MSG_TYPE_KEY		"messageType"
+#define AGPS_JSON_MSG_TYPE_VAL_DATA	"DATA"
+
+#define AGPS_JSON_DATA_KEY		"data"
+#define AGPS_JSON_MCC_KEY		"mcc"
+#define AGPS_JSON_MNC_KEY		"mnc"
+#define AGPS_JSON_AREA_CODE_KEY		"tac"
+#define AGPS_JSON_CELL_ID_KEY		"eci"
+#define AGPS_JSON_PHYCID_KEY		"phycid"
+#define AGPS_JSON_TYPES_KEY		"types"
+#define AGPS_JSON_CELL_LOC_KEY_DOREPLY	"doReply"
+
+#define AGPS_JSON_APPID_KEY		"appId"
+#define AGPS_JSON_APPID_VAL_AGPS	"AGPS"
+#define AGPS_JSON_APPID_VAL_SINGLE_CELL	"SCELL"
+#define AGPS_JSON_APPID_VAL_MULTI_CELL	"MCELL"
+#define AGPS_JSON_CELL_LOC_KEY_LAT	"lat"
+#define AGPS_JSON_CELL_LOC_KEY_LON	"lon"
+#define AGPS_JSON_CELL_LOC_KEY_UNCERT	"uncertainty"
 
 /**@brief Requests specified A-GPS data from nRF Cloud.
  *

@@ -122,6 +122,18 @@ enum nrf_cloud_topic_type {
 	NRF_CLOUD_TOPIC_MESSAGE,
 };
 
+/**@brief FOTA status reported to nRF Cloud. */
+enum nrf_cloud_fota_status {
+	NRF_CLOUD_FOTA_QUEUED = 0,
+	NRF_CLOUD_FOTA_IN_PROGRESS = 1,
+	NRF_CLOUD_FOTA_FAILED = 2,
+	NRF_CLOUD_FOTA_SUCCEEDED = 3,
+	NRF_CLOUD_FOTA_TIMED_OUT = 4,
+	NRF_CLOUD_FOTA_CANCELED = 5,
+	NRF_CLOUD_FOTA_REJECTED = 6,
+	NRF_CLOUD_FOTA_DOWNLOADING = 7,
+};
+
 /**@brief FOTA update type. */
 enum nrf_cloud_fota_type {
 	NRF_CLOUD_FOTA_TYPE__FIRST = 0,
@@ -134,6 +146,16 @@ enum nrf_cloud_fota_type {
 	NRF_CLOUD_FOTA_BOOTLOADER = 2,
 
 	NRF_CLOUD_FOTA_TYPE__INVALID
+};
+
+/**@brief Common FOTA job info */
+struct nrf_cloud_fota_job_info {
+	enum nrf_cloud_fota_type type;
+	/** Null-terminated FOTA job identifier */
+	char *id;
+	char *host;
+	char *path;
+	int file_size;
 };
 
 /**@brief Generic encapsulation for any data that is sent to the cloud. */
@@ -204,6 +226,35 @@ struct nrf_cloud_tx_data {
 	enum nrf_cloud_topic_type topic_type;
 	/** Quality of Service of the message. */
 	enum mqtt_qos qos;
+};
+
+/** @brief Cell-based location request type */
+enum cell_based_location_type {
+	CELL_LOC_TYPE_INVALID = -1,
+	CELL_LOC_TYPE_SINGLE,
+	CELL_LOC_TYPE_MULTI /* Not yet supported */
+};
+
+/**@brief Structure used for cellular positioning results from nRF Cloud. */
+struct nrf_cloud_cell_pos_result {
+	enum cell_based_location_type type;
+	double lat;
+	double lon;
+	/** Uncertainty of location result */
+	uint32_t unc;
+};
+
+/** @brief nRF Cloud Predicted GPS (P-GPS) result */
+struct nrf_cloud_pgps_result {
+	/** User-provided buffer to hold download host name */
+	char *host;
+	/** Size of user-provided host buffer */
+	size_t host_sz;
+
+	/** User-provided buffer to hold download path/file name */
+	char *path;
+	/** Size of user-provided path buffer */
+	size_t path_sz;
 };
 
 /**
