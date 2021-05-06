@@ -38,11 +38,25 @@ LOG_MODULE_REGISTER(nrf_cloud_rest, CONFIG_NRF_CLOUD_REST_LOG_LEVEL);
 #define API_UPDATE_FOTA_BODY_TEMPLATE	"{\"status\":\"%s\"}"
 #define API_GET_SINGLECELL_TEMPLATE	"/v1/location/single-cell?deviceIdentifier=%s&mcc=%u&mnc=%u&tac=%u&eci=%u&format=json"
 
+#define API_GET_AGPS_BASE		"/v1/location/agps?deviceIdentifier=%s"
+#define API_GET_AGPS_REQ_TYPE		"&requestType=%s"
+#define API_GET_AGPS_NET_INFO		"&mcc=%u&mnc=%u&tac=%u&eci=%u"
+#define API_GET_AGPS_CUSTOM_TYPE	"&customTypes=%s"
+#define AGPS_NET_INFO_PRINT_SZ		(3 + 3 + 5 + 10)
+#define AGPS_REQ_TYPE_STR_CUSTOM	"custom"
+#define AGPS_REQ_TYPE_STR_LOC		"rtLocation"
+#define AGPS_REQ_TYPE_STR_ASSIST	"rtAssistance"
+/* Custom type format is a comma separated list of
+ * @ref enum gps_agps_type digits
+ * digits.
+ */
+#define AGPS_CUSTOM_TYPE_STR_SZ		(9 * 2)
+
 #define HTTP_PROTOCOL "HTTP/1.1"
 #define SOCKET_PROTOCOL IPPROTO_TLS_1_2
 
 /** @brief Mapping of enum to strings for Job Execution Status. */
-static const char *job_status_strings[] = {
+static const char *const job_status_strings[] = {
 	[NRF_CLOUD_FOTA_QUEUED]      = "QUEUED",
 	[NRF_CLOUD_FOTA_IN_PROGRESS] = "IN_PROGRESS",
 	[NRF_CLOUD_FOTA_FAILED]      = "FAILED",
@@ -52,9 +66,15 @@ static const char *job_status_strings[] = {
 	[NRF_CLOUD_FOTA_CANCELED]    = "CANCELLED",
 	[NRF_CLOUD_FOTA_DOWNLOADING] = "DOWNLOADING",
 };
-
 #define JOB_STATUS_STRING_COUNT (sizeof(job_status_strings) / \
 				 sizeof(*job_status_strings))
+
+/** @brief Mapping of enum to strings for AGPS request type. */
+static const char *const agps_req_type_strings[] = {
+	[NRF_CLOUD_REST_AGPS_REQ_ASSISTANCE]	= AGPS_REQ_TYPE_STR_ASSIST,
+	[NRF_CLOUD_REST_AGPS_REQ_LOCATION]	= AGPS_REQ_TYPE_STR_LOC,
+	[NRF_CLOUD_REST_AGPS_REQ_CUSTOM]	= AGPS_REQ_TYPE_STR_CUSTOM,
+};
 
 /** @brief nRF Cloud REST API data */
 struct nrf_cloud_rest_api_data
@@ -569,7 +589,7 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 	char * auth_hdr = NULL;
 	char * url = NULL;
 	struct http_request http_req;
-	char * dev_id = request->device_id ? request->device_id : "\"\"";
+	char * dev_id = request->device_id ? request->device_id : "na";
 
 	init_request(&http_req, HTTP_GET, CONTENT_TYPE_TXT_PLAIN);
 
@@ -584,8 +604,8 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 	http_req.url = url;
 
 	ret = snprintk(url, url_sz, API_GET_SINGLECELL_TEMPLATE,
-		       dev_id, request->mcc, request->mnc,
-		       request->area_code, request->cell_id);
+		       dev_id, request->net_info.mcc, request->net_info.mnc,
+		       request->net_info.area_code, request->net_info.cell_id);
 	if (ret < 0 || ret >= url_sz) {
 		LOG_ERR("Could not format URL");
 		ret = -ENOBUFS;
@@ -629,6 +649,217 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 						    CELL_LOC_TYPE_SINGLE,
 						    result);
 	}
+
+clean_up:
+	if (url) {
+		k_free(url);
+	}
+	if (auth_hdr) {
+		k_free(auth_hdr);
+	}
+
+	close_connection(rest_ctx);
+
+	return ret;
+}
+
+int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context * const rest_ctx)
+{
+	return 0;
+}
+
+/* AGPS_TYPE_PRINT macro assumes single digit values, check for the rare case that the
+ * enum is modified.
+ */
+BUILD_ASSERT((GPS_AGPS_UTC_PARAMETERS <= 9) && (GPS_AGPS_EPHEMERIDES <= 9) &&
+	     (GPS_AGPS_ALMANAC <= 9) && (GPS_AGPS_KLOBUCHAR_CORRECTION <= 9) &&
+	     (GPS_AGPS_NEQUICK_CORRECTION <= 9) && (GPS_AGPS_INTEGRITY <= 9) &&
+	     (GPS_AGPS_LOCATION <= 9) && (GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS <= 9),
+	     "AGPS enumeration values have changed, update format_agps_custom_types_str()");
+
+#define AGPS_TYPE_PRINT(type)			\
+	if (!pos) {				\
+		types_buf[pos++] = ',';		\
+	}					\
+	types_buf[pos++] = (char)('0' + type);
+
+static int format_agps_custom_types_str(struct gps_agps_request const *const req, char *const types_buf)
+{
+	__ASSERT_NO_MSG(req != NULL);
+	__ASSERT_NO_MSG(types_str != NULL);
+
+	int pos = 0;
+
+	if (req->utc) {
+		AGPS_TYPE_PRINT(GPS_AGPS_UTC_PARAMETERS);
+	}
+	if (req->sv_mask_ephe) {
+		AGPS_TYPE_PRINT(GPS_AGPS_EPHEMERIDES);
+	}
+	if (req->sv_mask_alm) {
+		AGPS_TYPE_PRINT(GPS_AGPS_ALMANAC);
+	}
+	if (req->klobuchar) {
+		AGPS_TYPE_PRINT(GPS_AGPS_KLOBUCHAR_CORRECTION);
+	}
+	if (req->nequick) {
+		AGPS_TYPE_PRINT(GPS_AGPS_NEQUICK_CORRECTION);
+	}
+	if (req->system_time_tow) {
+		AGPS_TYPE_PRINT(GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS);
+	}
+	if (req->position) {
+		AGPS_TYPE_PRINT(GPS_AGPS_LOCATION);
+	}
+	if (req->integrity) {
+		AGPS_TYPE_PRINT(GPS_AGPS_INTEGRITY);
+	}
+
+	types_buf[pos] = '\0';
+
+	return pos ? 0 : -EBADF;
+}
+
+int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
+				 struct nrf_cloud_rest_agps_request const *const request)
+{
+	__ASSERT_NO_MSG(rest_ctx != NULL);
+	__ASSERT_NO_MSG(request != NULL);
+
+	int ret;
+	size_t url_sz;
+	size_t remain;
+	size_t pos;
+	char * auth_hdr = NULL;
+	char * url = NULL;
+	struct http_request http_req;
+	char * dev_id = request->device_id ? request->device_id : "na";
+	char * req_type = NULL;
+	char custom_types[AGPS_CUSTOM_TYPE_STR_SZ];
+
+	if ((request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) &&
+	    (request->agps_req == NULL)) {
+		LOG_ERR("Custom request type requires AGPS request data");
+		return -EINVAL;
+	}
+
+	init_request(&http_req, HTTP_GET, CONTENT_TYPE_TXT_PLAIN);
+
+	/* Determine size of URL buffer and allocate */
+	url_sz = sizeof(API_GET_AGPS_BASE) + strlen(dev_id);
+	if (request->net_info) {
+		url_sz += strlen(API_GET_AGPS_NET_INFO) + AGPS_NET_INFO_PRINT_SZ;
+	}
+	switch (request->type) {
+		case NRF_CLOUD_REST_AGPS_REQ_CUSTOM:
+			ret = format_agps_custom_types_str(request->agps_req,
+							   custom_types);
+			if (ret) {
+				LOG_ERR("No AGPS types requested");
+				return ret;
+			}
+			url_sz += strlen(API_GET_AGPS_CUSTOM_TYPE) +
+				  strlen(custom_types);
+			/* Fall-through */
+		case NRF_CLOUD_REST_AGPS_REQ_LOCATION:
+		case NRF_CLOUD_REST_AGPS_REQ_ASSISTANCE:
+			req_type = agps_req_type_strings[request->type];
+			url_sz += strlen(API_GET_AGPS_REQ_TYPE) + strlen(req_type);
+			break;
+		case NRF_CLOUD_REST_AGPS_REQ_UNSPECIFIED:
+			break;
+
+		default:
+			return -EINVAL;
+	}
+
+	url = k_calloc(url_sz, 1);
+	if (!url) {
+		ret = -ENOMEM;
+		goto clean_up;
+	}
+	http_req.url = url;
+
+	/* Format API URL */
+	ret = snprintk(url, url_sz, API_GET_AGPS_BASE, dev_id);
+	if (ret < 0 || ret >= url_sz) {
+		LOG_ERR("Could not format URL: device id");
+		ret = -ENOBUFS;
+		goto clean_up;
+	}
+	pos = ret;
+	remain = url_sz - ret;
+
+	if (req_type) {
+		ret = snprintk(&url[pos], remain, API_GET_AGPS_REQ_TYPE, req_type);
+		if (ret < 0 || ret >= remain) {
+			LOG_ERR("Could not format URL: request type");
+			ret = -ENOBUFS;
+			goto clean_up;
+		}
+		pos += ret;
+		remain -= ret;
+	}
+
+	if (request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) {
+		ret = snprintk(&url[pos], remain, API_GET_AGPS_CUSTOM_TYPE, custom_types);
+		if (ret < 0 || ret >= remain) {
+			LOG_ERR("Could not format URL: custom types");
+			ret = -ENOBUFS;
+			goto clean_up;
+		}
+		pos += ret;
+		remain -= ret;
+	}
+
+	if (request->net_info) {
+		ret = snprintk(&url[pos], remain, API_GET_AGPS_NET_INFO,
+			       request->net_info->mcc, request->net_info->mnc,
+			       request->net_info->area_code, request->net_info->cell_id);
+		if (ret < 0 || ret >= remain) {
+			LOG_ERR("Could not format URL: network info");
+			ret = -ENOBUFS;
+			goto clean_up;
+		}
+		pos += ret;
+		remain -= ret;
+	}
+
+	LOG_DBG("URL: %s", http_req.url);
+
+	/* Format auth header */
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	if (ret) {
+		LOG_ERR("Could not format HTTP auth header");
+		goto clean_up;
+	}
+	char * headers[] = { HDR_ACCEPT_APP_JSON,
+			     auth_hdr,
+			     NULL };
+
+	http_req.header_fields = (const char **)headers;
+
+	/* Make REST call */
+	ret = do_api_call(&http_req, rest_ctx);
+	if (ret) {
+		ret = -EIO;
+		goto clean_up;
+	}
+
+	if (rest_ctx->status == HTTP_STATUS_OK) {
+		ret = 0;
+		if (rest_ctx->rx_buf && rest_ctx->rx_buf_len) {
+			LOG_DBG("API call response len: %u bytes",
+				rest_ctx->response_len);
+		}
+	else if (rest_ctx->status == HTTP_STATUS_PARTIAL) {
+		LOG_INF("TODO: GET REMAINING BYTES...")
+	} else {
+		ret = -EBADMSG;
+		goto clean_up;
+	}
+
+	// TODO: return binary payload
 
 clean_up:
 	if (url) {
