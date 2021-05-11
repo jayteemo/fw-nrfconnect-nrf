@@ -82,10 +82,21 @@ void main(void)
 	};
 	struct nrf_cloud_rest_single_cell_request req = {
 		.device_id = CONFIG_REST_DEVICE_ID,
-		.mcc = 310,
-		.mnc = 410,
-		.area_code = 36879,
-		.cell_id = 84486415
+		.net_info = {
+			.mcc = 310,
+			.mnc = 410,
+			.area_code = 36879,
+			.cell_id = 84486415
+		}
+	};
+	struct nrf_cloud_rest_agps_request agps_rest = {
+		.device_id = CONFIG_REST_DEVICE_ID,
+		.type = NRF_CLOUD_REST_AGPS_REQ_CUSTOM
+	};
+	struct gps_agps_request agps = {
+		.utc = 1,
+		.sv_mask_alm = 1,
+		.klobuchar = 1
 	};
 
 	int err = init_modem_and_connect();
@@ -112,10 +123,10 @@ void main(void)
 
 		/* Single-cell request */
 		/* TODO: when MCELL is available, use neighbor data */
-		req.cell_id = n_cell.cell_id;
-		req.area_code = n_cell.area_code;
-		req.mnc = n_cell.mnc;
-		req.mcc = n_cell.mcc;
+		req.net_info.cell_id = n_cell.cell_id;
+		req.net_info.area_code = n_cell.area_code;
+		req.net_info.mnc = n_cell.mnc;
+		req.net_info.mcc = n_cell.mcc;
 	}
 
 	/* Use API token for SCELL endpoint */
@@ -123,8 +134,14 @@ void main(void)
 	if (err) {
 		LOG_ERR("Single Cell API call failed, error: %d", err);
 	} else {
-		LOG_INF("Single Cell Response: %s", rest_ctx.response);
+		LOG_INF("Single Cell Response: %s", log_strdup(rest_ctx.response));
 	}
+
+	agps_rest.net_info = &req.net_info;
+	agps_rest.agps_req = &agps;
+	nrf_cloud_rest_get_agps_data(&rest_ctx, &agps_rest);
+
+	return;
 
 	/* Use JWT for FOTA endpoints */
 	err = modem_jwt_generate(&jwt);
@@ -132,7 +149,7 @@ void main(void)
 		LOG_ERR("Failed to generate JWT, err %d", err);
 		return;
 	}
-	LOG_INF("JWT:\n%s",jwt.jwt_out);
+	LOG_INF("JWT:\n%s", log_strdup(jwt.jwt_out));
 
 	/* JWT auth */
 	rest_ctx.auth = jwt.jwt_out;

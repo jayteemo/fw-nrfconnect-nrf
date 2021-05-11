@@ -95,6 +95,7 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 	struct cell_based_loc_data * const result);
 
 int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context * const rest_ctx);
+
 int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 				 struct nrf_cloud_rest_agps_request const *const request);
 

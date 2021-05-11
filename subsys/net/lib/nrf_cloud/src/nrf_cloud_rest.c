@@ -14,6 +14,7 @@
 #include <net/tls_credentials.h>
 #include <modem/modem_key_mgmt.h>
 #include <net/http_client.h>
+#include <net/http_parser.h>
 #include <net/nrf_cloud_rest.h>
 #include <sys/base64.h>
 #include <logging/log.h>
@@ -88,6 +89,13 @@ struct nrf_cloud_rest_api_data
 	size_t rsp_buf_sz;
 };
 
+static int http_on_status_cb(struct http_parser * parser, const char *at,
+			     size_t length);
+
+static const struct http_parser_settings parser_settings = {
+	.on_status = http_on_status_cb
+};
+
 void base64_url_format(char * const base64_string)
 {
 	if (base64_string == NULL) {
@@ -135,6 +143,12 @@ int base64_url_unformat(char * const base64url_string)
 	return (strlen(base64url_string) % 4);
 }
 
+static int http_on_status_cb(struct http_parser * parser, const char *at,
+			     size_t length)
+{
+	LOG_DBG("http_on_status_cb");
+	return 0;
+}
 
 static void http_response_cb(struct http_response *rsp,
 			enum http_final_call final_data,
@@ -152,7 +166,8 @@ static void http_response_cb(struct http_response *rsp,
 
 	if (final_data == HTTP_DATA_FINAL) {
 		LOG_DBG("HTTP: All data received, status: %u %s",
-			rsp->http_status_code, rsp->http_status);
+			rsp->http_status_code,
+			log_strdup(rsp->http_status));
 
 		if (!rest_ctx) {
 			LOG_WRN("User data not provided...");
@@ -282,7 +297,7 @@ static int do_connect(int * const fd, const char * const hostname,
 		char peer_addr[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &net_sin(addr_info->ai_addr)->sin_addr,
 			  peer_addr, INET_ADDRSTRLEN);
-		LOG_DBG("getaddrinfo() %s", peer_addr);
+		LOG_DBG("getaddrinfo() %s", log_strdup(peer_addr));
 	}
 
 	((struct sockaddr_in *)addr_info->ai_addr)->sin_port = htons(port_num);
@@ -307,7 +322,7 @@ static int do_connect(int * const fd, const char * const hostname,
 		goto error_clean_up;
 	}
 
-	LOG_DBG("Connecting to %s", connect_addr);
+	LOG_DBG("Connecting to %s", log_strdup(connect_addr));
 
 	ret = connect(*fd, addr_info->ai_addr, sizeof(struct sockaddr_in));
 	if (ret) {
@@ -387,6 +402,8 @@ static void init_request(struct http_request * const req, const enum http_method
 	req->response		= http_response_cb;
 	req->method		= meth;
 	req->content_type_value	= content_type;
+
+	req->http_cb		= &parser_settings;
 }
 
 int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
@@ -425,7 +442,7 @@ int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ct
 		goto clean_up;
 	}
 
-	LOG_DBG("URL: %s", http_req.url);
+	LOG_DBG("URL: %s", log_strdup(http_req.url));
 
 	/* Format auth header */
 	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
@@ -457,7 +474,7 @@ int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ct
 	}
 	http_req.payload = payload;
 	http_req.payload_len = strlen(http_req.payload);
-	LOG_DBG("Payload: %s", http_req.payload);
+	LOG_DBG("Payload: %s", log_strdup(http_req.payload));
 
 	/* Make REST call */
 	ret = do_api_call(&http_req, rest_ctx);
@@ -521,7 +538,7 @@ int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
 		goto clean_up;
 	}
 
-	LOG_DBG("URL: %s", http_req.url);
+	LOG_DBG("URL: %s", log_strdup(http_req.url));
 
 	/* Format auth header */
 	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
@@ -612,7 +629,7 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 		goto clean_up;
 	}
 
-	LOG_DBG("URL: %s", http_req.url);
+	LOG_DBG("URL: %s", log_strdup(http_req.url));
 
 	/* Format auth header */
 	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
@@ -677,42 +694,42 @@ BUILD_ASSERT((GPS_AGPS_UTC_PARAMETERS <= 9) && (GPS_AGPS_EPHEMERIDES <= 9) &&
 	     (GPS_AGPS_LOCATION <= 9) && (GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS <= 9),
 	     "AGPS enumeration values have changed, update format_agps_custom_types_str()");
 
-#define AGPS_TYPE_PRINT(type)			\
-	if (!pos) {				\
-		types_buf[pos++] = ',';		\
+#define AGPS_TYPE_PRINT(buf, type)		\
+	if (pos != 0) {				\
+		buf[pos++] = ',';		\
 	}					\
-	types_buf[pos++] = (char)('0' + type);
+	buf[pos++] = (char)('0' + type);
 
 static int format_agps_custom_types_str(struct gps_agps_request const *const req, char *const types_buf)
 {
 	__ASSERT_NO_MSG(req != NULL);
-	__ASSERT_NO_MSG(types_str != NULL);
+	__ASSERT_NO_MSG(types_buf != NULL);
 
 	int pos = 0;
 
 	if (req->utc) {
-		AGPS_TYPE_PRINT(GPS_AGPS_UTC_PARAMETERS);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_UTC_PARAMETERS);
 	}
 	if (req->sv_mask_ephe) {
-		AGPS_TYPE_PRINT(GPS_AGPS_EPHEMERIDES);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_EPHEMERIDES);
 	}
 	if (req->sv_mask_alm) {
-		AGPS_TYPE_PRINT(GPS_AGPS_ALMANAC);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_ALMANAC);
 	}
 	if (req->klobuchar) {
-		AGPS_TYPE_PRINT(GPS_AGPS_KLOBUCHAR_CORRECTION);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_KLOBUCHAR_CORRECTION);
 	}
 	if (req->nequick) {
-		AGPS_TYPE_PRINT(GPS_AGPS_NEQUICK_CORRECTION);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_NEQUICK_CORRECTION);
 	}
 	if (req->system_time_tow) {
-		AGPS_TYPE_PRINT(GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_GPS_SYSTEM_CLOCK_AND_TOWS);
 	}
 	if (req->position) {
-		AGPS_TYPE_PRINT(GPS_AGPS_LOCATION);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_LOCATION);
 	}
 	if (req->integrity) {
-		AGPS_TYPE_PRINT(GPS_AGPS_INTEGRITY);
+		AGPS_TYPE_PRINT(types_buf, GPS_AGPS_INTEGRITY);
 	}
 
 	types_buf[pos] = '\0';
@@ -734,7 +751,7 @@ int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 	char * url = NULL;
 	struct http_request http_req;
 	char * dev_id = request->device_id ? request->device_id : "na";
-	char * req_type = NULL;
+	char const * req_type = NULL;
 	char custom_types[AGPS_CUSTOM_TYPE_STR_SZ];
 
 	if ((request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) &&
@@ -825,7 +842,7 @@ int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 		remain -= ret;
 	}
 
-	LOG_DBG("URL: %s", http_req.url);
+	LOG_DBG("URL: %s", log_strdup(http_req.url));
 
 	/* Format auth header */
 	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
@@ -852,8 +869,8 @@ int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 			LOG_DBG("API call response len: %u bytes",
 				rest_ctx->response_len);
 		}
-	else if (rest_ctx->status == HTTP_STATUS_PARTIAL) {
-		LOG_INF("TODO: GET REMAINING BYTES...")
+	} else if (rest_ctx->status == HTTP_STATUS_PARTIAL) {
+		LOG_INF("TODO: GET REMAINING BYTES...");
 	} else {
 		ret = -EBADMSG;
 		goto clean_up;
