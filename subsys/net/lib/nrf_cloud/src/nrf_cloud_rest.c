@@ -27,12 +27,19 @@ LOG_MODULE_REGISTER(nrf_cloud_rest, CONFIG_NRF_CLOUD_REST_LOG_LEVEL);
 #define BASE64_PAD_CHAR '='
 #define GET_BASE64_LEN(n) ((((4 * n) / 3) + 3) & ~3)
 
-#define AUTH_HDR_BEARER_TEMPLATE	"Authorization: Bearer %s\r\n"
-#define HOST_HDR_TEMPLATE		"Host: %s\r\n"
-#define HDR_ACCEPT_APP_JSON		"accept: application/json\r\n"
 #define CONTENT_TYPE_TXT_PLAIN		"text/plain"
 #define CONTENT_TYPE_ALL		"*/*"
 #define CONTENT_TYPE_APP_JSON		"application/json"
+#define CONTENT_TYPE_APP_OCT_STR	"application/octet-stream"
+
+#define AUTH_HDR_BEARER_TEMPLATE	"Authorization: Bearer %s\r\n"
+#define HOST_HDR_TEMPLATE		"Host: %s\r\n"
+#define HDR_ACCEPT_APP_JSON		"accept: application/json\r\n"
+#define HDR_ACCEPT_ALL			"accept: " CONTENT_TYPE_ALL "\r\n"
+#define HDR_RANGE_BYTES_TEMPLATE	"Range: bytes=%u-%u\r\n"
+#define HDR_RANGE_BYTES_SZ		(sizeof(HDR_RANGE_BYTES_TEMPLATE) + 11 + 11)
+// TODO: add cfg option
+#define RANGE_MAX_BYTES			1700
 
 #define API_GET_FOTA_URL_TEMPLATE	"/v1/fota-job-executions/%s/latest"
 #define API_UPDATE_FOTA_URL_TEMPLATE	"/v1/fota-job-executions/%s/%s"
@@ -81,7 +88,7 @@ static const char *const agps_req_type_strings[] = {
 struct nrf_cloud_rest_api_data
 {
 	/** JWT to use for authentication */
-	struct jwt_data * jwt;
+	struct jwt_data *jwt;
 	/** API token for auth header (if not using JWT) */
 	char *api_token;
 
@@ -89,20 +96,20 @@ struct nrf_cloud_rest_api_data
 	size_t rsp_buf_sz;
 };
 
-static int http_on_status_cb(struct http_parser * parser, const char *at,
+static int http_on_status_cb(struct http_parser *parser, const char *at,
 			     size_t length);
 
 static const struct http_parser_settings parser_settings = {
 	.on_status = http_on_status_cb
 };
 
-void base64_url_format(char * const base64_string)
+void base64_url_format(char *const base64_string)
 {
 	if (base64_string == NULL) {
 		return;
 	}
 
-	char * found = NULL;
+	char *found = NULL;
 
 	/* replace '+' with "-" */
 	for(found = base64_string; (found = strchr(found,'+'));) {
@@ -121,13 +128,13 @@ void base64_url_format(char * const base64_string)
 	}
 }
 
-int base64_url_unformat(char * const base64url_string)
+int base64_url_unformat(char *const base64url_string)
 {
 	if (base64url_string == NULL) {
 		return -EINVAL;
 	}
 
-	char * found = NULL;
+	char *found = NULL;
 
 	/* replace '-' with "+" */
 	for(found = base64url_string; (found = strchr(found,'-'));) {
@@ -143,7 +150,7 @@ int base64_url_unformat(char * const base64url_string)
 	return (strlen(base64url_string) % 4);
 }
 
-static int http_on_status_cb(struct http_parser * parser, const char *at,
+static int http_on_status_cb(struct http_parser *parser, const char *at,
 			     size_t length)
 {
 	LOG_DBG("http_on_status_cb");
@@ -154,7 +161,7 @@ static void http_response_cb(struct http_response *rsp,
 			enum http_final_call final_data,
 			void *user_data)
 {
-	struct nrf_cloud_rest_context * rest_ctx = NULL;
+	struct nrf_cloud_rest_context *rest_ctx = NULL;
 
 	if (user_data) {
 		rest_ctx = (struct nrf_cloud_rest_context *)user_data;
@@ -174,14 +181,12 @@ static void http_response_cb(struct http_response *rsp,
 			return;
 		}
 
-		if (rest_ctx) {
-			rest_ctx->status = rsp->http_status_code;
-			rest_ctx->response_len = rsp->content_length;
-		}
+		rest_ctx->status = rsp->http_status_code;
+		rest_ctx->response_len = rsp->content_length;
 	}
 }
 
-static int generate_auth_header(const char * const tok, char ** auth_hdr_out)
+static int generate_auth_header(const char *const tok, char ** auth_hdr_out)
 {
 	if (!tok || !auth_hdr_out)
 	{
@@ -205,7 +210,7 @@ static int generate_auth_header(const char * const tok, char ** auth_hdr_out)
 	return 0;
 }
 
-int tls_setup(int fd, const char * const tls_hostname)
+int tls_setup(int fd, const char *const tls_hostname)
 {
 	int err;
 	int verify;
@@ -272,13 +277,13 @@ static int socket_timeouts_set(int fd)
 	return 0;
 }
 
-static int do_connect(int * const fd, const char * const hostname,
-		      const uint16_t port_num, const char * const ip_address)
+static int do_connect(int *const fd, const char *const hostname,
+		      const uint16_t port_num, const char *const ip_address)
 {
 	int ret;
 	struct addrinfo *addr_info;
 	/* Use IP to connect if provided, always use hostname for TLS (SNI) */
-	const char * const connect_addr = ip_address ? ip_address : hostname;
+	const char *const connect_addr = ip_address ? ip_address : hostname;
 
 	struct addrinfo hints = {
 		.ai_family = AF_INET,
@@ -343,7 +348,7 @@ error_clean_up:
 	return ret;
 }
 
-static void close_connection(struct nrf_cloud_rest_context * const rest_ctx)
+static void close_connection(struct nrf_cloud_rest_context *const rest_ctx)
 {
 	if (rest_ctx && !rest_ctx->keep_alive && rest_ctx->connect_socket >= 0) {
 		(void)close(rest_ctx->connect_socket);
@@ -351,7 +356,7 @@ static void close_connection(struct nrf_cloud_rest_context * const rest_ctx)
 	}
 }
 
-static int do_api_call(struct http_request * http_req, struct nrf_cloud_rest_context * const rest_ctx)
+static int do_api_call(struct http_request *http_req, struct nrf_cloud_rest_context *const rest_ctx)
 {
 	int err = 0;
 
@@ -391,8 +396,8 @@ static int do_api_call(struct http_request * http_req, struct nrf_cloud_rest_con
 	return err;
 }
 
-static void init_request(struct http_request * const req, const enum http_method meth,
-			 const char * const content_type)
+static void init_request(struct http_request *const req, const enum http_method meth,
+			 const char *const content_type)
 {
 	memset(req, 0, sizeof(struct http_request));
 
@@ -406,8 +411,8 @@ static void init_request(struct http_request * const req, const enum http_method
 	req->http_cb		= &parser_settings;
 }
 
-int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
-	const char * const device_id, const char * const job_id,
+int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context *const rest_ctx,
+	const char *const device_id, const char *const job_id,
 	const enum nrf_cloud_fota_status status)
 {
 	__ASSERT_NO_MSG(rest_ctx != NULL);
@@ -417,9 +422,9 @@ int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ct
 
 	int ret;
 	size_t buff_sz;
-	char * auth_hdr = NULL;
-	char * url = NULL;
-	char * payload = NULL;
+	char *auth_hdr = NULL;
+	char *url = NULL;
+	char *payload = NULL;
 	struct http_request http_req;
 
 	init_request(&http_req, HTTP_PATCH, CONTENT_TYPE_APP_JSON);
@@ -450,7 +455,7 @@ int nrf_cloud_rest_update_fota_job(struct nrf_cloud_rest_context * const rest_ct
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
 	}
-	char * headers[] = { HDR_ACCEPT_APP_JSON,
+	char *headers[] = { HDR_ACCEPT_APP_JSON,
 			     auth_hdr,
 			     NULL };
 
@@ -507,16 +512,16 @@ clean_up:
 	return ret;
 }
 
-int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
-	const char * const device_id, struct nrf_cloud_fota_job_info *const job)
+int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context *const rest_ctx,
+	const char *const device_id, struct nrf_cloud_fota_job_info *const job)
 {
 	__ASSERT_NO_MSG(rest_ctx != NULL);
 	__ASSERT_NO_MSG(device_id != NULL);
 
 	int ret;
 	size_t url_sz;
-	char * auth_hdr = NULL;
-	char * url = NULL;
+	char *auth_hdr = NULL;
+	char *url = NULL;
 	struct http_request http_req;
 
 	init_request(&http_req, HTTP_GET, CONTENT_TYPE_ALL);
@@ -546,7 +551,7 @@ int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
 	}
-	char * headers[] = { HDR_ACCEPT_APP_JSON,
+	char *headers[] = { HDR_ACCEPT_APP_JSON,
 			     auth_hdr,
 			     NULL };
 
@@ -594,19 +599,19 @@ clean_up:
 	return ret;
 }
 
-int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const rest_ctx,
-	struct nrf_cloud_rest_single_cell_request const * const request,
-	struct cell_based_loc_data * const result)
+int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context *const rest_ctx,
+	struct nrf_cloud_rest_single_cell_request const *const request,
+	struct cell_based_loc_data *const result)
 {
 	__ASSERT_NO_MSG(rest_ctx != NULL);
 	__ASSERT_NO_MSG(request != NULL);
 
 	int ret;
 	size_t url_sz;
-	char * auth_hdr = NULL;
-	char * url = NULL;
+	char *auth_hdr = NULL;
+	char *url = NULL;
 	struct http_request http_req;
-	char * dev_id = request->device_id ? request->device_id : "na";
+	char *dev_id = request->device_id ? request->device_id : "na";
 
 	init_request(&http_req, HTTP_GET, CONTENT_TYPE_TXT_PLAIN);
 
@@ -637,7 +642,7 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
 	}
-	char * headers[] = { HDR_ACCEPT_APP_JSON,
+	char *headers[] = { HDR_ACCEPT_APP_JSON,
 			     auth_hdr,
 			     NULL };
 
@@ -680,7 +685,7 @@ clean_up:
 	return ret;
 }
 
-int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context * const rest_ctx)
+int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context *const rest_ctx)
 {
 	return 0;
 }
@@ -737,22 +742,68 @@ static int format_agps_custom_types_str(struct gps_agps_request const *const req
 	return pos ? 0 : -EBADF;
 }
 
-int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
-				 struct nrf_cloud_rest_agps_request const *const request)
+#define CONTENT_RANGE_RSP "content-range: bytes"
+#define CONTENT_RANGE_TOTAL_TOK '/'
+#define CR_TOK '\r'
+#define LF_TOK '\n'
+static int get_content_range_total_bytes(char *const buf)
+{
+	char *end;
+	char *start = strstr(buf, CONTENT_RANGE_RSP);
+
+	if (!start) {
+		return -EBADMSG;
+	}
+
+	end = strchr(start, (int)CR_TOK);
+	if (!end) {
+		end = strchr(start, (int)LF_TOK);
+		if (!end) {
+			return -EBADMSG;
+		}
+	}
+
+	*end = 0;
+	start = strrchr(start, (int)CONTENT_RANGE_TOTAL_TOK);
+
+	if (!start) {
+		return -EBADMSG;
+	}
+
+	return atoi(start + 1);
+}
+
+static int format_range_header(char *const buf, size_t buf_sz, size_t start_byte, size_t end_byte)
+{
+	int ret = snprintf(buf, buf_sz, HDR_RANGE_BYTES_TEMPLATE, start_byte, end_byte);
+
+	if (ret < 0 || ret >= buf_sz) {
+		return -EIO;
+	}
+
+	return 0;
+}
+
+int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
+				 struct nrf_cloud_rest_agps_request const *const request,
+				 struct nrf_cloud_data *const result)
 {
 	__ASSERT_NO_MSG(rest_ctx != NULL);
 	__ASSERT_NO_MSG(request != NULL);
 
 	int ret;
+	size_t total_bytes;
+	size_t rcvd_bytes;
 	size_t url_sz;
 	size_t remain;
 	size_t pos;
-	char * auth_hdr = NULL;
-	char * url = NULL;
+	char *auth_hdr = NULL;
+	char *url = NULL;
 	struct http_request http_req;
-	char * dev_id = request->device_id ? request->device_id : "na";
-	char const * req_type = NULL;
+	char *dev_id = request->device_id ? request->device_id : "na";
+	char const *req_type = NULL;
 	char custom_types[AGPS_CUSTOM_TYPE_STR_SZ];
+	char range_hdr[HDR_RANGE_BYTES_SZ];
 
 	if ((request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) &&
 	    (request->agps_req == NULL)) {
@@ -760,7 +811,7 @@ int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 		return -EINVAL;
 	}
 
-	init_request(&http_req, HTTP_GET, CONTENT_TYPE_TXT_PLAIN);
+	init_request(&http_req, HTTP_GET, CONTENT_TYPE_APP_OCT_STR);
 
 	/* Determine size of URL buffer and allocate */
 	url_sz = sizeof(API_GET_AGPS_BASE) + strlen(dev_id);
@@ -850,33 +901,81 @@ int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
 	}
-	char * headers[] = { HDR_ACCEPT_APP_JSON,
+
+	char *headers[] = { HDR_ACCEPT_ALL,
 			     auth_hdr,
+			     range_hdr,
 			     NULL };
 
 	http_req.header_fields = (const char **)headers;
 
-	/* Make REST call */
-	ret = do_api_call(&http_req, rest_ctx);
-	if (ret) {
-		ret = -EIO;
-		goto clean_up;
-	}
+	pos = 0;
+	remain = 0;
+	rcvd_bytes = 0;
+	total_bytes = 0;
 
-	if (rest_ctx->status == HTTP_STATUS_OK) {
-		ret = 0;
-		if (rest_ctx->rx_buf && rest_ctx->rx_buf_len) {
-			LOG_DBG("API call response len: %u bytes",
-				rest_ctx->response_len);
+	/* Do as many REST calls as needed to receive entire payload */
+	do {
+		/* Only request one byte if just checking size */
+		size_t end_byte = (!result) ?
+				  1 : (rcvd_bytes + RANGE_MAX_BYTES - 1);
+
+		/* Format range header */
+		ret = format_range_header(range_hdr, sizeof(range_hdr),
+					  rcvd_bytes,
+					  end_byte);
+		if (ret) {
+			LOG_ERR("Could not format Range header");
+			goto clean_up;
 		}
-	} else if (rest_ctx->status == HTTP_STATUS_PARTIAL) {
-		LOG_INF("TODO: GET REMAINING BYTES...");
-	} else {
-		ret = -EBADMSG;
-		goto clean_up;
-	}
 
-	// TODO: return binary payload
+		ret = do_api_call(&http_req, rest_ctx);
+		if (ret) {
+			ret = -EIO;
+			goto clean_up;
+		}
+
+		if (rest_ctx->status != HTTP_STATUS_PARTIAL) {
+			ret = -EBADMSG;
+			goto clean_up;
+		}
+
+		if (total_bytes == 0) {
+			total_bytes = get_content_range_total_bytes(rest_ctx->rx_buf);
+			if (total_bytes <= 0) {
+				ret = -EBADMSG;
+				goto clean_up;
+			}
+			LOG_INF("Total bytes in payload: %d", total_bytes);
+
+			if (!result) {
+				ret = total_bytes;
+				goto clean_up;
+			} else if (result->len < total_bytes) {
+				LOG_INF("Provided buffer is too small");
+				ret = -ENOBUFS;
+			}
+		}
+
+		rcvd_bytes += rest_ctx->response_len;
+
+		LOG_INF("AGPS data rx: %u/%u", rcvd_bytes, total_bytes);
+		if (rcvd_bytes > total_bytes) {
+			ret = -EFBIG;
+			goto clean_up;
+		}
+
+		memcpy(&((char *)result->ptr)[pos],
+		       rest_ctx->response,
+		       rest_ctx->response_len);
+
+		pos += rest_ctx->response_len;
+		remain = total_bytes - rcvd_bytes;
+
+	} while (remain);
+
+	/* Set output size */
+	result->len = total_bytes;
 
 clean_up:
 	if (url) {

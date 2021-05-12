@@ -61,6 +61,7 @@ int init_modem_and_connect(void)
 void main(void)
 {
 	char rx_buf[4096];
+	int agps_sz;
 	static struct nrf_cloud_fota_job_info job;
 	struct cell_based_loc_data location;
 	struct n_cell_measure_result n_cell;
@@ -98,12 +99,44 @@ void main(void)
 		.sv_mask_alm = 1,
 		.klobuchar = 1
 	};
+	struct nrf_cloud_data agps_out = {
+		.len = 0,
+		.ptr = NULL
+	};
 
 	int err = init_modem_and_connect();
 
 	if (err){
 		return;
 	}
+
+	agps_rest.net_info = &req.net_info;
+	agps_rest.agps_req = &agps;
+
+	agps_sz = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_rest, NULL);
+	if (agps_sz < 0) {
+		LOG_ERR("Could not get size of AGPS data, err %d", agps_sz);
+		return;
+	} else if (agps_sz == 0) {
+		LOG_ERR("No AGPS data available");
+		return;
+	}
+
+	agps_out.len = (uint32_t)agps_sz;
+	agps_out.ptr = k_calloc(agps_out.len, 1);
+	if (!agps_out.ptr) {
+		LOG_ERR("Failed to allocate %u bytes for AGPS buffer", agps_out.len);
+		return;
+	}
+
+	err = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_rest, &agps_out);
+	if (err) {
+		LOG_ERR("Failed to get AGPS data: %d", err);
+		k_free((void*)agps_out.ptr);
+	}
+
+	// TODO
+	return;
 
 	err = modem_get_neighboring_cell_data(&n_cell);
 	if (err) {
@@ -136,12 +169,6 @@ void main(void)
 	} else {
 		LOG_INF("Single Cell Response: %s", log_strdup(rest_ctx.response));
 	}
-
-	agps_rest.net_info = &req.net_info;
-	agps_rest.agps_req = &agps;
-	nrf_cloud_rest_get_agps_data(&rest_ctx, &agps_rest);
-
-	return;
 
 	/* Use JWT for FOTA endpoints */
 	err = modem_jwt_generate(&jwt);

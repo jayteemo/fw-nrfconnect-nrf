@@ -31,6 +31,7 @@ enum http_status {
 	HTTP_STATUS_UNAUTH = 401,
 	HTTP_STATUS_FORBIDDEN = 403,
 	HTTP_STATUS_NOT_FOUND = 404,
+	HTTP_STATUS_BAD_RANGE = 416,
 	HTTP_STATUS_UNPROC_ENTITY = 422,
 };
 
@@ -96,8 +97,9 @@ int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const res
 
 int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context * const rest_ctx);
 
-int nrf_cloud_rest_get_agps_data(struct nrf_cloud_rest_context * const rest_ctx,
-				 struct nrf_cloud_rest_agps_request const *const request);
+int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context * const rest_ctx,
+				 struct nrf_cloud_rest_agps_request const *const request,
+				 struct nrf_cloud_data *const result);
 
 int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
 	const char * const device_id, struct nrf_cloud_fota_job_info *const job);
