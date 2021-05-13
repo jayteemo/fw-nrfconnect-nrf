@@ -60,7 +60,7 @@ int init_modem_and_connect(void)
 
 void main(void)
 {
-	char rx_buf[4096];
+	char rx_buf[2100];
 	int agps_sz;
 	static struct nrf_cloud_fota_job_info job;
 	struct cell_based_loc_data location;
@@ -76,6 +76,7 @@ void main(void)
 	struct nrf_cloud_rest_context rest_ctx = {
 		.connect_socket = -1,
 		.keep_alive = true,
+		/* TODO: JWTs are not yet supported; use API token for location APIs */
 		.auth = CONFIG_REST_API_TOKEN,
 		.timeout_ms = 30000,
 		.rx_buf = rx_buf,
@@ -90,18 +91,19 @@ void main(void)
 			.cell_id = 84486415
 		}
 	};
-	struct nrf_cloud_rest_agps_request agps_rest = {
+	struct nrf_cloud_rest_agps_request agps_request = {
 		.device_id = CONFIG_REST_DEVICE_ID,
 		.type = NRF_CLOUD_REST_AGPS_REQ_CUSTOM
 	};
 	struct gps_agps_request agps = {
 		.utc = 1,
+		.sv_mask_ephe = 1,
 		.sv_mask_alm = 1,
 		.klobuchar = 1
 	};
-	struct nrf_cloud_data agps_out = {
-		.len = 0,
-		.ptr = NULL
+	struct nrf_cloud_rest_agps_result agps_result = {
+		.buf_sz = 0,
+		.buf = NULL
 	};
 
 	int err = init_modem_and_connect();
@@ -110,34 +112,46 @@ void main(void)
 		return;
 	}
 
-	agps_rest.net_info = &req.net_info;
-	agps_rest.agps_req = &agps;
-
-	agps_sz = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_rest, NULL);
+	/* Exercise AGPS API */
+	agps_request.net_info = &req.net_info;
+	agps_request.agps_req = &agps;
+	/* When requesting a potentially large result, set fragment size to a
+	 * small value (1) and do not provide a result buffer.
+	 * This will allow you to obtain the necessary size while limiting
+	 * data transfer.
+	 */
+	rest_ctx.fragment_size = 1;
+	agps_sz = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_request, NULL);
 	if (agps_sz < 0) {
-		LOG_ERR("Could not get size of AGPS data, err %d", agps_sz);
+		LOG_ERR("Failed to get AGPS data: %d", agps_sz);
 		return;
 	} else if (agps_sz == 0) {
-		LOG_ERR("No AGPS data available");
+		LOG_ERR("AGPS request successful");
 		return;
 	}
 
-	agps_out.len = (uint32_t)agps_sz;
-	agps_out.ptr = k_calloc(agps_out.len, 1);
-	if (!agps_out.ptr) {
-		LOG_ERR("Failed to allocate %u bytes for AGPS buffer", agps_out.len);
+	LOG_INF("Additional buffer required to download AGPS data of %d bytes",
+		agps_sz);
+
+	agps_result.buf_sz = (uint32_t)agps_sz;
+	agps_result.buf = k_calloc(agps_result.buf_sz, 1);
+	if (!agps_result.buf) {
+		LOG_ERR("Failed to allocate %u bytes for AGPS buffer", agps_result.buf_sz);
 		return;
 	}
-
-	err = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_rest, &agps_out);
+	/* Use the default configured fragment size */
+	rest_ctx.fragment_size = 0;
+	err = nrf_cloud_rest_agps_data_get(&rest_ctx, &agps_request, &agps_result);
 	if (err) {
 		LOG_ERR("Failed to get AGPS data: %d", err);
-		k_free((void*)agps_out.ptr);
+	} else {
+		// TODO: send to modem?
 	}
 
-	// TODO
-	return;
+	k_free(agps_result.buf);
+	agps_result.buf = NULL;
 
+	/* TODO: replace with existing ncellmeas handling */
 	err = modem_get_neighboring_cell_data(&n_cell);
 	if (err) {
 		LOG_ERR("Failed to get neighboring cell data");
@@ -162,7 +176,7 @@ void main(void)
 		req.net_info.mcc = n_cell.mcc;
 	}
 
-	/* Use API token for SCELL endpoint */
+	/* Exercise single-cell API */
 	err = nrf_cloud_rest_get_single_cell_loc(&rest_ctx, &req, &location);
 	if (err) {
 		LOG_ERR("Single Cell API call failed, error: %d", err);

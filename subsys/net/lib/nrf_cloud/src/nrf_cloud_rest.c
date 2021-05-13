@@ -38,8 +38,8 @@ LOG_MODULE_REGISTER(nrf_cloud_rest, CONFIG_NRF_CLOUD_REST_LOG_LEVEL);
 #define HDR_ACCEPT_ALL			"accept: " CONTENT_TYPE_ALL "\r\n"
 #define HDR_RANGE_BYTES_TEMPLATE	"Range: bytes=%u-%u\r\n"
 #define HDR_RANGE_BYTES_SZ		(sizeof(HDR_RANGE_BYTES_TEMPLATE) + 11 + 11)
-// TODO: add cfg option
-#define RANGE_MAX_BYTES			1700
+
+#define RANGE_MAX_BYTES			CONFIG_NRF_CLOUD_REST_FRAGMENT_SIZE
 
 #define API_GET_FOTA_URL_TEMPLATE	"/v1/fota-job-executions/%s/latest"
 #define API_UPDATE_FOTA_URL_TEMPLATE	"/v1/fota-job-executions/%s/%s"
@@ -786,7 +786,7 @@ static int format_range_header(char *const buf, size_t buf_sz, size_t start_byte
 
 int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 				 struct nrf_cloud_rest_agps_request const *const request,
-				 struct nrf_cloud_data *const result)
+				 struct nrf_cloud_rest_agps_result *const result)
 {
 	__ASSERT_NO_MSG(rest_ctx != NULL);
 	__ASSERT_NO_MSG(request != NULL);
@@ -797,6 +797,7 @@ int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	size_t url_sz;
 	size_t remain;
 	size_t pos;
+	size_t frag_size;
 	char *auth_hdr = NULL;
 	char *url = NULL;
 	struct http_request http_req;
@@ -808,6 +809,9 @@ int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	if ((request->type == NRF_CLOUD_REST_AGPS_REQ_CUSTOM) &&
 	    (request->agps_req == NULL)) {
 		LOG_ERR("Custom request type requires AGPS request data");
+		return -EINVAL;
+	} else if (result && !result->buf) {
+		LOG_ERR("Invalid result buffer");
 		return -EINVAL;
 	}
 
@@ -913,19 +917,17 @@ int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	remain = 0;
 	rcvd_bytes = 0;
 	total_bytes = 0;
+	frag_size = rest_ctx->fragment_size ?
+		    rest_ctx->fragment_size : RANGE_MAX_BYTES;
 
 	/* Do as many REST calls as needed to receive entire payload */
 	do {
-		/* Only request one byte if just checking size */
-		size_t end_byte = (!result) ?
-				  1 : (rcvd_bytes + RANGE_MAX_BYTES - 1);
-
 		/* Format range header */
 		ret = format_range_header(range_hdr, sizeof(range_hdr),
 					  rcvd_bytes,
-					  end_byte);
+					  (rcvd_bytes + frag_size - 1));
 		if (ret) {
-			LOG_ERR("Could not format Range header");
+			LOG_ERR("Could not format range header");
 			goto clean_up;
 		}
 
@@ -946,26 +948,36 @@ int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 				ret = -EBADMSG;
 				goto clean_up;
 			}
-			LOG_INF("Total bytes in payload: %d", total_bytes);
+			LOG_DBG("Total bytes in payload: %d", total_bytes);
 
 			if (!result) {
-				ret = total_bytes;
+				/* If all data was able to be downloaded without
+				 * a result buffer, return 0.  Otherwise, return
+				 * the total bytes needed for the result
+				 */
+				if (total_bytes > frag_size) {
+					ret = total_bytes;
+				} else {
+					ret = 0;
+				}
+
 				goto clean_up;
-			} else if (result->len < total_bytes) {
-				LOG_INF("Provided buffer is too small");
+
+			} else if (result->buf_sz < total_bytes) {
+				LOG_ERR("Provided buffer is too small");
 				ret = -ENOBUFS;
 			}
 		}
 
 		rcvd_bytes += rest_ctx->response_len;
 
-		LOG_INF("AGPS data rx: %u/%u", rcvd_bytes, total_bytes);
+		LOG_DBG("AGPS data rx: %u/%u", rcvd_bytes, total_bytes);
 		if (rcvd_bytes > total_bytes) {
 			ret = -EFBIG;
 			goto clean_up;
 		}
 
-		memcpy(&((char *)result->ptr)[pos],
+		memcpy(&result->buf[pos],
 		       rest_ctx->response,
 		       rest_ctx->response_len);
 
@@ -975,7 +987,7 @@ int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	} while (remain);
 
 	/* Set output size */
-	result->len = total_bytes;
+	result->agps_sz = total_bytes;
 
 clean_up:
 	if (url) {

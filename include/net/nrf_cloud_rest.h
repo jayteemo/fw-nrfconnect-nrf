@@ -54,10 +54,19 @@ struct nrf_cloud_rest_context {
 	int32_t timeout_ms;
 	/** Authentication string: JWT or API token */
 	char * auth;
-	/** User allocated buffer for receiving API response */
+	/** User allocated buffer for receiving API response.
+	 * Buffer size should be limited according to the
+	 * maximum TLS receive size of the modem.
+	 */
 	char * rx_buf;
 	/** Size of rx_buf */
 	size_t rx_buf_len;
+	/** Fragment size for downloads, set to zero to use
+	 * CONFIG_NRF_CLOUD_REST_FRAGMENT_SIZE.
+	 * The rx_buf must be able to hold the https headers
+	 * plus this fragment size.
+	 */
+	size_t fragment_size;
 
 	/** Results from API call */
 	/** HTTP status of API call */
@@ -82,13 +91,22 @@ struct nrf_cloud_rest_single_cell_request {
 };
 
 struct nrf_cloud_rest_agps_request {
-	/* Optional; provide valid string or set to NULL */
+	/** Optional; provide valid string or set to NULL */
 	char * device_id;
 	enum nrf_cloud_rest_agps_req_type type;
-	/* Required for custom request type */
+	/** Required for custom request type */
 	struct gps_agps_request * agps_req;
-	/* Optional; provide network info or set to NULL */
+	/** Optional; provide network info or set to NULL */
 	struct nrf_cloud_rest_network_info * net_info;
+};
+
+struct nrf_cloud_rest_agps_result {
+	/** Buffer to hold AGPS data */
+	char * buf;
+	/** Size of buffer */
+	size_t buf_sz;
+	/** Size of the AGPS data copied into buffer */
+	size_t agps_sz;
 };
 
 int nrf_cloud_rest_get_single_cell_loc(struct nrf_cloud_rest_context * const rest_ctx,
@@ -99,7 +117,7 @@ int nrf_cloud_rest_get_multi_cell_loc(struct nrf_cloud_rest_context * const rest
 
 int nrf_cloud_rest_agps_data_get(struct nrf_cloud_rest_context * const rest_ctx,
 				 struct nrf_cloud_rest_agps_request const *const request,
-				 struct nrf_cloud_data *const result);
+				 struct nrf_cloud_rest_agps_result *const result);
 
 int nrf_cloud_rest_get_fota_job(struct nrf_cloud_rest_context * const rest_ctx,
 	const char * const device_id, struct nrf_cloud_fota_job_info *const job);
