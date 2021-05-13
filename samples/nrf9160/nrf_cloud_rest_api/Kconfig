@@ -1,0 +1,30 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menu "nRF Cloud REST API Sample"
+
+config REST_JWT_SEC_TAG
+	int "Security tag to use for generating JWTs"
+	default 16842753
+
+config REST_API_TOKEN
+	string "API token which can be used instead of a JWT"
+
+config REST_DEVICE_ID
+	string "Device ID to be used in API calls"
+
+config REST_FOTA_ONLY
+	bool "Only exercise FOTA APIs"
+
+endmenu
+
+menu "Zephyr Kernel"
+source "Kconfig.zephyr"
+endmenu
+
+module = NRF_CLOUD_REST_SAMPLE
+module-str = nRF Cloud Rest Sample
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
