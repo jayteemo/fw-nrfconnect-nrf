@@ -63,6 +63,10 @@ config MQTT_TLS_PEER_VERIFY
 		Set to 0 for VERIFY_NONE, 1 for VERIFY_OPTIONAL, and 2 for
 		VERIFY_REQUIRED.
 
+config USER_SMS_PDU_STRING
+	string "SMS PDU which is sent to the user's device"
+	default ""
+
 endmenu
 
 menu "Zephyr Kernel"

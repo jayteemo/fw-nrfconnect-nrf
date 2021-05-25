@@ -481,10 +481,12 @@ static int init_sms(void)
 	return at_cmd_write("AT+CNMI=3,2,0,1", NULL, 0, NULL);
 }
 
+BUILD_ASSERT(sizeof(CONFIG_USER_SMS_PDU_STRING) > 1, "SMS PDU not set");
+
 static void send_sms(void)
 {
 	int err;
-	char sms[] = "AT+CMGS=34\r<INSERT_SMS_CONTENT>_";
+	char sms[] = "AT+CMGS=34\r" CONFIG_USER_SMS_PDU_STRING "_";
 
 	sms[sizeof(sms) - 2] = '\x1a';
 
