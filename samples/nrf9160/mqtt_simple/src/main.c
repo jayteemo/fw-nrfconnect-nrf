@@ -27,7 +27,8 @@
 
 LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
 
-#define DISCONNECT_STR "disconnect"
+#define DISCONNECT_STR		"disconnect"
+#define DELAYED_SMS_WAIT_S	30
 
 /* Buffers for MQTT client. */
 static uint8_t rx_buffer[CONFIG_MQTT_MESSAGE_BUFFER_SIZE];
@@ -42,12 +43,20 @@ static struct sockaddr_storage broker;
 
 /* File descriptor */
 static struct pollfd fds;
+static K_SEM_DEFINE(connection_poll_sem, 1, 1);
 
-#if defined(CONFIG_MQTT_LIB_TLS)
+#if !defined(CONFIG_LWM2M_CARRIER)
+static void delayed_sms_thread_run(void);
+static K_THREAD_DEFINE(delayed_sms_thread, 2048,
+		       delayed_sms_thread_run, NULL, NULL, NULL,
+		       K_HIGHEST_APPLICATION_THREAD_PRIO, 0, -1);
+#endif
+
 static int certificates_provision(void)
 {
 	int err = 0;
 
+#if defined(CONFIG_MQTT_LIB_TLS)
 	LOG_INF("Provisioning certificates");
 
 #if defined(CONFIG_NRF_MODEM_LIB) && defined(CONFIG_MODEM_KEY_MGMT)
@@ -73,13 +82,12 @@ static int certificates_provision(void)
 	}
 
 #endif
+#endif /* defined(CONFIG_MQTT_LIB_TLS) */
 
 	return err;
 }
-#endif /* defined(CONFIG_MQTT_LIB_TLS) */
 
 #if defined(CONFIG_NRF_MODEM_LIB)
-
 /**@brief Recoverable modem library error. */
 void nrf_modem_recoverable_error_handler(uint32_t err)
 {
@@ -499,6 +507,18 @@ static void send_sms(void)
 
 	LOG_INF("SMS sent");
 }
+
+void delayed_sms_thread_run(void)
+{
+	LOG_DBG("Delayed-SMS will be sent in %d seconds..", DELAYED_SMS_WAIT_S);
+	k_sleep(K_SECONDS(DELAYED_SMS_WAIT_S));
+
+	k_sem_take(&connection_poll_sem, K_FOREVER);
+	LOG_DBG("Sending delayed-SMS");
+	send_sms();
+	k_sem_give(&connection_poll_sem);
+}
+
 #endif
 
 #if defined(CONFIG_DK_LIBRARY)
@@ -574,22 +594,25 @@ static int modem_configure(void)
 
 	return 0;
 }
+void delayed_sms_thread_start(void)
+{
+#if !defined(CONFIG_LWM2M_CARRIER)
+	k_thread_start(delayed_sms_thread);
+#endif
+}
 
 void main(void)
 {
 	int err;
 	uint32_t connect_attempt = 0;
-	int64_t start_time;
 
 	LOG_INF("The MQTT simple sample started");
 
-#if defined(CONFIG_MQTT_LIB_TLS)
 	err = certificates_provision();
 	if (err != 0) {
 		LOG_ERR("Failed to provision certificates");
 		return;
 	}
-#endif /* defined(CONFIG_MQTT_LIB_TLS) */
 
 	do {
 		err = modem_configure();
@@ -600,7 +623,8 @@ void main(void)
 		}
 	} while (err);
 
-	start_time = k_uptime_get();
+	delayed_sms_thread_start();
+
 	err = client_init(&client);
 	if (err != 0) {
 		LOG_ERR("client_init: %d", err);
@@ -612,7 +636,6 @@ void main(void)
 #endif
 
 do_connect:
-
 #if defined(CONFIG_MQTT_LIB_TLS)
 	if (atomic_get(&carrier_requested_disconnect)) {
 		/* A disconnect was requested to free up the TLS socket
@@ -642,16 +665,10 @@ do_connect:
 
 	while (1) {
 
-#if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
-		int64_t time = start_time;
-		if (start_time && (k_uptime_delta(&time) >= 30000)) {
-			send_sms();
-			/* only once */
-			start_time = 0;
-		}
-#endif
-
+		k_sem_take(&connection_poll_sem, K_FOREVER);
 		err = poll(&fds, 1, mqtt_keepalive_time_left(&client));
+		k_sem_give(&connection_poll_sem);
+
 		if (err < 0) {
 			LOG_ERR("poll: %d", errno);
 			break;
