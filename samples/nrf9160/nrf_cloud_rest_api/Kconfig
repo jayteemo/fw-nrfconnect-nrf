@@ -6,18 +6,81 @@
 
 menu "nRF Cloud REST API Sample"
 
+config REST_SAMPLE_NAME
+	string "Name of this sample, which is printed on startup"
+	default "nRF Cloud REST API Sample"
+
 config REST_JWT_SEC_TAG
 	int "Security tag to use for generating JWTs"
 	default 16842753
 
+config REST_RETRY_WAIT_TIME_MIN
+	int "Wait time, in minutes, before retrying (rebooting)"
+	default 30
+
 config REST_API_TOKEN
 	string "API token which can be used instead of a JWT"
 
-config REST_DEVICE_ID
-	string "Device ID to be used in API calls"
-
 config REST_FOTA_ONLY
 	bool "Only exercise FOTA APIs"
+
+config REST_ENABLE_LED
+	depends on DK_LIBRARY
+	bool "Turn on LED when connected to network"
+	default y
+
+if REST_ENABLE_LED
+config REST_LED_NUM
+	int "LED number to use"
+	default 0
+endif
+
+config REST_DO_JITP
+	depends on DK_LIBRARY
+	bool "Ask to perform just-in-time provisioning on startup"
+
+if REST_DO_JITP
+config REST_DO_JITP_BUTTON_NUM
+	int "Button number to use for JITP request"
+	default 1
+endif
+
+menu "nRF Cloud REST Device ID Source"
+choice
+	prompt "Device ID Source"
+	default REST_ID_SRC_IMEI
+
+config REST_ID_SRC_IMEI
+	depends on NRF_MODEM_LIB
+	bool "IMEI based value"
+
+config REST_ID_SRC_COMPILE_TIME
+	bool "Compile time value"
+
+config REST_ID_SRC_INTERNAL_UUID
+	bool "Modem internal UUID value"
+	select MODEM_ATTEST_TOKEN
+	select MODEM_ATTEST_TOKEN_PARSING
+	help
+	  Requires modem firmware version 1.3 or later.
+
+endchoice
+
+if REST_ID_SRC_IMEI
+config REST_ID_PREFIX
+	string "Prefix used when constructing the ID from the IMEI"
+	default "nrf-"
+	help
+	  The nrf- prefix is reserved on nRF Connect for Cloud for official Nordic
+	  devices (e.g. the nRF9160 DK or the Thingy:91).
+endif
+
+if REST_ID_SRC_COMPILE_TIME
+config REST_DEVICE_ID
+	string "ID used for connection to nRF Cloud"
+	default ""
+endif
+endmenu # "Client ID"
 
 endmenu
 
