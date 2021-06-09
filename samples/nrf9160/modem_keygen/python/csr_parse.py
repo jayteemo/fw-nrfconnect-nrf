@@ -88,8 +88,9 @@ def parse_cose(cose_str):
         attest_obj = loads(cose_obj.value[2])
         print("    Payload ID: " + payload_id_dict.get(attest_obj[0]))
         print("    Dev. UUID:  " + attest_obj[1].hex())
-        # Print the sec_tag byte as an integer
-        print("    sec_tag:    " + str(attest_obj[2][0]))
+        # sec_tag is another cbor object
+        sec_tag = loads(attest_obj[2])
+        print("    sec_tag:    " + str(sec_tag))
         # SHA256 digest of cert/key in the payload
         print("    SHA256:     " + attest_obj[3].hex())
         print("    Nonce:      " + attest_obj[4].hex())
