@@ -7,6 +7,7 @@
 import argparse
 import sys
 from os import path
+from os import makedirs
 from cbor2 import loads
 import base64
 import OpenSSL.crypto
@@ -35,12 +36,19 @@ header_key_type_dict = {
     -5: 'nordic_base_rd_key'
 }
 
+csr_pem_bytes=b''
+pub_key_bytes=b''
+dev_uuid_hex_str=""
+sec_tag_str=""
 payload_digest = ""
 
 def parse_args():
     parser = argparse.ArgumentParser(description="CSR parser")
     parser.add_argument("-k", "--keygen", type=str, help="base64url string: KEYGEN output", default="")
     parser.add_argument("-a", "--attest", type=str, help="base64url string: ATTESTTOKEN output", default="")
+    parser.add_argument("-s", "--save", action='store_true', help="Save PEM file(s): <UUID>_<sec_tag>_<type>.pem")
+    parser.add_argument("-p", "--path", type=str, help="Path to save PEM file.  Selects -s", default="")
+    parser.add_argument("-f", "--fileprefix", type=str, help="Prefix for output files (<prefix><UUID>_<sec_tag>_<type>.pem). Selects -s", default="")
     args = parser.parse_args()
     return args
 
@@ -58,6 +66,9 @@ def parse_cose(cose_str):
     """
     if len(cose_str) == 0:
         return
+
+    global dev_uuid_hex_str
+    global sec_tag_str
 
     # Decode to binary and parse cbor
     cose_bytes = base64_decode(cose_str)
@@ -87,10 +98,12 @@ def parse_cose(cose_str):
     if str(cose_obj.value[2]) != "None":
         attest_obj = loads(cose_obj.value[2])
         print("    Payload ID: " + payload_id_dict.get(attest_obj[0]))
-        print("    Dev. UUID:  " + attest_obj[1].hex())
+        dev_uuid_hex_str = attest_obj[1].hex().upper()
+        print("    Dev. UUID:  " + dev_uuid_hex_str)
         # sec_tag is another cbor object
         sec_tag = loads(attest_obj[2])
-        print("    sec_tag:    " + str(sec_tag))
+        sec_tag_str = str(sec_tag)
+        print("    sec_tag:    " + sec_tag_str)
         # SHA256 digest of cert/key in the payload
         print("    SHA256:     " + attest_obj[3].hex())
         print("    Nonce:      " + attest_obj[4].hex())
@@ -111,11 +124,60 @@ def parse_cose(cose_str):
 
     return
 
+def write_file(pathname, filename, bytes):
+    """
+    save bytes to file
+    """
+
+    if not path.isdir(pathname):
+        try:
+            makedirs(pathname, exist_ok=True)
+        except OSError as e:
+            raise RuntimeError("Error creating file path")
+
+    full_path = path.join(pathname, filename)
+
+    try:
+        f = open(full_path, "wb")
+    except OSError:
+        raise RuntimeError("Error opening file: " + full_path)
+
+    f.write(bytes)
+    print("File created: " + path.abspath(f.name))
+    f.close()
+
+    return
+
+def save_output(path, prefix):
+    """
+    save CSR/key data to PEM file(s)
+    """
+    global dev_uuid_hex_str
+    global sec_tag_str
+    global csr_pem_bytes
+    global pub_key_bytes
+
+    if (len(dev_uuid_hex_str) <= 0):
+        raise RuntimeError("Device UUID not found. Full KEYGEN output must be provided.")
+
+    filename = prefix + dev_uuid_hex_str + "_" + sec_tag_str
+
+    if(len(csr_pem_bytes)):
+        write_file(path, filename + "_csr.pem", csr_pem_bytes)
+
+    if(len(pub_key_bytes)):
+        write_file(path, filename + "_pub.pem", pub_key_bytes)
+
+    return
+
 def parse_keygen_output(keygen_str):
     """
     parse keygen output.
     """
     print("\nParsing AT%KEYGEN output:\n")
+
+    global csr_pem_bytes
+    global pub_key_bytes
 
     # Input format: <base64url_body>.<base64url_cose>
     #               cose portion is optional
@@ -133,20 +195,20 @@ def parse_keygen_output(keygen_str):
     except OpenSSL.crypto.Error:
         # Handle public key only
         pub_key = OpenSSL.crypto.load_publickey(OpenSSL.crypto.FILETYPE_ASN1,body_bytes)
-        pub_key_str = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, pub_key)
+        pub_key_bytes = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, pub_key)
 
     else:
         # CSR loaded, print it
-        csr_pem_str = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
-        csr_pem_list = str(csr_pem_str.decode()).split('\n')
+        csr_pem_bytes = OpenSSL.crypto.dump_certificate_request(FILETYPE_PEM,csr_asn1)
+        csr_pem_list = str(csr_pem_bytes.decode()).split('\n')
         for line in csr_pem_list:
             print(line)
 
         # Extract public key
-        pub_key_str = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, csr_asn1.get_pubkey())
+        pub_key_bytes = OpenSSL.crypto.dump_publickey(FILETYPE_PEM, csr_asn1.get_pubkey())
 
     print("Device public key:")
-    print(pub_key_str.decode())
+    print(pub_key_bytes.decode())
 
     global payload_digest
     payload_digest = hashlib.sha256(body_bytes).hexdigest()
@@ -195,15 +257,23 @@ def parse_attesttoken_output(atokout_str):
 def main():
 
     if not len(sys.argv) > 1:
-        raise RuntimeError('No input provided')
+        raise RuntimeError("No input provided")
 
     args = parse_args()
+
     if len(args.keygen) > 0:
         parse_keygen_output(args.keygen)
     elif len(args.attest) > 0:
         parse_attesttoken_output(args.attest)
     else:
         raise RuntimeError("No input data provided")
+
+    if (args.save == False) and ((len(args.path) > 0) or (len(args.fileprefix) > 0)):
+        args.save = True
+        print("Argument -s has been selected since path/fileprefix was specified")
+
+    if args.save:
+        save_output(args.path, args.fileprefix)
 
     return
 
