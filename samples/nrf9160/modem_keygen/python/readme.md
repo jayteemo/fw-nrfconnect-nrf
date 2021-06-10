@@ -11,12 +11,21 @@ optional arguments:
                         base64url string: KEYGEN output
   -a ATTEST, --attest ATTEST
                         base64url string: ATTESTTOKEN output
+  -s, --save            Save PEM file(s): <UUID>_<sec_tag>_<type>.pem
+  -p PATH, --path PATH  Path to save PEM file. Selects -s
+  -f FILEPREFIX, --fileprefix FILEPREFIX
+                        Prefix for output files (<prefix><UUID>_<sec_tag>_<type>.pem). Selects -s
 ```
 
 Parse modem keygen output; with or without COSE portion:
 
 `python3 csr_parse.py -k <base64url AT%KEYGEN output>`
 
+Parse modem keygen output and save PEM file(s); COSE portion is required:
+
+`python3 csr_parse.py -k <base64url AT%KEYGEN output> -s`
+
+`python3 csr_parse.py -k <base64url AT%KEYGEN output> -p <my_output_path> -f <my_file_prefix>`
 
 Parse modem attestation token output; with or without COSE portion:
 
@@ -125,4 +134,50 @@ COSE:
   Sig:
       6b97c099628a71dceb10cfaee8b28ec697c9765b655a54b8e8471bd612f0bd3956e82509c26130de045215951a968780d9c71e7a3a6a18be779b4e79998070d6
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+```
+
+AT%KEYGEN: CSR with file save
+```
+python3 csr_parse.py -k MIIBCjCBrwIBADAvMS0wKwYDVQQDDCQ1MDM2MzE1NC0zOTMxLTQ0ZjAtODAyMi0xMjFiNjQwMTYyN2QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQqD6pNfa29o_EXnw62bnQWr8-JqsNh_HZxS3k3bMD4KZ8-qxnvgeoiqQ5zAycEP_Wcmzqypvwyf3qWMrZ2VB5aoB4wHAYJKoZIhvcNAQkOMQ8wDTALBgNVHQ8EBAMCA-gwDAYIKoZIzj0EAwIFAANIADBFAiEAv7OLZ_dXbszfhhjcLMUT72wTmw-z6GlgWxVhyWgR27ACIAvY_lPu3yfYZY5AL6uYTkUFp4GQkbSOUC_lsHyCxOuG.0oRDoQEmoQRBIVhL2dn3hQlQUDYxVDkxRPCAIhIbZAFifUERWCBwKj1W8FsvclMdZQgl4gBB4unZMYw0toU6uQZuXHLoDFAbhyLuHetYFWbiyxNZsnzSWEDUiTl7wwFt0hEsCiEQsxj-hCtpBk8Za8UXfdAycpx2faCOPJIrkfmiSS8-Y6_2tTAoAMN1BiWiTOimY1wZE3Ud -p /my_devices/pem_files -f hw_rev2-
+
+Parsing AT%KEYGEN output:
+
+-----BEGIN CERTIFICATE REQUEST-----
+MIIBCjCBrwIBADAvMS0wKwYDVQQDDCQ1MDM2MzE1NC0zOTMxLTQ0ZjAtODAyMi0x
+MjFiNjQwMTYyN2QwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQqD6pNfa29o/EX
+nw62bnQWr8+JqsNh/HZxS3k3bMD4KZ8+qxnvgeoiqQ5zAycEP/Wcmzqypvwyf3qW
+MrZ2VB5aoB4wHAYJKoZIhvcNAQkOMQ8wDTALBgNVHQ8EBAMCA+gwDAYIKoZIzj0E
+AwIFAANIADBFAiEAv7OLZ/dXbszfhhjcLMUT72wTmw+z6GlgWxVhyWgR27ACIAvY
+/lPu3yfYZY5AL6uYTkUFp4GQkbSOUC/lsHyCxOuG
+-----END CERTIFICATE REQUEST-----
+
+Device public key:
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEKg+qTX2tvaPxF58Otm50Fq/PiarD
+Yfx2cUt5N2zA+CmfPqsZ74HqIqkOcwMnBD/1nJs6sqb8Mn96ljK2dlQeWg==
+-----END PUBLIC KEY-----
+
+SHA256 Digest:
+702a3d56f05b2f72531d650825e20041e2e9d9318c34b6853ab9066e5c72e80c
+
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+COSE:
+  Prot Hdr:   1 : -7 (ECDSA w/ SHA-256)
+  Unprot Hdr: 4 : -2 (identity_key)
+  ---------------
+  Attestation:
+    Payload ID: CSR_msg_v1
+    Dev. UUID:  50363154393144F08022121B6401627D
+    sec_tag:    17
+    SHA256:     702a3d56f05b2f72531d650825e20041e2e9d9318c34b6853ab9066e5c72e80c
+    Nonce:      1b8722ee1deb581566e2cb1359b27cd2
+  ---------------
+  Sig:
+      d489397bc3016dd2112c0a2110b318fe842b69064f196bc5177dd032729c767da08e3c922b91f9a2492f3e63aff6b5302800c3750625a24ce8a6635c1913751d
+
+COSE digest matches payload
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
+Argument -s has been selected since path/fileprefix was specified
+File created: /my_devices/pem_files/hw_rev2-50363154393144F08022121B6401627D_17_csr.pem
+File created: /my_devices/pem_files/hw_rev2-50363154393144F08022121B6401627D_17_pub.pem
 ```
