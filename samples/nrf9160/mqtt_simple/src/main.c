@@ -21,8 +21,17 @@
 #if defined(CONFIG_LWM2M_CARRIER)
 #include <lwm2m_carrier.h>
 #endif
+#if defined(CONFIG_DK_LIBRARY)
 #include <dk_buttons_and_leds.h>
-
+#define SW1_BTN_NUM	3
+#define SW1_GND_VALUE	0x04
+#define SW1_STATE_GND() ((bool)(dk_get_buttons() & SW1_GND_VALUE))
+#define SW1_STATE_NC() (!SW1_STATE_GND())
+#define SW2_BTN_NUM	4
+#define SW2_GND_VALUE	0x08
+#define SW2_STATE_GND() ((bool)(dk_get_buttons() & SW2_GND_VALUE))
+#define SW2_STATE_NC() (!SW2_STATE_GND())
+#endif
 #include "certificates.h"
 
 LOG_MODULE_REGISTER(mqtt_simple, CONFIG_MQTT_SIMPLE_LOG_LEVEL);
@@ -44,6 +53,12 @@ static struct sockaddr_storage broker;
 /* File descriptor */
 static struct pollfd fds;
 static K_SEM_DEFINE(connection_poll_sem, 1, 1);
+
+static atomic_t lte_ready;
+
+#if defined(CONFIG_DK_LIBRARY)
+static K_SEM_DEFINE(switch_state_sem, 0, 1);
+#endif
 
 #if !defined(CONFIG_LWM2M_CARRIER)
 static void delayed_sms_thread_run(void);
@@ -145,6 +160,7 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		break;
 	case LWM2M_CARRIER_EVENT_LTE_READY:
 		LOG_INF("LWM2M_CARRIER_EVENT_LTE_READY");
+		atomic_set(&lte_ready, 1);
 		break;
 	case LWM2M_CARRIER_EVENT_ERROR:
 		LOG_ERR("LWM2M_CARRIER_EVENT_ERROR: code %d, value %d",
@@ -526,6 +542,10 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
 	if (has_changed & button_states &
 	    BIT(CONFIG_BUTTON_EVENT_BTN_NUM - 1)) {
+		if (atomic_get(&lte_ready) == 0) {
+			LOG_INF("Not connected to network, ignoring button press");
+			return;
+		}
 #if !IS_ENABLED(CONFIG_LWM2M_CARRIER)
 		send_sms();
 #else
@@ -539,6 +559,11 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			LOG_ERR("Publish failed: %d", ret);
 		}
 #endif
+	} else if ((has_changed & BIT(SW1_BTN_NUM - 1)) &&
+		   ((button_states & SW1_GND_VALUE) == 0) &&
+		   !IS_ENABLED(CONFIG_LWM2M_CARRIER)) {
+		LOG_DBG("Switch 1 set to N.C");
+		k_sem_give(&switch_state_sem);
 	}
 }
 #endif
@@ -587,6 +612,7 @@ static int modem_configure(void)
 			LOG_INF("Failed to establish LTE connection: %d", err);
 			return err;
 		}
+		atomic_set(&lte_ready, 1);
 		LOG_INF("LTE Link Connected!");
 #endif /* defined(CONFIG_LWM2M_CARRIER) */
 	}
@@ -597,8 +623,14 @@ static int modem_configure(void)
 void delayed_sms_thread_start(void)
 {
 #if !defined(CONFIG_LWM2M_CARRIER)
+#if defined(CONFIG_DK_LIBRARY)
+	if (SW2_STATE_GND()){
+		LOG_INF("Switch 2 is not in the N.C. position, delayed-SMS will not be sent.");
+		return;
+	}
+#endif /* CONFIG_DK_LIBRARY */
 	k_thread_start(delayed_sms_thread);
-#endif
+#endif /* !CONFIG_LWM2M_CARRIER */
 }
 
 void main(void)
@@ -623,6 +655,19 @@ void main(void)
 		}
 	} while (err);
 
+#if defined(CONFIG_DK_LIBRARY)
+	dk_buttons_init(button_handler);
+
+	if (!IS_ENABLED(CONFIG_LWM2M_CARRIER)) {
+		if (SW1_STATE_GND()){
+			LOG_INF("Move Switch 1 to the N.C. position to continue");
+			k_sem_take(&switch_state_sem, K_FOREVER);
+		} else {
+			LOG_INF("Switch 1 set to N.C., starting application");
+		}
+	}
+#endif
+
 	delayed_sms_thread_start();
 
 	err = client_init(&client);
@@ -630,10 +675,6 @@ void main(void)
 		LOG_ERR("client_init: %d", err);
 		return;
 	}
-
-#if defined(CONFIG_DK_LIBRARY)
-	dk_buttons_init(button_handler);
-#endif
 
 do_connect:
 #if defined(CONFIG_MQTT_LIB_TLS)
