@@ -122,6 +122,10 @@ int get_string_from_array(const cJSON * const array, const int index,
 int get_string_from_obj(const cJSON * const obj, const char *const key,
 			char **string_out);
 
+int json_send_to_cloud(cJSON *const request);
+
+cJSON *json_create_req_obj(const char *const app_id, const char *const msg_type);
+
 #ifdef __cplusplus
 }
 #endif
