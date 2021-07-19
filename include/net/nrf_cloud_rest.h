@@ -53,7 +53,9 @@ enum nrf_cloud_rest_agps_req_type {
 /** @brief Parameters and data for using the nRF Cloud REST API */
 struct nrf_cloud_rest_context {
 
-	/** Connection socket */
+	/** Connection socket; initialize to -1 and library
+	 * will make the connection.
+	 */
 	int connect_socket;
 	/** If the connection should remain after API call */
 	bool keep_alive;
@@ -243,9 +245,13 @@ int nrf_cloud_rest_disconnect(struct nrf_cloud_rest_context *const rest_ctx);
 /**
  * @brief Performs just-in-time provisioning (JITP) with nRF Cloud.
  *
+ * @note After a device has been provisioned with nRF Cloud, it must be
+ * associated with an nRF Cloud account before using any other functions in this
+ * library.
+ *
  * @param[in] nrf_cloud_sec_tag Modem sec_tag containing nRF Cloud JITP credentials
  *
- * @retval 0 If successful; wait 30s before using the REST API for this device.
+ * @retval 0 If successful; wait 30s before associating device with nRF Cloud account.
  * @retval 1 Device is already provisioned.
  *         Otherwise, a (negative) error code is returned.
  */

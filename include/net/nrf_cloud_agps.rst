@@ -24,7 +24,7 @@ Configuration
 Configure the following options to enable or disable the use of this library:
 
 * :option:`CONFIG_NRF_CLOUD`
-* :option:`CONFIG_NRF_CLOUD_MQTT`
+* :option:`CONFIG_NRF_CLOUD_MQTT` or :option:`CONFIG_NRF_CLOUD_REST`
 * :option:`CONFIG_NRF_CLOUD_AGPS`
 
 See :ref:`configure_application` for information on how to change configuration options.
@@ -37,7 +37,8 @@ A-GPS data can be requested using one of the following methods:
 * By specifying an array of A-GPS types
 * By requesting all the available assistance data
 
-The :c:func:`nrf_cloud_agps_request` function is used to request by type, and the :c:func:`nrf_cloud_agps_request_all` function is used to return all available assistance data.
+If :option:`CONFIG_NRF_CLOUD_MQTT` is enabled, the :c:func:`nrf_cloud_agps_request` function is used to request by type, and the :c:func:`nrf_cloud_agps_request_all` function is used to return all available assistance data.
+If :option:`CONFIG_NRF_CLOUD_REST` is enabled, the :c:func:`nrf_cloud_rest_agps_data_get` function is used to request A-GPS data.
 
 When nRF Connect for Cloud responds with the requested A-GPS data, the :c:func:`nrf_cloud_agps_process` function processes the received data.
 The function parses the data and passes it on to the modem.
