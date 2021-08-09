@@ -152,10 +152,6 @@ Currently, the supported sensor types are GPS and FLIP (see :c:enum:`nrf_cloud_s
 
 Use :c:func:`nrf_cloud_sensor_data_stream` to send sensor data with best quality.
 
-Before sending any sensor data, call the function :c:func:`nrf_cloud_sensor_attach` with the type of the sensor.
-Note that this function must be called after receiving the event :c:enumerator:`NRF_CLOUD_EVT_READY`.
-It triggers the event :c:enumerator:`NRF_CLOUD_EVT_SENSOR_ATTACHED` if the function executes successfully.
-
 .. _lib_nrf_cloud_unlink:
 
 Removing the link between device and user

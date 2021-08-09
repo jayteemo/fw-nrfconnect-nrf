@@ -58,10 +58,6 @@ enum nrf_cloud_evt_type {
 	NRF_CLOUD_EVT_USER_ASSOCIATED,
 	/** The device can now start sending sensor data to the cloud. */
 	NRF_CLOUD_EVT_READY,
-	/** A sensor was successfully attached to the cloud.
-	 * Supported sensor types are defined in @ref nrf_cloud_sensor.
-	 */
-	NRF_CLOUD_EVT_SENSOR_ATTACHED,
 	/** The device received data from the cloud. */
 	NRF_CLOUD_EVT_RX_DATA,
 	/** The data sent to the cloud was acknowledged. */
@@ -177,12 +173,6 @@ struct nrf_cloud_connect_param {
 	const struct nrf_cloud_sensor_list *sensor;
 };
 
-/**@brief Parameters of attached sensors. */
-struct nrf_cloud_sa_param {
-	/** The sensor that is being attached. */
-	enum nrf_cloud_sensor sensor_type;
-};
-
 /**@brief Sensor data transmission parameters. */
 struct nrf_cloud_sensor_data {
 	/** The sensor that is the source of the data. */
@@ -278,25 +268,10 @@ int nrf_cloud_uninit(void);
 int nrf_cloud_connect(const struct nrf_cloud_connect_param *param);
 
 /**
- * @brief Attach a sensor to the cloud.
- *
- * This API should only be called after receiving an
- * @ref NRF_CLOUD_EVT_READY event.
- * If the API succeeds, wait for the @ref NRF_CLOUD_EVT_SENSOR_ATTACHED
- * event before sending the sensor data.
- *
- * @param[in] param	Sensor information.
- *
- * @retval 0 If successful.
- *           Otherwise, a (negative) error code is returned.
- */
-int nrf_cloud_sensor_attach(const struct nrf_cloud_sa_param *param);
-
-/**
  * @brief Send sensor data reliably.
  *
  * This API should only be called after receiving an
- * @ref NRF_CLOUD_EVT_SENSOR_ATTACHED event.
+ * @ref NRF_CLOUD_EVT_READY event.
  * If the API succeeds, you can expect the
  * @ref NRF_CLOUD_EVT_SENSOR_DATA_ACK event.
  *
@@ -321,7 +296,7 @@ int nrf_cloud_shadow_update(const struct nrf_cloud_sensor_data *param);
  * @brief Stream sensor data.
  *
  * This API should only be called after receiving an
- * @ref NRF_CLOUD_EVT_SENSOR_ATTACHED event.
+ * @ref NRF_CLOUD_EVT_READY event.
  *
  * @param[in] param Sensor data.
  *

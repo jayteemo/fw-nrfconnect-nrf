@@ -36,6 +36,7 @@ nRF9160
   * :ref:`lib_nrf_cloud` library:
 
     * Added function :c:func:`nrf_cloud_uninit`, which can be used to uninitialize the nRF Cloud library.  If :ref:`cloud_api_readme` is used, call :c:func:`cloud_uninit`
+    * Removed function nrf_cloud_sensor_attach, the associated structure nrf_cloud_sa_param, and event NRF_CLOUD_EVT_SENSOR_ATTACHED.  These items provided no useful functionality.
 
   * :ref:`serial_lte_modem` application:
 
