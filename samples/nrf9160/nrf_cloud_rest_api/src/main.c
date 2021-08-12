@@ -438,6 +438,8 @@ void main(void)
 
 	(void)do_jitp();
 
+retry:
+
 	err = modem_jwt_generate(&jwt);
 	if (err) {
 		LOG_ERR("Failed to generate JWT, err %d", err);
@@ -446,7 +448,6 @@ void main(void)
 	LOG_DBG("JWT:\n%s", log_strdup(jwt.jwt_buf));
 	rest_ctx.auth = jwt.jwt_buf;
 
-retry:
 	if (IS_ENABLED(CONFIG_REST_FOTA_ONLY)) {
 		goto fota_start;
 	}
