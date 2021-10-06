@@ -998,6 +998,15 @@ int json_common_config_add(cJSON *parent, struct cloud_data_cfg *data, const cha
 		values_added = true;
 	}
 
+	if (data->loc_mode_fresh) {
+		err = json_add_number(config_obj, CONFIG_LOCATION_MODE, data->loc_mode);
+		if (err) {
+			LOG_ERR("Encoding error: %d returned at %s:%d", err, __FILE__, __LINE__);
+			goto exit;
+		}
+		values_added = true;
+	}
+
 	if (data->nod_list_fresh) {
 		cJSON *nod_list = cJSON_CreateArray();
 
@@ -1063,6 +1072,7 @@ void json_common_config_get(cJSON *parent, struct cloud_data_cfg *data)
 	cJSON *move_res = cJSON_GetObjectItem(parent, CONFIG_MOVE_RES);
 	cJSON *move_timeout = cJSON_GetObjectItem(parent, CONFIG_MOVE_TIMEOUT);
 	cJSON *acc_thres = cJSON_GetObjectItem(parent, CONFIG_ACC_THRESHOLD);
+	cJSON *loc_mode = cJSON_GetObjectItem(parent, CONFIG_LOCATION_MODE);
 	cJSON *nod_list = cJSON_GetObjectItem(parent, CONFIG_NO_DATA_LIST);
 
 	if (gps_timeout != NULL) {
@@ -1087,6 +1097,10 @@ void json_common_config_get(cJSON *parent, struct cloud_data_cfg *data)
 
 	if (acc_thres != NULL) {
 		data->accelerometer_threshold = acc_thres->valuedouble;
+	}
+
+	if (loc_mode != NULL) {
+		data->loc_mode = loc_mode->valuedouble;
 	}
 
 	if (nod_list != NULL && cJSON_IsArray(nod_list)) {

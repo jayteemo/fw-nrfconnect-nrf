@@ -117,7 +117,6 @@ int cloud_codec_encode_neighbor_cells(struct cloud_codec_data *output,
 				      struct cloud_data_neighbor_cells *neighbor_cells)
 {
 	__ASSERT_NO_MSG(output != NULL);
-	__ASSERT_NO_MSG(neighbor_cells != NULL);
 
 	int err = 0;
 	char * buffer;
@@ -125,17 +124,22 @@ int cloud_codec_encode_neighbor_cells(struct cloud_codec_data *output,
 						      NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
 	cJSON *data_obj = cJSON_AddObjectToObject(cell_pos_req_obj, NRF_CLOUD_JSON_DATA_KEY);
 
-	err = nrf_cloud_format_cell_pos_req_json(&neighbor_cells->cell_data, 1, data_obj);
+	if (neighbor_cells) {
+		err = nrf_cloud_format_cell_pos_req_json(&neighbor_cells->cell_data, 1, data_obj);
+		neighbor_cells->queued = true;
+	} else {
+		err = nrf_cloud_format_single_cell_pos_req_json(data_obj);
+	}
 
 	if (err) {
-		neighbor_cells->queued = false;
+		if (neighbor_cells) {
+			neighbor_cells->queued = false;
+		}
 		output->len = 0;
 		output->buf = NULL;
 		cJSON_Delete(cell_pos_req_obj);
 		return err;
 	}
-
-	neighbor_cells->queued = true;
 
 	buffer = cJSON_PrintUnformatted(cell_pos_req_obj);
 	if (buffer == NULL) {
@@ -145,9 +149,9 @@ int cloud_codec_encode_neighbor_cells(struct cloud_codec_data *output,
 		goto exit;
 	}
 
-	//if (IS_ENABLED(CONFIG_CLOUD_CODEC_LOG_LEVEL_DBG)) {
+	if (IS_ENABLED(CONFIG_CLOUD_CODEC_LOG_LEVEL_DBG)) {
 		json_print_obj("Encoded message:\n", cell_pos_req_obj);
-	//}
+	}
 
 	output->buf = buffer;
 	output->len = strlen(buffer);

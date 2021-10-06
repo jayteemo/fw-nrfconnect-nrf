@@ -433,8 +433,14 @@ static void send_neighbor_cell_update(struct lte_lc_cells_info *cell_info)
 		     sizeof(struct lte_lc_ncell) * CONFIG_LTE_NEIGHBOR_CELLS_MAX);
 
 	memcpy(&evt->data.neighbor_cells.cell_data, cell_info, sizeof(struct lte_lc_cells_info));
-	memcpy(&evt->data.neighbor_cells.neighbor_cells, cell_info->neighbor_cells,
-	       sizeof(struct lte_lc_ncell) * evt->data.neighbor_cells.cell_data.ncells_count);
+	if (cell_info->neighbor_cells) {
+		memcpy(&evt->data.neighbor_cells.neighbor_cells, cell_info->neighbor_cells,
+		       sizeof(struct lte_lc_ncell) * evt->data.neighbor_cells.cell_data.ncells_count);
+		evt->data.neighbor_cells.cell_data.neighbor_cells = evt->data.neighbor_cells.neighbor_cells;
+	} else {
+		evt->data.neighbor_cells.cell_data.neighbor_cells = NULL;
+		evt->data.neighbor_cells.cell_data.ncells_count = 0;
+	}
 
 	/* Convert RSRP to dBm and RSRQ to dB per "nRF91 AT Commands" v1.7. */
 	evt->data.neighbor_cells.cell_data.current_cell.rsrp =

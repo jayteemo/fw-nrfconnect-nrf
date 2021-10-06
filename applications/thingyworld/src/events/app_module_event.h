@@ -66,10 +66,6 @@ enum app_module_event_type {
 	 *  attached in the event structure.
 	 */
 	APP_EVT_ERROR,
-
-	APP_EVT_LOC_MODE_SCELL,
-	APP_EVT_LOC_MODE_MCELL,
-	APP_EVT_LOC_MODE_AGPS
 };
 
 /** @brief Data types that the application module requests samples for in
@@ -83,6 +79,7 @@ enum app_module_data_type {
 	APP_DATA_BATTERY,
 	APP_DATA_GNSS,
 	APP_DATA_NEIGHBOR_CELLS,
+	APP_DATA_SCELL,
 
 	APP_DATA_COUNT,
 };

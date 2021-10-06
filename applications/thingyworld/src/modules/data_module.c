@@ -572,8 +572,14 @@ static void data_encode(void)
 		 */
 		return;
 	}
+	if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL) {
+		err = cloud_codec_encode_neighbor_cells(&codec, &neighbor_cells);
+	} else if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL) {
+		err = cloud_codec_encode_neighbor_cells(&codec, NULL);
+	} else {
+		err = -ENOTSUP;
+	}
 
-	err = cloud_codec_encode_neighbor_cells(&codec, &neighbor_cells);
 	switch (err) {
 	case 0:
 		LOG_DBG("Neighbor cell data encoded successfully");
@@ -975,6 +981,13 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 			new_config->accelerometer_threshold);
 	}
 
+	if (current_cfg.loc_mode != new_config->loc_mode) {
+		current_cfg.loc_mode = new_config->loc_mode;
+
+		config_change = true;
+		current_cfg.loc_mode_fresh = true;
+	}
+
 	/* If there has been a change in the currently applied device configuration we want to store
 	 * the configuration to flash, distribute it to other modules and acknowledge the change
 	 * back to cloud.
@@ -1096,6 +1109,13 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	}
 }
 
+static void location_mode_set(const enum cloud_data_location_mode loc_mode)
+{
+	struct cloud_data_cfg new = current_cfg;
+	new.loc_mode = loc_mode;
+	new_config_handle(&new);
+}
+
 /* Message handler for all states. */
 static void on_all_states(struct data_msg_data *msg)
 {
@@ -1176,15 +1196,15 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, ui, UI_EVT_BUTTON_DATA_READY) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
 		LOG_INF("Multicell mode enabled");
-		SEND_EVENT(app, APP_EVT_LOC_MODE_MCELL);
+		location_mode_set(CLOUD_CODEC_LOC_MODE_MCELL);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_2X) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
 		LOG_INF("A-GPS mode enabled");
-		SEND_EVENT(app, APP_EVT_LOC_MODE_AGPS);
+		location_mode_set(CLOUD_CODEC_LOC_MODE_AGPS);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_LONG) &&
 		   (msg->module.ui.data.ui.button_number == 1)) {
 		LOG_INF("Single cell mode enabled");
-		SEND_EVENT(app, APP_EVT_LOC_MODE_SCELL);
+		location_mode_set(CLOUD_CODEC_LOC_MODE_SCELL);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_NOT_READY)) {
@@ -1359,9 +1379,16 @@ static void on_all_states(struct data_msg_data *msg)
 		memcpy(&neighbor_cells.cell_data, &msg->module.modem.data.neighbor_cells.cell_data,
 		       sizeof(neighbor_cells.cell_data));
 
-		memcpy(&neighbor_cells.neighbor_cells,
-		       &msg->module.modem.data.neighbor_cells.neighbor_cells,
-		       sizeof(neighbor_cells.neighbor_cells));
+		if (msg->module.modem.data.neighbor_cells.cell_data.neighbor_cells) {
+			memcpy(&neighbor_cells.neighbor_cells,
+			&msg->module.modem.data.neighbor_cells.neighbor_cells,
+			sizeof(neighbor_cells.neighbor_cells));
+
+			neighbor_cells.cell_data.neighbor_cells = neighbor_cells.neighbor_cells;
+		} else {
+			neighbor_cells.cell_data.neighbor_cells = NULL;
+			neighbor_cells.cell_data.ncells_count = 0;
+		}
 
 		neighbor_cells.ts = msg->module.modem.data.neighbor_cells.timestamp;
 		neighbor_cells.queued = true;

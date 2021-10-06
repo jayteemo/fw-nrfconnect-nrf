@@ -59,6 +59,12 @@ enum cloud_data_gps_format {
 	CLOUD_CODEC_GPS_FORMAT_NMEA
 };
 
+enum cloud_data_location_mode {
+	CLOUD_CODEC_LOC_MODE_SCELL,
+	CLOUD_CODEC_LOC_MODE_MCELL,
+	CLOUD_CODEC_LOC_MODE_AGPS
+};
+
 /** @brief Structure containing GPS data published to cloud. */
 struct cloud_data_gps {
 	/** GPS data timestamp. UNIX milliseconds. */
@@ -109,6 +115,8 @@ struct cloud_data_cfg {
 	double accelerometer_threshold;
 	/** Variable used to govern what data types are requested by the application. */
 	struct cloud_data_no_data no_data;
+	/** Location mode */
+	enum cloud_data_location_mode loc_mode;
 
 	/** Flags to signify if the corresponding data value is fresh and can be used. */
 	bool active_mode_fresh		   : 1;
@@ -118,6 +126,7 @@ struct cloud_data_cfg {
 	bool movement_timeout_fresh	   : 1;
 	bool accelerometer_threshold_fresh : 1;
 	bool nod_list_fresh		   : 1;
+	bool loc_mode_fresh		   : 1;
 };
 
 struct cloud_data_accelerometer {
