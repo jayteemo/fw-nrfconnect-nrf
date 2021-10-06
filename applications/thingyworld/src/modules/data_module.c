@@ -1196,6 +1196,7 @@ static void on_all_states(struct data_msg_data *msg)
 	if (IS_EVENT(msg, ui, UI_EVT_BUTTON_DATA_READY) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
 		LOG_INF("Multicell mode enabled");
+		SEND_EVENT(gps, GPS_EVT_INACTIVE);
 		location_mode_set(CLOUD_CODEC_LOC_MODE_MCELL);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_2X) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
@@ -1204,6 +1205,7 @@ static void on_all_states(struct data_msg_data *msg)
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_LONG) &&
 		   (msg->module.ui.data.ui.button_number == 1)) {
 		LOG_INF("Single cell mode enabled");
+		SEND_EVENT(gps, GPS_EVT_INACTIVE);
 		location_mode_set(CLOUD_CODEC_LOC_MODE_SCELL);
 	}
 

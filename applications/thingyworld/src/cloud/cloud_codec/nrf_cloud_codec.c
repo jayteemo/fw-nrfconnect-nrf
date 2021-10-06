@@ -221,13 +221,13 @@ int cloud_codec_decode_config(char *input, size_t input_len,
 
 	group_obj = json_object_decode(root_obj, OBJECT_STATE);
 	if (group_obj == NULL) {
-		err = -ENODATA;
+		err = -ENOENT;
 		goto exit;
 	}
 
 	subgroup_obj = json_object_decode(group_obj, OBJECT_CONFIG);
 	if (subgroup_obj == NULL) {
-		err = -ENODATA;
+		err = -ENOENT;
 		goto exit;
 	}
 

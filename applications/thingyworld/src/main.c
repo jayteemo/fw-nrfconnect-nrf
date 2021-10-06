@@ -408,6 +408,11 @@ static void on_state_running(struct app_msg_data *msg)
 void on_sub_state_passive(struct app_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
+
+		if (app_cfg.loc_mode != msg->module.data.data.cfg.loc_mode) {
+			data_sample_timer_handler(NULL);
+		}
+
 		/* Keep a copy of the new configuration. */
 		app_cfg = msg->module.data.data.cfg;
 
@@ -444,6 +449,11 @@ void on_sub_state_passive(struct app_msg_data *msg)
 static void on_sub_state_active(struct app_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
+
+		if (app_cfg.loc_mode != msg->module.data.data.cfg.loc_mode) {
+			data_sample_timer_handler(NULL);
+		}
+
 		/* Keep a copy of the new configuration. */
 		app_cfg = msg->module.data.data.cfg;
 

@@ -34,6 +34,8 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_GPS_MODULE_LOG_LEVEL);
 #define GNSS_EVENT_THREAD_STACK_SIZE 768
 #define GNSS_EVENT_THREAD_PRIORITY   5
 
+static bool agps_mode_active = false;
+
 struct gps_msg_data {
 	union {
 		struct app_module_event app;
@@ -555,6 +557,8 @@ static void on_state_init(struct gps_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
 		gnss_timeout = msg->module.data.data.cfg.gps_timeout;
+		agps_mode_active =
+			(msg->module.data.data.cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS);
 	}
 }
 
@@ -563,6 +567,17 @@ static void on_state_running(struct gps_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
 		gnss_timeout = msg->module.data.data.cfg.gps_timeout;
+
+		LOG_INF("on_state_running CFG READY");
+		if (agps_mode_active &&
+		    msg->module.data.data.cfg.loc_mode != CLOUD_CODEC_LOC_MODE_AGPS) {
+			LOG_INF("on_state_running CFG READY - SETTING INACTIVE");
+			inactivity_timeout_handler(NULL);
+			(void)nrf_modem_gnss_stop();
+		}
+
+		agps_mode_active =
+			(msg->module.data.data.cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS);
 	}
 }
 
