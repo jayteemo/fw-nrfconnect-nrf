@@ -241,17 +241,17 @@ static void update_led_pattern(enum led_state pattern)
 
 static void led_pat_active_work_fn(struct k_work *work)
 {
-	update_led_pattern(LED_STATE_ACTIVE_MODE);
+	//update_led_pattern(LED_STATE_TURN_OFF);
 }
 
 static void led_pat_passive_work_fn(struct k_work *work)
 {
-	update_led_pattern(LED_STATE_PASSIVE_MODE);
+	update_led_pattern(LED_STATE_TURN_OFF);
 }
 
 static void led_pat_gps_work_fn(struct k_work *work)
 {
-	update_led_pattern(LED_STATE_GPS_SEARCHING);
+	//update_led_pattern(LED_STATE_TURN_OFF);
 }
 
 static void btn_press_hold_timer_handler(struct k_timer *timer)
@@ -333,7 +333,7 @@ static void on_state_active_sub_state_gps_active(struct ui_msg_data *msg)
 static void on_state_active_sub_state_gps_inactive(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, gps, GPS_EVT_ACTIVE)) {
-		update_led_pattern(LED_STATE_GPS_SEARCHING);
+		//update_led_pattern(LED_STATE_GPS_SEARCHING);
 		sub_state_set(SUB_STATE_GPS_ACTIVE);
 	}
 
@@ -346,8 +346,8 @@ static void on_state_active_sub_state_gps_inactive(struct ui_msg_data *msg)
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
 		if (!msg->module.data.data.cfg.active_mode) {
 			state_set(STATE_PASSIVE);
-			k_work_reschedule(&led_pat_passive_work,
-					      K_SECONDS(5));
+			//k_work_reschedule(&led_pat_passive_work,
+			//		      K_SECONDS(5));
 		}
 	}
 }
@@ -379,14 +379,14 @@ static void on_state_passive_sub_state_gps_active(struct ui_msg_data *msg)
 static void on_state_passive_sub_state_gps_inactive(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, gps, GPS_EVT_ACTIVE)) {
-		update_led_pattern(LED_STATE_GPS_SEARCHING);
+		//update_led_pattern(LED_STATE_GPS_SEARCHING);
 		sub_state_set(SUB_STATE_GPS_ACTIVE);
 	}
 
 	if ((IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) ||
 	    (IS_EVENT(msg, data, DATA_EVT_UI_DATA_SEND))) {
-		update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
-		k_work_reschedule(&led_pat_passive_work, K_SECONDS(5));
+		//update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
+		//k_work_reschedule(&led_pat_passive_work, K_SECONDS(5));
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
@@ -395,6 +395,23 @@ static void on_state_passive_sub_state_gps_inactive(struct ui_msg_data *msg)
 			k_work_reschedule(&led_pat_active_work,
 					      K_SECONDS(5));
 		}
+	}
+}
+
+static void loc_mode_led_set(const enum cloud_data_location_mode loc_mode)
+{
+	if (loc_mode == CLOUD_CODEC_LOC_MODE_SCELL) {
+		LOG_INF("Setting LED for SCELL");
+		update_led_pattern(LED_STATE_LOC_MODE_SCELL);
+		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
+	} else if (loc_mode == CLOUD_CODEC_LOC_MODE_MCELL) {
+		LOG_INF("Setting LED for MCELL");
+		update_led_pattern(LED_STATE_LOC_MODE_MCELL);
+		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
+	} else if (loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
+		LOG_INF("Setting LED for AGPS");
+		update_led_pattern(LED_STATE_GPS_SEARCHING);
+		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
 	}
 }
 
@@ -438,6 +455,12 @@ static void on_all_states(struct ui_msg_data *msg)
 		state_set(msg->module.data.data.cfg.active_mode ?
 			 STATE_ACTIVE :
 			 STATE_PASSIVE);
+
+		loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
+	} else if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
+		if (msg->module.data.data.cfg.loc_mode_fresh) {
+			loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
+		}
 	}
 }
 
