@@ -442,17 +442,19 @@ static void send_neighbor_cell_update(struct lte_lc_cells_info *cell_info)
 		evt->data.neighbor_cells.cell_data.ncells_count = 0;
 	}
 
-	/* Convert RSRP to dBm and RSRQ to dB per "nRF91 AT Commands" v1.7. */
-	evt->data.neighbor_cells.cell_data.current_cell.rsrp =
-			adjust_rsrp(evt->data.neighbor_cells.cell_data.current_cell.rsrp);
-	evt->data.neighbor_cells.cell_data.current_cell.rsrq =
-			adjust_rsrq(evt->data.neighbor_cells.cell_data.current_cell.rsrq);
+	if (!IS_ENABLED(CONFIG_NRF_CLOUD)) {
+		/* Convert RSRP to dBm and RSRQ to dB per "nRF91 AT Commands" v1.7. */
+		evt->data.neighbor_cells.cell_data.current_cell.rsrp =
+				adjust_rsrp(evt->data.neighbor_cells.cell_data.current_cell.rsrp);
+		evt->data.neighbor_cells.cell_data.current_cell.rsrq =
+				adjust_rsrq(evt->data.neighbor_cells.cell_data.current_cell.rsrq);
 
-	for (size_t i = 0; i < evt->data.neighbor_cells.cell_data.ncells_count; i++) {
-		evt->data.neighbor_cells.neighbor_cells[i].rsrp =
-			adjust_rsrp(evt->data.neighbor_cells.neighbor_cells[i].rsrp);
-		evt->data.neighbor_cells.neighbor_cells[i].rsrq =
-			adjust_rsrq(evt->data.neighbor_cells.neighbor_cells[i].rsrq);
+		for (size_t i = 0; i < evt->data.neighbor_cells.cell_data.ncells_count; i++) {
+			evt->data.neighbor_cells.neighbor_cells[i].rsrp =
+				adjust_rsrp(evt->data.neighbor_cells.neighbor_cells[i].rsrp);
+			evt->data.neighbor_cells.neighbor_cells[i].rsrq =
+				adjust_rsrq(evt->data.neighbor_cells.neighbor_cells[i].rsrq);
+		}
 	}
 
 	evt->type = MODEM_EVT_NEIGHBOR_CELLS_DATA_READY;
