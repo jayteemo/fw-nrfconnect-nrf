@@ -195,7 +195,7 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 		ssize_t len;
 
 		len = snprintf(log_buf, sizeof(log_buf),
-			       "eDRX parameter update: eDRX: %f, PTW: %f",
+			       "eDRX parameter update: eDRX: %.2f, PTW: %.2f",
 			       evt->edrx_cfg.edrx, evt->edrx_cfg.ptw);
 		if (len > 0) {
 			LOG_DBG("%s", log_strdup(log_buf));
@@ -215,8 +215,12 @@ static void lte_evt_handler(const struct lte_lc_evt *const evt)
 		send_cell_update(evt->cell.id, evt->cell.tac);
 		break;
 	case LTE_LC_EVT_NEIGHBOR_CELL_MEAS:
-		LOG_DBG("Neighbor cell measurements received");
-		send_neighbor_cell_update((struct lte_lc_cells_info *)&evt->cells_info);
+		if (evt->cells_info.current_cell.id != LTE_LC_CELL_EUTRAN_ID_INVALID) {
+			LOG_DBG("Neighbor cell measurements received");
+			send_neighbor_cell_update((struct lte_lc_cells_info *)&evt->cells_info);
+		} else {
+			LOG_DBG("Neighbor cell measurement was not successful");
+		}
 		break;
 	default:
 		break;

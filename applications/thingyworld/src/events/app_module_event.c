@@ -25,8 +25,6 @@ static char *type2str(enum app_module_data_type type)
 		return "GNSS";
 	case APP_DATA_NEIGHBOR_CELLS:
 		return "NEIGHBOR_CELLS";
-	case APP_DATA_SCELL:
-		return "SCELL";
 	default:
 		return "Unknown type";
 	}

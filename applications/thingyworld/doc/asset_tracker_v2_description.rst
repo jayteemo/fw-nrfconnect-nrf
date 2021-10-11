@@ -164,6 +164,17 @@ Newly sampled data is always published prior to the old, buffered data.
 The application has LTE and cloud connection awareness.
 Upon a disconnect from the cloud service, the application keeps the sensor data that has been buffered and empty the buffers in batch messages when the application reconnects to the cloud service.
 
+Requirements
+************
+
+The application supports the following development kits:
+
+.. table-from-rows:: /includes/sample_board_rows.txt
+   :header: heading
+   :rows: thingy91_nrf9160_ns, nrf9160dk_nrf9160_ns
+
+.. include:: /includes/spm.txt
+
 User interface
 **************
 
@@ -222,17 +233,6 @@ See :ref:`cmake_options` for more information.
 
 Alternatively, you can manually set the configuration options to match the contents of the overlay configuration file.
 
-Requirements
-************
-
-The application supports the following development kits:
-
-.. table-from-rows:: /includes/sample_board_rows.txt
-   :header: heading
-   :rows: thingy91_nrf9160_ns, nrf9160dk_nrf9160_ns
-
-.. include:: /includes/spm.txt
-
 Configuration
 *************
 
@@ -282,7 +282,7 @@ This enables the cloud to indirectly fetch A-GPS and P-GPS data from `nRF Cloud`
 This approach saves data and energy costs related to maintaining multiple connections.
 
 .. note::
-   For more information on the various trade-offs of using A-GPS compared to using P-GPS, see the `nRF Cloud Location Services documentation`_.
+   |gps_tradeoffs|
 
 By default, the application is configured to communicate with `nRF Cloud`_ using the factory-provisioned certificates on Thingy:91 and nRF9160 DK.
 This enables the application to function out-of-the-box with nRF Cloud.
@@ -539,37 +539,6 @@ Following are the current limitations in the nRF Cloud implementation of the Ass
 		}
 	}
 
-* nRF Cloud does not support a separate endpoint for *batch* data updates. To temporarily circumvent this, batched data updates are sent to the message endpoint.
-
-
-Dependencies
-************
-
-This application uses the following |NCS| libraries and drivers:
-
-* :ref:`event_manager`
-* :ref:`lib_aws_iot`
-* :ref:`lib_aws_fota`
-* :ref:`lib_azure_iot_hub`
-* :ref:`lib_azure_fota`
-* :ref:`lib_nrf_cloud`
-* :ref:`lib_nrf_cloud_fota`
-* :ref:`lib_nrf_cloud_agps`
-* :ref:`lib_date_time`
-* :ref:`lte_lc_readme`
-* :ref:`modem_info_readme`
-* :ref:`lib_download_client`
-* :ref:`lib_fota_download`
-* :ref:`caf_leds`
-
-It uses the following `sdk-nrfxlib`_ library:
-
-* :ref:`nrfxlib:nrf_modem`
-
-In addition, it uses the following sample:
-
-* :ref:`secure_partition_manager`
-
 .. _asset_tracker_v2_internal_modules:
 
 Internal modules
@@ -673,3 +642,31 @@ You can configure the heap memory by using the :kconfig:`CONFIG_HEAP_MEM_POOL_SI
 The data management module that encodes data destined for cloud is the biggest consumer of heap memory.
 Therefore, when adjusting buffer sizes in the data management module, you must also adjust the heap accordingly.
 This avoids the problem of running out of heap memory in worst-case scenarios.
+
+Dependencies
+************
+
+This application uses the following |NCS| libraries and drivers:
+
+* :ref:`event_manager`
+* :ref:`lib_aws_iot`
+* :ref:`lib_aws_fota`
+* :ref:`lib_azure_iot_hub`
+* :ref:`lib_azure_fota`
+* :ref:`lib_nrf_cloud`
+* :ref:`lib_nrf_cloud_fota`
+* :ref:`lib_nrf_cloud_agps`
+* :ref:`lib_date_time`
+* :ref:`lte_lc_readme`
+* :ref:`modem_info_readme`
+* :ref:`lib_download_client`
+* :ref:`lib_fota_download`
+* :ref:`caf_leds`
+
+It uses the following `sdk-nrfxlib`_ library:
+
+* :ref:`nrfxlib:nrf_modem`
+
+In addition, it uses the following sample:
+
+* :ref:`secure_partition_manager`

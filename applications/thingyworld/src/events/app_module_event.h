@@ -65,7 +65,7 @@ enum app_module_event_type {
 	/** An error has occurred in the application module. Error details are
 	 *  attached in the event structure.
 	 */
-	APP_EVT_ERROR,
+	APP_EVT_ERROR
 };
 
 /** @brief Data types that the application module requests samples for in
@@ -79,7 +79,6 @@ enum app_module_data_type {
 	APP_DATA_BATTERY,
 	APP_DATA_GNSS,
 	APP_DATA_NEIGHBOR_CELLS,
-	APP_DATA_SCELL,
 
 	APP_DATA_COUNT,
 };

@@ -321,21 +321,6 @@ static void active_mode_timers_start_all(void)
 	SEND_EVENT(app, APP_EVT_ACTIVITY_DETECTION_DISABLE);
 }
 
-static void mcell_get(void)
-{
-	struct app_module_event *app_module_event = new_app_module_event();
-
-	/* Specify a timeout that each module has to fetch data. If data is not
-	 * fetched within this timeout, the data that is available is sent.
-	 */
-	app_module_event->timeout = 10;
-	app_module_event->data_list[0] = APP_DATA_NEIGHBOR_CELLS;
-	app_module_event->count = 1;
-	app_module_event->type = APP_EVT_DATA_GET;
-
-	EVENT_SUBMIT(app_module_event);
-}
-
 static void data_get(void)
 {
 	static bool first = true;
@@ -353,14 +338,14 @@ static void data_get(void)
 	app_module_event->data_list[count++] = APP_DATA_ENVIRONMENTAL;
 
 	//if (IS_ENABLED(CONFIG_APP_REQUEST_NEIGHBOR_CELLS_DATA) && !app_cfg.no_data.neighbor_cell) {
-	if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL) {
+	if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL ||
+	    app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL ) {
 		app_module_event->data_list[count++] = APP_DATA_NEIGHBOR_CELLS;
-	} else if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL) {
-		app_module_event->data_list[count++] = APP_DATA_SCELL;
 	} else if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
 		app_module_event->data_list[count++] = APP_DATA_GNSS;
 		app_module_event->timeout = MAX(app_cfg.gps_timeout + 15, 75);
 	}
+
 	if (first) {
 		app_module_event->data_list[count++] = APP_DATA_MODEM_STATIC;
 		first = false;

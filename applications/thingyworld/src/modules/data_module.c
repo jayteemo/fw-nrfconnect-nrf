@@ -505,7 +505,7 @@ static void config_print_all(void)
 	LOG_DBG("Movement resolution: %d", current_cfg.movement_resolution);
 	LOG_DBG("Movement timeout: %d", current_cfg.movement_timeout);
 	LOG_DBG("GPS timeout: %d", current_cfg.gps_timeout);
-	LOG_DBG("Accelerometer threshold: %f", current_cfg.accelerometer_threshold);
+	LOG_DBG("Accelerometer threshold: %.2f", current_cfg.accelerometer_threshold);
 
 	if (!current_cfg.no_data.neighbor_cell) {
 		LOG_DBG("Requesting of neighbor cell data is enabled");
@@ -528,17 +528,6 @@ static void config_distribute(enum data_module_event_type type)
 	data_module_event->data.cfg = current_cfg;
 
 	EVENT_SUBMIT(data_module_event);
-}
-
-static void config_status_set_all(bool fresh)
-{
-	current_cfg.active_mode_fresh = fresh;
-	current_cfg.gps_timeout_fresh = fresh;
-	current_cfg.active_wait_timeout_fresh = fresh;
-	current_cfg.movement_resolution_fresh = fresh;
-	current_cfg.movement_timeout_fresh = fresh;
-	current_cfg.accelerometer_threshold_fresh = fresh;
-	current_cfg.nod_list_fresh = fresh;
 }
 
 static void data_send(enum data_module_event_type event,
@@ -678,27 +667,6 @@ static int get_modem_info(struct modem_param_info *const modem_info)
 	return 0;
 }
 
-/* Converts the A-GPS data request from GNSS API to GPS driver format. */
-static void agps_request_convert(
-	struct gps_agps_request *dest,
-	const struct nrf_modem_gnss_agps_data_frame *src)
-{
-	dest->sv_mask_ephe = src->sv_mask_ephe;
-	dest->sv_mask_alm = src->sv_mask_alm;
-	dest->utc = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_GPS_UTC_REQUEST ? 1 : 0;
-	dest->klobuchar = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_KLOBUCHAR_REQUEST ? 1 : 0;
-	dest->nequick = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_NEQUICK_REQUEST ? 1 : 0;
-	dest->system_time_tow = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_SYS_TIME_AND_SV_TOW_REQUEST ? 1 : 0;
-	dest->position = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_POSITION_REQUEST ? 1 : 0;
-	dest->integrity = src->data_flags &
-		NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST ? 1 : 0;
-}
-
 /**
  * @brief Combine and encode modem network parameters together with the incoming A-GPS data request
  *	  types to form the A-GPS request.
@@ -713,7 +681,6 @@ static int agps_request_encode(struct nrf_modem_gnss_agps_data_frame *incoming_r
 	int err;
 	struct cloud_codec_data codec = {0};
 	static struct modem_param_info modem_info = {0};
-	struct gps_agps_request agps_request;
 	static struct cloud_data_agps_request cloud_agps_request = {0};
 
 	err = get_modem_info(&modem_info);
@@ -725,12 +692,8 @@ static int agps_request_encode(struct nrf_modem_gnss_agps_data_frame *incoming_r
 	cloud_agps_request.mnc = modem_info.network.mnc.value;
 	cloud_agps_request.cell = modem_info.network.cellid_dec;
 	cloud_agps_request.area = modem_info.network.area_code.value;
+	cloud_agps_request.request = *incoming_request;
 	cloud_agps_request.queued = true;
-
-	agps_request_convert(&agps_request, incoming_request);
-
-	BUILD_ASSERT(sizeof(cloud_agps_request.request) == sizeof(agps_request));
-	memcpy(&cloud_agps_request.request, &agps_request, sizeof(cloud_agps_request.request));
 
 	err = cloud_codec_encode_agps_request(&codec, &cloud_agps_request);
 	switch (err) {
@@ -759,21 +722,17 @@ static void config_get(void)
 	SEND_EVENT(data, DATA_EVT_CONFIG_GET);
 }
 
-static void config_send(bool send_all)
+static void config_send(void)
 {
 	int err;
 	struct cloud_codec_data codec;
 	struct data_module_event *evt;
 
-	if (send_all || IS_ENABLED(CONFIG_DATA_SEND_ALL_DEVICE_CONFIGURATIONS)) {
-		config_status_set_all(true);
-	}
-
 	err = cloud_codec_encode_config(&codec, &current_cfg);
 	if (err) {
 		LOG_ERR("Error encoding configuration, error: %d", err);
 		SEND_ERROR(data, DATA_EVT_ERROR, err);
-		goto exit;
+		return;
 	}
 
 	evt = new_data_module_event();
@@ -784,9 +743,6 @@ static void config_send(bool send_all)
 	data_list_add_pending(codec.buf, codec.len, CONFIG);
 	EVENT_SUBMIT(evt);
 
-exit:
-	/* Reset the status flag of all configuations after the data has been sent. */
-	config_status_set_all(false);
 }
 
 static void data_ui_send(void)
@@ -883,7 +839,6 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		}
 
 		config_change = true;
-		current_cfg.active_mode_fresh = true;
 	}
 
 	if (current_cfg.no_data.gnss != new_config->no_data.gnss) {
@@ -896,7 +851,6 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		}
 
 		config_change = true;
-		current_cfg.nod_list_fresh = true;
 	}
 
 	if (current_cfg.no_data.neighbor_cell != new_config->no_data.neighbor_cell) {
@@ -909,7 +863,6 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		}
 
 		config_change = true;
-		current_cfg.nod_list_fresh = true;
 	}
 
 	if (new_config->gps_timeout > 0) {
@@ -919,10 +872,10 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 			LOG_WRN("New GPS timeout: %d", current_cfg.gps_timeout);
 
 			config_change = true;
-			current_cfg.gps_timeout_fresh = true;
 		}
 	} else {
 		LOG_ERR("New GPS timeout out of range: %d", new_config->gps_timeout);
+		return;
 	}
 
 	if (new_config->active_wait_timeout > 0) {
@@ -932,10 +885,10 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 			LOG_WRN("New Active wait timeout: %d", current_cfg.active_wait_timeout);
 
 			config_change = true;
-			current_cfg.active_wait_timeout_fresh = true;
 		}
 	} else {
 		LOG_ERR("New Active timeout out of range: %d", new_config->active_wait_timeout);
+		return;
 	}
 
 	if (new_config->movement_resolution > 0) {
@@ -945,11 +898,11 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 			LOG_WRN("New Movement resolution: %d", current_cfg.movement_resolution);
 
 			config_change = true;
-			current_cfg.movement_resolution_fresh = true;
 		}
 	} else {
 		LOG_ERR("New Movement resolution out of range: %d",
 			new_config->movement_resolution);
+		return;
 	}
 
 	if (new_config->movement_timeout > 0) {
@@ -959,10 +912,10 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 			LOG_WRN("New Movement timeout: %d", current_cfg.movement_timeout);
 
 			config_change = true;
-			current_cfg.movement_timeout_fresh = true;
 		}
 	} else {
 		LOG_ERR("New Movement timeout out of range: %d", new_config->movement_timeout);
+		return;
 	}
 
 	if ((new_config->accelerometer_threshold < ACCELEROMETER_S_M2_MAX) &&
@@ -970,27 +923,25 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		if (current_cfg.accelerometer_threshold != new_config->accelerometer_threshold) {
 			current_cfg.accelerometer_threshold = new_config->accelerometer_threshold;
 
-			LOG_WRN("New Accelerometer threshold: %f",
+			LOG_WRN("New Accelerometer threshold: %.2f",
 				current_cfg.accelerometer_threshold);
 
 			config_change = true;
-			current_cfg.accelerometer_threshold_fresh = true;
 		}
 	} else {
-		LOG_ERR("New Accelerometer threshold out of range: %f",
+		LOG_ERR("New Accelerometer threshold out of range: %.2f",
 			new_config->accelerometer_threshold);
+		return;
 	}
 
 	if (current_cfg.loc_mode != new_config->loc_mode) {
 		current_cfg.loc_mode = new_config->loc_mode;
 
 		config_change = true;
-		current_cfg.loc_mode_fresh = true;
 	}
 
 	/* If there has been a change in the currently applied device configuration we want to store
-	 * the configuration to flash, distribute it to other modules and acknowledge the change
-	 * back to cloud.
+	 * the configuration to flash and distribute it to other modules.
 	 */
 	if (config_change) {
 		int err = save_config(&current_cfg, sizeof(current_cfg));
@@ -1000,11 +951,16 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		}
 
 		config_distribute(DATA_EVT_CONFIG_READY);
-		config_send(false);
-		return;
 	}
 
 	LOG_DBG("No new values in incoming device configuration update message");
+	LOG_DBG("Acknowledge currently applied configuration back to cloud");
+
+	/* Always acknowledge all configurations back to cloud to avoid a potential mismatch
+	 * between reported parameters in the cloud-side state and parameters reported by the
+	 * device.
+	 */
+	config_send();
 }
 
 /**
@@ -1034,7 +990,7 @@ static void agps_request_handle(struct nrf_modem_gnss_agps_data_frame *incoming_
 	 * selected as the A-GPS source via the CONFIG_AGPS_SRC_NRF_CLOUD option.
 	 */
 #if defined(CONFIG_AGPS) && (defined(CONFIG_NRF_CLOUD_MQTT) || defined(CONFIG_AGPS_SRC_SUPL))
-	err = agps_request_send(*incoming_request, AGPS_SOCKET_NOT_PROVIDED);
+	err = agps_request_send(*incoming_request);
 	if (err) {
 		LOG_WRN("Failed to request A-GPS data, error: %d", err);
 		LOG_WRN("This is expected to fail if we are not in a connected state");
@@ -1104,7 +1060,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONFIG_EMPTY)) {
-		config_send(true);
+		config_send();
 		return;
 	}
 }

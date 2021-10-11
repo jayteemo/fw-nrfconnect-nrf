@@ -452,15 +452,11 @@ static void on_all_states(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
-		state_set(msg->module.data.data.cfg.active_mode ?
-			 STATE_ACTIVE :
-			 STATE_PASSIVE);
+		state_set(msg->module.data.data.cfg.active_mode ? STATE_ACTIVE : STATE_PASSIVE);
 
 		loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
 	} else if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
-		if (msg->module.data.data.cfg.loc_mode_fresh) {
-			loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
-		}
+		loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
 	}
 }
 
