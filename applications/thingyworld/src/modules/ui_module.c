@@ -339,7 +339,7 @@ static void on_state_active_sub_state_gps_inactive(struct ui_msg_data *msg)
 
 	if ((IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) ||
 	    (IS_EVENT(msg, data, DATA_EVT_UI_DATA_SEND))) {
-		update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
+		//update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
 		k_work_reschedule(&led_pat_active_work, K_SECONDS(5));
 	}
 
@@ -356,13 +356,13 @@ static void on_state_active_sub_state_gps_inactive(struct ui_msg_data *msg)
 static void on_state_passive_sub_state_gps_active(struct ui_msg_data *msg)
 {
 	if (IS_EVENT(msg, gps, GPS_EVT_INACTIVE)) {
-		update_led_pattern(LED_STATE_PASSIVE_MODE);
+		//update_led_pattern(LED_STATE_PASSIVE_MODE);
 		sub_state_set(SUB_STATE_GPS_INACTIVE);
 	}
 
 	if ((IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) ||
 	    (IS_EVENT(msg, data, DATA_EVT_UI_DATA_SEND))) {
-		update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
+		//update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
 		k_work_reschedule(&led_pat_gps_work, K_SECONDS(5));
 	}
 
