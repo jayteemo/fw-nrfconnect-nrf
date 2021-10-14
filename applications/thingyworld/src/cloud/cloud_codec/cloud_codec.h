@@ -158,6 +158,8 @@ struct cloud_data_modem_static {
 	char brdv[30];
 	/** Modem firmware. */
 	char fw[40];
+	/** Application name */
+	char app_name[64];
 	/** Flag signifying that the data entry is to be encoded. */
 	bool queued : 1;
 };

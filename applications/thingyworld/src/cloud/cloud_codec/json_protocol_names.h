@@ -47,6 +47,7 @@
 #define MODEM_ICCID		"iccid"
 #define MODEM_FIRMWARE_VERSION	"modemFirmware"
 #define MODEM_BOARD		"board"
+#define MODEM_APP_NAME		"appName"
 #define MODEM_APP_VERSION	"appVersion"
 #define MODEM_RSRP		"rsrp"
 #define MODEM_AREA_CODE		"areaCode"

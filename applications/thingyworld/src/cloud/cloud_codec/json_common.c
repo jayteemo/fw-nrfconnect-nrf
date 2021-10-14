@@ -125,6 +125,12 @@ int json_common_modem_static_data_add(cJSON *parent,
 		goto exit;
 	}
 
+	err = json_add_str(modem_val_obj, MODEM_APP_NAME, data->app_name);
+	if (err) {
+		LOG_ERR("Encoding error: %d returned at %s:%d", err, __FILE__, __LINE__);
+		goto exit;
+	}
+
 	err = json_add_str(modem_val_obj, MODEM_APP_VERSION, data->appv);
 	if (err) {
 		LOG_ERR("Encoding error: %d returned at %s:%d", err, __FILE__, __LINE__);

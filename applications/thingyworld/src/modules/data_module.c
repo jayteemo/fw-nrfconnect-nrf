@@ -78,7 +78,7 @@ static struct cloud_data_neighbor_cells neighbor_cells;
 /* Static modem data does not change between firmware versions and does not
  * have to be buffered.
  */
-static struct cloud_data_modem_static modem_stat;
+static struct cloud_data_modem_static modem_stat = { .app_name = STRINGIFY(PROJECT_NAME) };
 
 /* Head of ringbuffers. */
 static int head_gps_buf;
