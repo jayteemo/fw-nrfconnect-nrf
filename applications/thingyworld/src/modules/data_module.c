@@ -1090,6 +1090,8 @@ static void on_all_states(struct data_msg_data *msg)
 				msg->module.cloud.data.config.gps_timeout,
 			.accelerometer_threshold =
 				msg->module.cloud.data.config.accelerometer_threshold,
+			.loc_mode =
+				msg->module.cloud.data.config.loc_mode,
 			.no_data.gnss =
 				msg->module.cloud.data.config.no_data.gnss,
 			.no_data.neighbor_cell =
