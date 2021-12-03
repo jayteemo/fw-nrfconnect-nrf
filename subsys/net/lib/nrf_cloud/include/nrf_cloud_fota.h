@@ -40,6 +40,8 @@ enum nrf_cloud_fota_error {
 	NRF_CLOUD_FOTA_ERROR_APPLY_FAIL,
 	/** Firmware file type differs from expected FOTA type. */
 	NRF_CLOUD_FOTA_ERROR_MISMATCH,
+	/** Unhandled FOTA type. */
+	NRF_CLOUD_FOTA_ERROR_BAD_TYPE,
 };
 
 /**@brief FOTA info for a BLE job */
@@ -107,8 +109,6 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
  * @retval -EBUSY If a FOTA job is in progress.
  */
 int nrf_cloud_fota_uninit(void);
-
-int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf);
 
 /**@brief Handler for nRF Cloud FOTA MQTT events.
  *

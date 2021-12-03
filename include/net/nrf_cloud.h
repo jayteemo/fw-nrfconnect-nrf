@@ -218,11 +218,11 @@ enum nrf_cloud_fota_type {
 
 	/** Application update. */
 	NRF_CLOUD_FOTA_APPLICATION = NRF_CLOUD_FOTA_TYPE__FIRST,
-	/** Modem update (delta). */
-	NRF_CLOUD_FOTA_MODEM = 1,
+	/** Delta modem update */
+	NRF_CLOUD_FOTA_MODEM_DELTA = 1,
 	/** Bootloader update. */
 	NRF_CLOUD_FOTA_BOOTLOADER = 2,
-	/** Modem update (full). */
+	/** Full modem update */
 	NRF_CLOUD_FOTA_MODEM_FULL = 3,
 
 	NRF_CLOUD_FOTA_TYPE__INVALID
@@ -340,6 +340,7 @@ struct nrf_cloud_svc_info_fota {
 	uint8_t bootloader:1;
 	uint8_t modem:1;
 	uint8_t application:1;
+	uint8_t modem_full:1;
 
 	uint8_t _rsvd:5;
 };
@@ -694,6 +695,8 @@ int nrf_cloud_handle_error_message(const char *const buf,
 				   const char *const app_id,
 				   const char *const msg_type,
 				   enum nrf_cloud_error *const err);
+
+int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf);
 
 /** @} */
 

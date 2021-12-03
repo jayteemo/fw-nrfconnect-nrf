@@ -11,7 +11,7 @@ menuconfig NRF_CLOUD_FOTA
 	select DOWNLOAD_CLIENT
 	select REBOOT
 	select CJSON_LIB
-	depends on SETTINGS
+	select SETTINGS
 	default y if NRF_CLOUD_MQTT
 
 if NRF_CLOUD_FOTA

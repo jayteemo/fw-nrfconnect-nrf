@@ -16,6 +16,10 @@
 
 LOG_MODULE_REGISTER(nrf_cloud_fota_common, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+static char fmfu_buf[CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE];
+#endif
+
 int nrf_cloud_bootloader_fota_slot_set(struct nrf_cloud_settings_fota_job * const job)
 {
 	int err = -ENOTSUP;
@@ -63,7 +67,7 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 	int err;
 
-	if (job->type == NRF_CLOUD_FOTA_MODEM) {
+	if (job->type == NRF_CLOUD_FOTA_MODEM_DELTA || job->type == NRF_CLOUD_FOTA_MODEM_FULL) {
 #if defined(CONFIG_NRF_MODEM_LIB)
 		int modem_lib_init_result = nrf_modem_lib_get_init_ret();
 
@@ -155,3 +159,26 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 	return 0;
 }
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf)
+{
+	if (!fmfu_dev_inf) {
+		return -EINVAL;
+	}
+
+	int ret;
+	const struct dfu_target_full_modem_params params = {
+		.buf = fmfu_buf,
+		.len = sizeof(fmfu_buf),
+		.dev = (struct dfu_target_fmfu_fdev *)fmfu_dev_inf
+	};
+
+	ret = dfu_target_full_modem_cfg(&params);
+	if (ret) {
+		LOG_ERR("Failed to initialize full modem FOTA: %d", ret);
+	}
+
+	return ret;
+}
+#endif

@@ -129,10 +129,6 @@ static struct nrf_cloud_settings_fota_job saved_job = {
 static bool initialized;
 static bool fota_dl_initialized;
 
-#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
-static char fmfu_buf[CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE];
-#endif
-
 SETTINGS_STATIC_HANDLER_DEFINE(fota, NRF_CLOUD_SETTINGS_FULL_FOTA, NULL,
 			       fota_settings_set, NULL, NULL);
 
@@ -174,6 +170,12 @@ static int fota_settings_set(const char *key, size_t len_rd,
 	}
 
 	return 0;
+}
+
+static bool is_modem_fota_type(const enum nrf_cloud_fota_type type)
+{
+	return ((type == NRF_CLOUD_FOTA_MODEM_DELTA) ||
+		(type == NRF_CLOUD_FOTA_MODEM_FULL));
 }
 
 int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
@@ -226,7 +228,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		/* No job is pending validation */
 		ret = 0;
 
-		if (saved_job.type == NRF_CLOUD_FOTA_MODEM &&
+		if (is_modem_fota_type(saved_job.type) &&
 		    (saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_PASS ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_FAIL ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_UNKNOWN)) {
@@ -258,32 +260,9 @@ int nrf_cloud_fota_uninit(void)
 	return 0;
 }
 
-#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
-int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf)
-{
-	if (!fmfu_dev_inf) {
-		return -EINVAL;
-	}
-
-	int ret;
-	const struct dfu_target_full_modem_params params = {
-		.buf = fmfu_buf,
-		.len = sizeof(fmfu_buf),
-		.dev = (struct dfu_target_fmfu_fdev *)fmfu_dev_inf
-	};
-
-	ret = dfu_target_full_modem_cfg(&params);
-	if (ret) {
-		LOG_ERR("Failed to initialize full modem FOTA: %d", ret);
-	}
-
-	return ret;
-}
-#endif
-
 int nrf_cloud_modem_fota_completed(const bool fota_success)
 {
-	if (saved_job.type != NRF_CLOUD_FOTA_MODEM ||
+	if (!is_modem_fota_type(saved_job.type) ||
 	    saved_job.validate != NRF_CLOUD_FOTA_VALIDATE_PENDING) {
 		return -EOPNOTSUPP;
 	}
@@ -855,11 +834,16 @@ static int start_job(struct nrf_cloud_fota_job *const job)
 	case NRF_CLOUD_FOTA_APPLICATION:
 		img_type = DFU_TARGET_IMAGE_TYPE_MCUBOOT;
 		break;
-	case NRF_CLOUD_FOTA_MODEM:
+	case NRF_CLOUD_FOTA_MODEM_DELTA:
 		img_type = DFU_TARGET_IMAGE_TYPE_MODEM_DELTA;
+		break;
+	case NRF_CLOUD_FOTA_MODEM_FULL:
+		img_type = DFU_TARGET_IMAGE_TYPE_FULL_MODEM;
 		break;
 	default:
 		LOG_ERR("Unhandled FOTA type: %d", job->info.type);
+		job->status = NRF_CLOUD_FOTA_REJECTED;
+		job->error = NRF_CLOUD_FOTA_ERROR_BAD_TYPE;
 		return -EFTYPE;
 	}
 
