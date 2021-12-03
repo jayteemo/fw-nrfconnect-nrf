@@ -9,6 +9,8 @@
 #include "json_protocol_names.h"
 #include "cloud/cloud_wrapper.h"
 
+#define EXT_FLASH_DEVICE DT_LABEL(DT_INST(0, jedec_spi_nor))
+
 #define MODULE nrf_cloud_integration
 
 #include <zephyr/logging/log.h>
@@ -274,6 +276,14 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 #endif
 
 	config.client_id = client_id_buf;
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+	struct dfu_target_fmfu_fdev fmfu_dev_inf;
+	fmfu_dev_inf.dev = device_get_binding(EXT_FLASH_DEVICE);
+	fmfu_dev_inf.size = 0;
+	fmfu_dev_inf.offset = 0;
+	config.fmfu_dev_inf = &fmfu_dev_inf;
+#endif
 
 	err = nrf_cloud_init(&config);
 	if (err) {

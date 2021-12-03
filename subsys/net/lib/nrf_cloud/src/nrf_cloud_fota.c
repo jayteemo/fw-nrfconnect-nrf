@@ -129,6 +129,10 @@ static struct nrf_cloud_settings_fota_job saved_job = {
 static bool initialized;
 static bool fota_dl_initialized;
 
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+static char fmfu_buf[CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE];
+#endif
+
 SETTINGS_STATIC_HANDLER_DEFINE(fota, NRF_CLOUD_SETTINGS_FULL_FOTA, NULL,
 			       fota_settings_set, NULL, NULL);
 
@@ -253,6 +257,29 @@ int nrf_cloud_fota_uninit(void)
 
 	return 0;
 }
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf)
+{
+	if (!fmfu_dev_inf) {
+		return -EINVAL;
+	}
+
+	int ret;
+	const struct dfu_target_full_modem_params params = {
+		.buf = fmfu_buf,
+		.len = sizeof(fmfu_buf),
+		.dev = (struct dfu_target_fmfu_fdev *)fmfu_dev_inf
+	};
+
+	ret = dfu_target_full_modem_cfg(&params);
+	if (ret) {
+		LOG_ERR("Failed to initialize full modem FOTA: %d", ret);
+	}
+
+	return ret;
+}
+#endif
 
 int nrf_cloud_modem_fota_completed(const bool fota_success)
 {

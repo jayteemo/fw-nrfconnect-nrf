@@ -115,6 +115,17 @@ int nrf_cloud_init(const struct nrf_cloud_init_param *param)
 		return err;
 	}
 
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+	if (param->fmfu_dev_inf) {
+		err = nrf_cloud_fota_fmfu_dev_set(param->fmfu_dev_inf);
+		if (err) {
+			return err;
+		}
+	} else {
+		LOG_WRN("Full modem FOTA not initialized; flash device not specified");
+	}
+#endif
+
 	app_event_handler = param->event_handler;
 
 	nfsm_set_current_state_and_notify(STATE_INITIALIZED, NULL);
@@ -734,6 +745,10 @@ static int api_init(const struct cloud_backend *const backend,
 	}
 
 	params.client_id = backend->config->id;
+#endif
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+	params.fmfu_dev_inf = backend->config->fmfu_dev_inf;
 #endif
 
 	backend->config->handler = handler;

@@ -14,6 +14,7 @@
 #include <modem/modem_info.h>
 #endif
 #include <cJSON.h>
+#include <dfu/dfu_target_full_modem.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,10 +218,12 @@ enum nrf_cloud_fota_type {
 
 	/** Application update. */
 	NRF_CLOUD_FOTA_APPLICATION = NRF_CLOUD_FOTA_TYPE__FIRST,
-	/** Modem update. */
+	/** Modem update (delta). */
 	NRF_CLOUD_FOTA_MODEM = 1,
 	/** Bootloader update. */
 	NRF_CLOUD_FOTA_BOOTLOADER = 2,
+	/** Modem update (full). */
+	NRF_CLOUD_FOTA_MODEM_FULL = 3,
 
 	NRF_CLOUD_FOTA_TYPE__INVALID
 };
@@ -426,6 +429,10 @@ struct nrf_cloud_init_param {
 	 * is enabled; otherwise, NULL.
 	 */
 	char *client_id;
+	/** Flash device information required for full modem FOTA updates.
+	 * Only used if CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE is enabled.
+	*/
+	struct dfu_target_fmfu_fdev *fmfu_dev_inf;
 };
 
 /**

@@ -14,6 +14,7 @@
  */
 
 #include <zephyr/kernel.h>
+#include <dfu/dfu_target_full_modem.h>
 
 /**@brief Cloud events that can be notified asynchronously by the backend. */
 enum cloud_event_type {
@@ -199,6 +200,7 @@ struct cloud_backend_config {
 	void *user_data;
 	char *id;
 	size_t id_len;
+	struct dfu_target_fmfu_fdev *fmfu_dev_inf;
 };
 
 /**@brief Structure for cloud backend. */

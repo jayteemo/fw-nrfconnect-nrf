@@ -108,6 +108,8 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
  */
 int nrf_cloud_fota_uninit(void);
 
+int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf);
+
 /**@brief Handler for nRF Cloud FOTA MQTT events.
  *
  * @param _mqtt_evt Pointer to the recived mqtt_evt.
