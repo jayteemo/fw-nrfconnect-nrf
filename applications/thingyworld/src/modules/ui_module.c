@@ -201,16 +201,15 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 		} else {
 			/* Release */
 			k_timer_stop(&btn_press_hold_timer);
-
-			if (atomic_get(&btn1_press_cnt) == 1) {
-				k_timer_start(&btn_press_window_timer, K_MSEC(800),K_MSEC(0));
-			} else if (atomic_get(&btn1_press_cnt) == 2) {
+			int cnt = atomic_get(&btn1_press_cnt);
+			if (cnt == 3) {
 				k_timer_stop(&btn_press_window_timer);
 				btn_press_window_timer_handler(NULL);
+			} else if (cnt >= 1) {
+				k_timer_start(&btn_press_window_timer, K_MSEC(800),K_MSEC(0));
 			}
 		}
 	}
-
 
 #if defined(CONFIG_BOARD_NRF9160DK_NRF9160_NS)
 	if (has_changed & button_states & DK_BTN2_MSK) {
@@ -277,10 +276,17 @@ static void btn_press_window_timer_handler(struct k_timer *timer)
 	struct ui_module_event *ui_module_event =
 				new_ui_module_event();
 
-	if (atomic_get(&btn1_press_cnt) == 1) {
-		ui_module_event->type = UI_EVT_BUTTON_DATA_READY;
-	} else {
+	switch (atomic_get(&btn1_press_cnt)) {
+	case 2:
 		ui_module_event->type = UI_EVT_BUTTON_PRESS_2X;
+		break;
+	case 3:
+		ui_module_event->type = UI_EVT_BUTTON_PRESS_3X;
+		break;
+	case 1:
+	default:
+		ui_module_event->type = UI_EVT_BUTTON_DATA_READY;
+		break;
 	}
 
 	atomic_set(&btn1_press_cnt, 0);
@@ -411,6 +417,10 @@ static void loc_mode_led_set(const enum cloud_data_location_mode loc_mode)
 	} else if (loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
 		LOG_INF("Setting LED for AGPS");
 		update_led_pattern(LED_STATE_GPS_SEARCHING);
+		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
+	} else if (loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
+		LOG_INF("Setting LED for ALL");
+		update_led_pattern(LED_STATE_LOC_MODE_ALL);
 		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
 	}
 }

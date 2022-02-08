@@ -552,13 +552,17 @@ static int setup(void)
 	return 0;
 }
 
+bool is_agps_loc_mode_active(const enum cloud_data_location_mode loc_mode) {
+	return (loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) ||
+	       (loc_mode == CLOUD_CODEC_LOC_MODE_ALL);
+}
+
 /* Message handler for STATE_INIT. */
 static void on_state_init(struct gps_msg_data *msg)
 {
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
 		gnss_timeout = msg->module.data.data.cfg.gps_timeout;
-		agps_mode_active =
-			(msg->module.data.data.cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS);
+		agps_mode_active = is_agps_loc_mode_active(msg->module.data.data.cfg.loc_mode);
 	}
 }
 
@@ -570,14 +574,13 @@ static void on_state_running(struct gps_msg_data *msg)
 
 		LOG_INF("on_state_running CFG READY");
 		if (agps_mode_active &&
-		    msg->module.data.data.cfg.loc_mode != CLOUD_CODEC_LOC_MODE_AGPS) {
+		    !is_agps_loc_mode_active(msg->module.data.data.cfg.loc_mode)) {
 			LOG_INF("on_state_running CFG READY - SETTING INACTIVE");
 			inactivity_timeout_handler(NULL);
 			(void)nrf_modem_gnss_stop();
 		}
 
-		agps_mode_active =
-			(msg->module.data.data.cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS);
+		agps_mode_active = is_agps_loc_mode_active(msg->module.data.data.cfg.loc_mode);
 	}
 }
 

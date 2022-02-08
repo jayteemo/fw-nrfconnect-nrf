@@ -344,6 +344,10 @@ static void data_get(void)
 	} else if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
 		app_module_event->data_list[count++] = APP_DATA_GNSS;
 		app_module_event->timeout = MAX(app_cfg.gps_timeout + 15, 75);
+	} else if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
+		app_module_event->data_list[count++] = APP_DATA_NEIGHBOR_CELLS;
+		app_module_event->data_list[count++] = APP_DATA_GNSS;
+		app_module_event->timeout = MAX(app_cfg.gps_timeout + 15, 75);
 	}
 
 	if (first) {

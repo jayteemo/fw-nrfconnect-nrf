@@ -561,29 +561,25 @@ static void data_encode(void)
 		 */
 		return;
 	}
-	if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL) {
+	if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL ||
+	    current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
 		err = cloud_codec_encode_neighbor_cells(&codec, &neighbor_cells);
-	} else if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL) {
-		err = cloud_codec_encode_neighbor_cells(&codec, NULL);
-	} else {
-		err = -ENOTSUP;
+		if (err) {
+			LOG_ERR("Error encoding MCELL data: %d", err);
+		} else {
+			data_send(DATA_EVT_NEIGHBOR_CELLS_DATA_SEND, NEIGHBOR_CELLS, &codec);
+		}
+
 	}
 
-	switch (err) {
-	case 0:
-		LOG_DBG("Neighbor cell data encoded successfully");
-		data_send(DATA_EVT_NEIGHBOR_CELLS_DATA_SEND, NEIGHBOR_CELLS, &codec);
-		break;
-	case -ENOTSUP:
-		/* Neighbor cell data encoding not supported */
-		break;
-	case -ENODATA:
-		LOG_DBG("No neighbor cells data to encode, error: %d", err);
-		break;
-	default:
-		LOG_ERR("Error encoding neighbor cells data: %d", err);
-		SEND_ERROR(data, DATA_EVT_ERROR, err);
-		return;
+	if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL ||
+	    current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
+		err = cloud_codec_encode_neighbor_cells(&codec, NULL);
+		if (err) {
+			LOG_ERR("Error encoding SCELL data: %d", err);
+		} else {
+			data_send(DATA_EVT_NEIGHBOR_CELLS_DATA_SEND, NEIGHBOR_CELLS, &codec);
+		}
 	}
 
 	err = cloud_codec_encode_data(
@@ -1068,7 +1064,14 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 static void location_mode_set(const enum cloud_data_location_mode loc_mode)
 {
 	struct cloud_data_cfg new = current_cfg;
+
 	new.loc_mode = loc_mode;
+	new.active_mode = false;
+
+	if (loc_mode == CLOUD_CODEC_LOC_MODE_ALL){
+		new.active_mode = true;
+	}
+
 	new_config_handle(&new);
 }
 
@@ -1165,6 +1168,10 @@ static void on_all_states(struct data_msg_data *msg)
 		LOG_INF("Single cell mode enabled");
 		SEND_EVENT(gps, GPS_EVT_INACTIVE);
 		location_mode_set(CLOUD_CODEC_LOC_MODE_SCELL);
+	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_3X) &&
+		   (msg->module.ui.data.ui.button_number == 1)) {
+		LOG_INF("All mode enabled");
+		location_mode_set(CLOUD_CODEC_LOC_MODE_ALL);
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_MODEM_STATIC_DATA_NOT_READY)) {

@@ -167,6 +167,32 @@ struct led_effect {
 		.loop_forever = true,						\
 	}
 
+/** Create multi-color LED blinking effect initializer.
+ *
+ * LED color is periodically changed between the selected colors.
+ *
+ * @param _period	Period of time between LED color switches.
+ * @param _color	Selected LED color 1.
+ * @param _color	Selected LED color 2.
+ */
+#define LED_EFFECT_LED_BLINK_2(_period, _color1, _color2)			\
+	{									\
+		.steps = ((const struct led_effect_step[]) {			\
+			{							\
+				.color = _color1,				\
+				.substep_count = 1,				\
+				.substep_time = (_period),			\
+			},							\
+			{							\
+				.color = _color2,				\
+				.substep_count = 1,				\
+				.substep_time = (_period),			\
+			},							\
+		}),								\
+		.step_count = 2,						\
+		.loop_forever = true,						\
+	}
+
 /** @def _BREATH_SUBSTEPS
  *
  * @brief Substeps for color update for LED breathing effect.

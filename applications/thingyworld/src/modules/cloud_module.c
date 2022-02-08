@@ -315,8 +315,11 @@ static void cloud_wrap_event_handler(const struct cloud_wrap_event *const evt)
 		 * based on topic. This means that agps_data_handle() must be called on both
 		 * CLOUD_WRAP_EVT_AGPS_DATA_RECEIVED and CLOUD_WRAP_EVT_DATA_RECEIVED events.
 		 */
-		if (copy_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
-			agps_data_handle(evt->data.buf, evt->data.len);
+		if (copy_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS ||
+		    copy_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
+			if (evt->data.buf && evt->data.buf[0] != '{') {
+				agps_data_handle(evt->data.buf, evt->data.len);
+			}
 		}
 		break;
 	case CLOUD_WRAP_EVT_PGPS_DATA_RECEIVED:

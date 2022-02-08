@@ -21,7 +21,8 @@ static char *get_evt_type_str(enum ui_module_event_type type)
 		return "UI_EVT_BUTTON_PRESS_LONG";
 	case UI_EVT_BUTTON_PRESS_2X:
 		return "UI_EVT_BUTTON_PRESS_2X";
-
+	case UI_EVT_BUTTON_PRESS_3X:
+		return "UI_EVT_BUTTON_PRESS_3X";
 	default:
 		return "Unknown event";
 	}

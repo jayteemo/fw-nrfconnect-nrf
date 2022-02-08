@@ -50,5 +50,8 @@ static const struct led_effect asset_tracker_led_effect[] = {
 								LED_COLOR(0, 0, 255)),
 	[LED_STATE_LOC_MODE_MCELL]	 LED_EFFECT_LED_BREATH(LED_PERIOD_NORMAL,
 								LED_COLOR(0, 255, 0)),
+	[LED_STATE_LOC_MODE_ALL]	 LED_EFFECT_LED_BLINK_2(LED_PERIOD_NORMAL,
+								LED_COLOR(255, 0, 255),
+								LED_COLOR(0, 255, 0 )),
 	[LED_STATE_TURN_OFF]		= LED_EFFECT_LED_OFF(),
 };

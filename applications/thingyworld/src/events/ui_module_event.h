@@ -26,6 +26,7 @@ enum ui_module_event_type {
 	UI_EVT_ERROR,
 	UI_EVT_BUTTON_PRESS_2X,
 	UI_EVT_BUTTON_PRESS_LONG,
+	UI_EVT_BUTTON_PRESS_3X,
 };
 
 struct ui_module_data {

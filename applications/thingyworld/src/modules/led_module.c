@@ -47,13 +47,20 @@ static void update_led(enum led_state state)
 		led_bm |= BIT(LED_ID_PUBLISHING);
 		break;
 	case LED_STATE_ACTIVE_MODE:
-		send_led_event(LED_ID_MODE,
-				&asset_tracker_led_effect[LED_STATE_ACTIVE_MODE]);
-		led_bm |= BIT(LED_ID_MODE);
+		/* Supress LED for thingyworld active mode
+		 *send_led_event(LED_ID_MODE,
+		 *		&asset_tracker_led_effect[LED_STATE_ACTIVE_MODE]);
+		 *led_bm |= BIT(LED_ID_MODE);
+		 */
 		break;
 	case LED_STATE_LOC_MODE_MCELL:
 		send_led_event(LED_ID_MODE,
 				&asset_tracker_led_effect[LED_STATE_LOC_MODE_MCELL]);
+		led_bm |= BIT(LED_ID_MODE);
+		break;
+	case LED_STATE_LOC_MODE_ALL:
+		send_led_event(LED_ID_MODE,
+				&asset_tracker_led_effect[LED_STATE_LOC_MODE_ALL]);
 		led_bm |= BIT(LED_ID_MODE);
 		break;
 	case LED_STATE_LOC_MODE_SCELL:

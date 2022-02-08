@@ -62,7 +62,8 @@ enum cloud_data_gps_format {
 enum cloud_data_location_mode {
 	CLOUD_CODEC_LOC_MODE_SCELL,
 	CLOUD_CODEC_LOC_MODE_MCELL,
-	CLOUD_CODEC_LOC_MODE_AGPS
+	CLOUD_CODEC_LOC_MODE_AGPS,
+	CLOUD_CODEC_LOC_MODE_ALL,
 };
 
 /** @brief Structure containing GPS data published to cloud. */
