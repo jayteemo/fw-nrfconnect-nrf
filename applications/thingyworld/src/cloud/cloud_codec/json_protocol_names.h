@@ -66,6 +66,9 @@
 #define DATA_NEIGHBOR_CELLS_NEIGHBOR_MEAS "nmr"
 #define DATA_NEIGHBOR_CELLS_PCI		  "cell"
 
+#define CONFIG_VERSION_VAL_DELTA	  -2
+#define CONFIG_VERSION_VAL_INVALID	  -1
+#define CONFIG_VERSION		  	  "v"
 #define CONFIG_DEVICE_MODE		  "activeMode"
 #define CONFIG_ACTIVE_TIMEOUT		  "activeWaitTime"
 #define CONFIG_MOVE_TIMEOUT		  "movementTimeout"
@@ -124,6 +127,8 @@
 #define MODEM_CELL_ID		"cell"
 #define MODEM_IP_ADDRESS	"ip"
 
+#define CONFIG_VERSION_VAL_INVALID	  -1
+#define CONFIG_VERSION			  "v"
 #define CONFIG_DEVICE_MODE		  "act"
 #define CONFIG_ACTIVE_TIMEOUT		  "actwt"
 #define CONFIG_MOVE_TIMEOUT		  "mvt"

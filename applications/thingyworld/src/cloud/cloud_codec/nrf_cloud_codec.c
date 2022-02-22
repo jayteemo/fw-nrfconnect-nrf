@@ -30,6 +30,8 @@ enum batch_data_type {
 	RSRP
 };
 
+static int version_prev;
+
 /* Function that checks the version number of the incoming message and determines if it has already
  * been handled. Receiving duplicate messages can often occur upon retransmissions from the AWS IoT
  * broker due to unACKed MQTT QoS 1 messages and unACKed TCP packets. Messages from AWS IoT
@@ -38,7 +40,6 @@ enum batch_data_type {
 static bool has_shadow_update_been_handled(cJSON *root_obj)
 {
 	cJSON *version_obj;
-	static int version_prev;
 	bool retval = false;
 
 	version_obj = cJSON_GetObjectItem(root_obj, DATA_VERSION);
@@ -303,6 +304,7 @@ int cloud_codec_decode_config(char *input, size_t input_len,
 	cJSON *root_obj = NULL;
 	cJSON *group_obj = NULL;
 	cJSON *subgroup_obj = NULL;
+	int prev = version_prev;
 
 	if (input == NULL) {
 		return -EINVAL;
@@ -327,6 +329,13 @@ int cloud_codec_decode_config(char *input, size_t input_len,
 		json_print_obj("Decoded message:\n", root_obj);
 	}
 
+	group_obj = json_object_decode(root_obj, DATA_ID);
+	if (group_obj != NULL) {
+		/* This is a message, ignore for thingyworld */
+		err = -ECANCELED;
+		goto exit;
+	}
+
 	group_obj = json_object_decode(root_obj, OBJECT_CONFIG);
 	if (group_obj != NULL) {
 		subgroup_obj = group_obj;
@@ -335,19 +344,24 @@ int cloud_codec_decode_config(char *input, size_t input_len,
 
 	group_obj = json_object_decode(root_obj, OBJECT_STATE);
 	if (group_obj == NULL) {
-		err = -ENOENT;
+		err = -ENODATA;
 		goto exit;
 	}
 
 	subgroup_obj = json_object_decode(group_obj, OBJECT_CONFIG);
 	if (subgroup_obj == NULL) {
-		err = -ENOENT;
+		err = -ENODATA;
 		goto exit;
 	}
 
 get_data:
 
 	json_common_config_get(subgroup_obj, cfg);
+
+	/* Shadow version changed, config ver should have already been confirmed */
+	if (prev != version_prev) {
+		cfg->v = CONFIG_VERSION_VAL_DELTA;
+	}
 
 exit:
 	cJSON_Delete(root_obj);
@@ -371,7 +385,11 @@ int cloud_codec_encode_config(struct cloud_codec_data *output,
 		return -ENOMEM;
 	}
 
-	err = json_common_config_add(rep_obj, data, DATA_CONFIG);
+	if (data) {
+		err = json_common_config_add(rep_obj, data, DATA_CONFIG);
+	} else {
+		err = (cJSON_AddNullToObjectCS(rep_obj, DATA_CONFIG) == NULL) ? -ENOMEM : 0;
+	}
 
 	json_add_obj(state_obj, OBJECT_REPORTED, rep_obj);
 	json_add_obj(root_obj, OBJECT_STATE, state_obj);

@@ -339,7 +339,8 @@ static void data_get(void)
 
 	//if (IS_ENABLED(CONFIG_APP_REQUEST_NEIGHBOR_CELLS_DATA) && !app_cfg.no_data.neighbor_cell) {
 	if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL ||
-	    app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL ) {
+	    app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_MCELL ||
+	    app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_DEMO) {
 		app_module_event->data_list[count++] = APP_DATA_NEIGHBOR_CELLS;
 	} else if (app_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_AGPS) {
 		app_module_event->data_list[count++] = APP_DATA_GNSS;

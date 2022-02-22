@@ -279,7 +279,7 @@ static void cloud_wrap_event_handler(const struct cloud_wrap_event *const evt)
 		break;
 	}
 	case CLOUD_WRAP_EVT_DATA_RECEIVED:
-		LOG_DBG("CLOUD_WRAP_EVT_DATA_RECEIVED");
+		LOG_INF("CLOUD_WRAP_EVT_DATA_RECEIVED");
 
 		int err;
 
@@ -813,6 +813,11 @@ static void on_sub_state_cloud_disconnected(struct cloud_msg_data *msg)
 
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTION_TIMEOUT)) {
 		connect_cloud();
+	}
+
+	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_SEND) &&
+	    IS_ENABLED(CONFIG_NRF_CLOUD_MQTT)) {
+		config_send(&msg->module.data);
 	}
 }
 

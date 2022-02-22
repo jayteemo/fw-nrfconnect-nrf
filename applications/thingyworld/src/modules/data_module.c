@@ -31,6 +31,7 @@
 #include "events/sensor_module_event.h"
 #include "events/ui_module_event.h"
 #include "events/util_module_event.h"
+#include "cloud/cloud_codec/json_protocol_names.h"
 
 #include <logging/log.h>
 LOG_MODULE_REGISTER(MODULE, CONFIG_DATA_MODULE_LOG_LEVEL);
@@ -88,18 +89,26 @@ static int head_ui_buf;
 static int head_accel_buf;
 static int head_bat_buf;
 
+/* Default for "demo mode"...
+ * CONFIG_DATA_ACTIVE_TIMEOUT_SECONDS is used when "all mode" is enabled
+ */
+#define DEMO_MODE_ACTIVE_WAIT_TO_S	3600
+#define CONFIG_VERSION_VAL_CURRENT	1
+
 /* Default device configuration. */
 static struct cloud_data_cfg current_cfg = {
+	.v				= CONFIG_VERSION_VAL_CURRENT,
 	.gps_timeout			= CONFIG_DATA_GPS_TIMEOUT_SECONDS,
-	.active_mode			= (IS_ENABLED(CONFIG_DATA_DEVICE_MODE) ? true : false),
-	.active_wait_timeout		= CONFIG_DATA_ACTIVE_TIMEOUT_SECONDS,
+	.active_mode			= true, /* default to active mode for "demo mode" */
+	.active_wait_timeout		= DEMO_MODE_ACTIVE_WAIT_TO_S,
 	.movement_resolution		= CONFIG_DATA_MOVEMENT_RESOLUTION_SECONDS,
 	.movement_timeout		= CONFIG_DATA_MOVEMENT_TIMEOUT_SECONDS,
 	.accelerometer_threshold	= CONFIG_DATA_ACCELEROMETER_THRESHOLD,
 	.no_data.gnss			= (IS_ENABLED(CONFIG_DATA_SAMPLE_GNSS_DEFAULT)
 					   ? false : true),
 	.no_data.neighbor_cell		= (IS_ENABLED(CONFIG_DATA_SAMPLE_NEIGHBOR_CELLS_DEFAULT)
-					   ? false : true)
+					   ? false : true),
+	.loc_mode			= CLOUD_CODEC_LOC_MODE_DEMO
 };
 
 static struct k_work_delayable data_send_work;
@@ -269,20 +278,38 @@ static bool event_handler(const struct event_header *eh)
 	return false;
 }
 
+static void set_demo_mode(void)
+{
+	LOG_INF("Demo mode enabled");
+	current_cfg.active_mode = true;
+	current_cfg.active_wait_timeout = DEMO_MODE_ACTIVE_WAIT_TO_S;
+}
+
 static int config_settings_handler(const char *key, size_t len,
 				   settings_read_cb read_cb, void *cb_arg)
 {
 	int err;
 
+	struct cloud_data_cfg temp_cfg;
+
 	if (strcmp(key, DEVICE_SETTINGS_CONFIG_KEY) == 0) {
-		err = read_cb(cb_arg, &current_cfg, sizeof(current_cfg));
+		err = read_cb(cb_arg, &temp_cfg, sizeof(temp_cfg));
 		if (err < 0) {
-			LOG_ERR("Failed to load configuration, error: %d", err);
+			LOG_ERR("Failed to load config, error: %d", err);
 			return err;
+		} else if (err == 0) {
+			LOG_INF("Config does not exist in settings");
+		} else if (err != sizeof(current_cfg)) {
+			LOG_WRN("Config size (%d) in settings does not match (%d), ignoring",
+				err, sizeof(current_cfg));
+		} else if (temp_cfg.v != current_cfg.v) {
+			LOG_WRN("Config ver (%d) in settings does not match (%d), ignoring",
+				temp_cfg.v, current_cfg.v);
+		} else {
+			LOG_INF("Loading config ver %d from settings", current_cfg.v);
+			current_cfg = temp_cfg;
 		}
 	}
-
-	LOG_DBG("Device configuration loaded from flash");
 
 	return 0;
 }
@@ -573,6 +600,7 @@ static void data_encode(void)
 	}
 
 	if (current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_SCELL ||
+	    current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_DEMO ||
 	    current_cfg.loc_mode == CLOUD_CODEC_LOC_MODE_ALL) {
 		err = cloud_codec_encode_neighbor_cells(&codec, NULL);
 		if (err) {
@@ -718,6 +746,28 @@ static void config_get(void)
 	SEND_EVENT(data, DATA_EVT_CONFIG_GET);
 }
 
+static void config_clear(void)
+{
+	int err;
+	struct cloud_codec_data codec;
+	struct data_module_event *evt;
+
+	err = cloud_codec_encode_config(&codec, NULL);
+	if (err) {
+		LOG_ERR("Error clearing configuration, error: %d", err);
+		SEND_ERROR(data, DATA_EVT_ERROR, err);
+		return;
+	}
+
+	evt = new_data_module_event();
+	evt->type = DATA_EVT_CONFIG_SEND;
+	evt->data.buffer.buf = codec.buf;
+	evt->data.buffer.len = codec.len;
+
+	data_list_add_pending(codec.buf, codec.len, CONFIG);
+	EVENT_SUBMIT(evt);
+}
+
 static void config_send(void)
 {
 	int err;
@@ -824,8 +874,19 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 {
 	bool config_change = false;
 
+	if (new_config->v != CONFIG_VERSION_VAL_DELTA &&
+	    (current_cfg.v != new_config->v)) {
+		LOG_WRN("Shadow config version (%d) mismatch, sending current config version (%d)",
+			new_config->v, current_cfg.v);
+		config_clear();
+		config_send();
+		return;
+	}
+
 	/* Guards making sure that only new configuration values are applied. */
 	if (current_cfg.active_mode != new_config->active_mode) {
+		LOG_INF("Ignoring active_mode config change; setting controlled by locm");
+	/*
 		current_cfg.active_mode = new_config->active_mode;
 
 		if (current_cfg.active_mode) {
@@ -835,6 +896,7 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 		}
 
 		config_change = true;
+	*/
 	}
 
 	if (current_cfg.no_data.gnss != new_config->no_data.gnss) {
@@ -931,9 +993,48 @@ static void new_config_handle(struct cloud_data_cfg *new_config)
 	}
 
 	if (current_cfg.loc_mode != new_config->loc_mode) {
-		current_cfg.loc_mode = new_config->loc_mode;
 
 		config_change = true;
+
+		switch (new_config->loc_mode) {
+		case CLOUD_CODEC_LOC_MODE_UNINIT:
+			LOG_INF("Incoming location mode uninitialized...");
+			LOG_INF("Setting to current: %d", current_cfg.loc_mode);
+			config_change = false;
+			break;
+		case CLOUD_CODEC_LOC_MODE_DEMO:
+			set_demo_mode();
+			break;
+		case CLOUD_CODEC_LOC_MODE_SCELL: {
+			LOG_INF("Single cell mode enabled");
+			current_cfg.active_mode = false;
+			SEND_EVENT(gps, GPS_EVT_INACTIVE);
+			break;
+		}
+		case CLOUD_CODEC_LOC_MODE_MCELL: {
+			LOG_INF("Multicell mode enabled");
+			current_cfg.active_mode = false;
+			SEND_EVENT(gps, GPS_EVT_INACTIVE);
+			break;
+		}
+		case CLOUD_CODEC_LOC_MODE_AGPS:
+			LOG_INF("A-GPS mode enabled");
+			current_cfg.active_mode = false;
+			break;
+		case CLOUD_CODEC_LOC_MODE_ALL:
+			LOG_INF("All mode enabled");
+			current_cfg.active_mode = true;
+			current_cfg.active_wait_timeout = CONFIG_DATA_ACTIVE_TIMEOUT_SECONDS;
+			break;
+		default:
+			LOG_INF("Invalid location mode: %d", new_config->loc_mode);
+			config_change = false;
+			break;
+		}
+
+		if (config_change) {
+			current_cfg.loc_mode = new_config->loc_mode;
+		}
 	}
 
 	/* If there has been a change in the currently applied device configuration we want to store
@@ -1027,6 +1128,12 @@ static void on_cloud_state_disconnected(struct data_msg_data *msg)
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONNECTED)) {
 		date_time_update_async(date_time_event_handler);
 		state_set(STATE_CLOUD_CONNECTED);
+		return;
+	}
+
+	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONFIG_EMPTY) &&
+	    IS_ENABLED(CONFIG_NRF_CLOUD_MQTT)) {
+		config_send();
 	}
 }
 
@@ -1064,14 +1171,7 @@ static void on_cloud_state_connected(struct data_msg_data *msg)
 static void location_mode_set(const enum cloud_data_location_mode loc_mode)
 {
 	struct cloud_data_cfg new = current_cfg;
-
 	new.loc_mode = loc_mode;
-	new.active_mode = false;
-
-	if (loc_mode == CLOUD_CODEC_LOC_MODE_ALL){
-		new.active_mode = true;
-	}
-
 	new_config_handle(&new);
 }
 
@@ -1081,6 +1181,8 @@ static void on_all_states(struct data_msg_data *msg)
 	/* Distribute new configuration received from cloud. */
 	if (IS_EVENT(msg, cloud, CLOUD_EVT_CONFIG_RECEIVED)) {
 		struct cloud_data_cfg new = {
+			.v =
+				msg->module.cloud.data.config.v,
 			.active_mode =
 				msg->module.cloud.data.config.active_mode,
 			.active_wait_timeout =
@@ -1156,21 +1258,15 @@ static void on_all_states(struct data_msg_data *msg)
 #endif
 	if (IS_EVENT(msg, ui, UI_EVT_BUTTON_DATA_READY) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
-		LOG_INF("Multicell mode enabled");
-		SEND_EVENT(gps, GPS_EVT_INACTIVE);
 		location_mode_set(CLOUD_CODEC_LOC_MODE_MCELL);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_2X) &&
 	    (msg->module.ui.data.ui.button_number == 1)) {
-		LOG_INF("A-GPS mode enabled");
 		location_mode_set(CLOUD_CODEC_LOC_MODE_AGPS);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_LONG) &&
 		   (msg->module.ui.data.ui.button_number == 1)) {
-		LOG_INF("Single cell mode enabled");
-		SEND_EVENT(gps, GPS_EVT_INACTIVE);
 		location_mode_set(CLOUD_CODEC_LOC_MODE_SCELL);
 	} else if (IS_EVENT(msg, ui, UI_EVT_BUTTON_PRESS_3X) &&
 		   (msg->module.ui.data.ui.button_number == 1)) {
-		LOG_INF("All mode enabled");
 		location_mode_set(CLOUD_CODEC_LOC_MODE_ALL);
 	}
 

@@ -68,6 +68,11 @@ static void update_led(enum led_state state)
 				&asset_tracker_led_effect[LED_STATE_LOC_MODE_SCELL]);
 		led_bm |= BIT(LED_ID_MODE);
 		break;
+	case LED_STATE_LOC_MODE_DEMO:
+		send_led_event(LED_ID_MODE,
+				&asset_tracker_led_effect[LED_STATE_LOC_MODE_DEMO]);
+		led_bm |= BIT(LED_ID_MODE);
+		break;
 	case LED_STATE_PASSIVE_MODE:
 		send_led_event(LED_ID_MODE,
 				&asset_tracker_led_effect[LED_STATE_PASSIVE_MODE]);

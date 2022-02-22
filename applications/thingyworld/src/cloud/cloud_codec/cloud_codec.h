@@ -60,6 +60,8 @@ enum cloud_data_gps_format {
 };
 
 enum cloud_data_location_mode {
+	CLOUD_CODEC_LOC_MODE_UNINIT,
+	CLOUD_CODEC_LOC_MODE_DEMO,
 	CLOUD_CODEC_LOC_MODE_SCELL,
 	CLOUD_CODEC_LOC_MODE_MCELL,
 	CLOUD_CODEC_LOC_MODE_AGPS,
@@ -100,6 +102,8 @@ struct cloud_data_no_data {
 };
 
 struct cloud_data_cfg {
+	/** Config version. */
+	int v;
 	/** Device mode. */
 	bool active_mode;
 	/** GPS search timeout. */

@@ -951,6 +951,12 @@ int json_common_config_add(cJSON *parent, struct cloud_data_cfg *data, const cha
 		goto exit;
 	}
 
+	err = json_add_number(config_obj, CONFIG_VERSION, data->v);
+	if (err) {
+		LOG_ERR("Encoding error: %d returned at %s:%d", err, __FILE__, __LINE__);
+		goto exit;
+	}
+
 	err = json_add_bool(config_obj, CONFIG_DEVICE_MODE, data->active_mode);
 	if (err) {
 		LOG_ERR("Encoding error: %d returned at %s:%d", err, __FILE__, __LINE__);
@@ -1040,6 +1046,7 @@ exit:
 
 void json_common_config_get(cJSON *parent, struct cloud_data_cfg *data)
 {
+	cJSON *ver = cJSON_GetObjectItem(parent, CONFIG_VERSION);
 	cJSON *gps_timeout = cJSON_GetObjectItem(parent, CONFIG_GPS_TIMEOUT);
 	cJSON *active = cJSON_GetObjectItem(parent, CONFIG_DEVICE_MODE);
 	cJSON *active_wait = cJSON_GetObjectItem(parent, CONFIG_ACTIVE_TIMEOUT);
@@ -1048,6 +1055,12 @@ void json_common_config_get(cJSON *parent, struct cloud_data_cfg *data)
 	cJSON *acc_thres = cJSON_GetObjectItem(parent, CONFIG_ACC_THRESHOLD);
 	cJSON *loc_mode = cJSON_GetObjectItem(parent, CONFIG_LOCATION_MODE);
 	cJSON *nod_list = cJSON_GetObjectItem(parent, CONFIG_NO_DATA_LIST);
+
+	if (ver != NULL) {
+		data->v = ver->valueint;
+	} else {
+		data->v = CONFIG_VERSION_VAL_INVALID;
+	}
 
 	if (gps_timeout != NULL) {
 		data->gps_timeout = gps_timeout->valueint;

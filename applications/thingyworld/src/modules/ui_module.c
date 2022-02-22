@@ -322,7 +322,7 @@ static void on_state_active_sub_state_gps_active(struct ui_msg_data *msg)
 
 	if ((IS_EVENT(msg, data, DATA_EVT_DATA_SEND)) ||
 	    (IS_EVENT(msg, data, DATA_EVT_UI_DATA_SEND))) {
-		update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
+		//update_led_pattern(LED_STATE_CLOUD_PUBLISHING);
 		k_work_reschedule(&led_pat_gps_work, K_SECONDS(5));
 	}
 
@@ -422,6 +422,10 @@ static void loc_mode_led_set(const enum cloud_data_location_mode loc_mode)
 		LOG_INF("Setting LED for ALL");
 		update_led_pattern(LED_STATE_LOC_MODE_ALL);
 		k_work_reschedule(&led_pat_passive_work, K_SECONDS(10));
+	} else {
+		LOG_INF("Setting LED for DEMO");
+		update_led_pattern(LED_STATE_LOC_MODE_DEMO);
+		k_work_reschedule(&led_pat_passive_work, K_SECONDS(5));
 	}
 }
 
@@ -458,12 +462,11 @@ static void on_all_states(struct ui_msg_data *msg)
 	}
 
 	if (IS_EVENT(msg, modem, MODEM_EVT_LTE_CONNECTING)) {
-		update_led_pattern(LED_STATE_LTE_CONNECTING);
+		//update_led_pattern(LED_STATE_LTE_CONNECTING);
 	}
 
 	if (IS_EVENT(msg, data, DATA_EVT_CONFIG_INIT)) {
 		state_set(msg->module.data.data.cfg.active_mode ? STATE_ACTIVE : STATE_PASSIVE);
-
 		loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
 	} else if (IS_EVENT(msg, data, DATA_EVT_CONFIG_READY)) {
 		loc_mode_led_set(msg->module.data.data.cfg.loc_mode);
