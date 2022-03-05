@@ -161,6 +161,8 @@ int fota_download_cancel(void);
  */
 int fota_download_target(void);
 
+int fota_download_s0_active_get(bool *const s0_active);
+
 #ifdef __cplusplus
 }
 #endif

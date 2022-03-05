@@ -49,6 +49,7 @@ SYS_INIT(load_huk, PRE_KERNEL_2, 0);
 
 static void validate_and_boot(const struct fw_info *fw_info, uint16_t slot)
 {
+	printk("BOOTLOADER sample...");
 	printk("Attempting to boot slot %d.\r\n", slot);
 
 	if (fw_info == NULL) {
@@ -91,6 +92,20 @@ void main(void)
 	uint32_t s1_addr = s1_address_read();
 	const struct fw_info *s0_info = fw_info_find(s0_addr);
 	const struct fw_info *s1_info = fw_info_find(s1_addr);
+
+	if (!s0_info) {
+		printk("s0 null\n");
+	} else {
+		printk("s0: sz(%d), ver(%d), valid(%X)\n",
+		      s0_info->size, s0_info->version, s0_info->valid);
+	}
+
+	if (!s1_info) {
+		printk("s1 null\n");
+	} else {
+		printk("s1: sz(%d), ver(%d), valid(%X)\n",
+		      s1_info->size, s1_info->version, s1_info->valid);
+	}
 
 	if (!s1_info || (s0_info->version >= s1_info->version)) {
 		validate_and_boot(s0_info, BOOT_SLOT_0);
