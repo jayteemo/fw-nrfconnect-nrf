@@ -14,6 +14,32 @@ menuconfig NRF_CLOUD_FOTA
 	select SETTINGS
 	default y if NRF_CLOUD_MQTT
 
+menuconfig NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
+	bool "Enable full modem FOTA updates"
+	select NRF_MODEM_LIB
+	select ZCBOR
+	select DFU_TARGET
+	select DFU_TARGET_FULL_MODEM
+	select DFU_TARGET_STREAM
+	select STREAM_FLASH_ERASE
+	select STREAM_FLASH
+	select FLASH
+	select MBEDTLS_SHA256_C
+	select CDDL_GEN
+	select FMFU_FDEV
+	select OBERON_BACKEND
+	select NORDIC_SECURITY_BACKEND
+	default n
+	help
+	  Requires flash device of at least 4MB.
+
+if NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
+config NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE
+	int "Size of buffer used for stream flash writing full modem updates"
+	range 512 4096
+	default 1024
+endif # NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
+
 if NRF_CLOUD_FOTA
 config NRF_CLOUD_FOTA_PROGRESS_PCT_INCREMENT
 	int "Percentage increment at which FOTA download progress is reported"
@@ -30,30 +56,6 @@ config NRF_CLOUD_FOTA_DOWNLOAD_FRAGMENT_SIZE
 config NRF_CLOUD_FOTA_BLE_DEVICES
 	bool "Enable API for FOTA of BLE devices"
 	depends on BT
-
-menuconfig NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
-	bool "Enable full modem FOTA updates"
-	select DFU_TARGET_STREAM
-	select STREAM_FLASH_ERASE
-	select STREAM_FLASH
-	select FLASH
-	select DFU_TARGET_FULL_MODEM
-	select DFU_TARGET
-	select FMFU_FDEV
-	select MBEDTLS_SHA256_C
-	select CDDL_GEN
-	select OBERON_BACKEND
-	select NORDIC_SECURITY_BACKEND
-	default y
-	help
-	  Requires flash device of at least 4MB.
-
-if NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
-config NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE
-	int "Size of buffer used for stream flash writing full modem updates"
-	range 512 4096
-	default 1024
-endif # NRF_CLOUD_FOTA_FULL_MODEM_UPDATE
 
 choice
 	prompt "Log level for nRF Cloud FOTA"

@@ -278,11 +278,17 @@ int cloud_wrap_init(cloud_wrap_evt_handler_t event_handler)
 	config.client_id = client_id_buf;
 
 #if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
-	struct dfu_target_fmfu_fdev fmfu_dev_inf;
-	fmfu_dev_inf.dev = device_get_binding(EXT_FLASH_DEVICE);
-	fmfu_dev_inf.size = 0;
-	fmfu_dev_inf.offset = 0;
-	config.fmfu_dev_inf = &fmfu_dev_inf;
+	struct dfu_target_fmfu_fdev fmfu_dev_inf = {
+		.size = 0,
+		.offset = 0,
+		.dev = device_get_binding(EXT_FLASH_DEVICE)
+	};
+
+	if (fmfu_dev_inf.dev != NULL) {
+		config.fmfu_dev_inf = &fmfu_dev_inf;
+	} else {
+		LOG_ERR("Could not get flash device");
+	}
 #endif
 
 	err = nrf_cloud_init(&config);

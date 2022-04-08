@@ -728,7 +728,7 @@ static void nrf_cloud_fota_cb_handler(const struct nrf_cloud_fota_evt
 			.type = NRF_CLOUD_EVT_FOTA_DONE,
 		};
 
-		LOG_DBG("NRF_CLOUD_FOTA_EVT_DONE: rebooting");
+		LOG_DBG("NRF_CLOUD_FOTA_EVT_DONE");
 
 		if (evt) {
 			fota_type = evt->type;

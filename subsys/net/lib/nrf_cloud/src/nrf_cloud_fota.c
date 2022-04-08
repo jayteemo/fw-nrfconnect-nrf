@@ -172,12 +172,6 @@ static int fota_settings_set(const char *key, size_t len_rd,
 	return 0;
 }
 
-static bool is_modem_fota_type(const enum nrf_cloud_fota_type type)
-{
-	return ((type == NRF_CLOUD_FOTA_MODEM_DELTA) ||
-		(type == NRF_CLOUD_FOTA_MODEM_FULL));
-}
-
 int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 {
 	int ret;
@@ -228,7 +222,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		/* No job is pending validation */
 		ret = 0;
 
-		if (is_modem_fota_type(saved_job.type) &&
+		if (nrf_cloud_fota_is_type_modem(saved_job.type) &&
 		    (saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_PASS ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_FAIL ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_UNKNOWN)) {
@@ -262,7 +256,7 @@ int nrf_cloud_fota_uninit(void)
 
 int nrf_cloud_modem_fota_completed(const bool fota_success)
 {
-	if (!is_modem_fota_type(saved_job.type) ||
+	if (!nrf_cloud_fota_is_type_modem(saved_job.type) ||
 	    saved_job.validate != NRF_CLOUD_FOTA_VALIDATE_PENDING) {
 		return -EOPNOTSUPP;
 	}
@@ -573,7 +567,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 			(void)send_job_update(&current_fota);
 		}
 
-		/* MCUBOOT: download finished, update job status and reboot */
+		/* MCUBOOT or MODEM full: download finished, update job status and reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
@@ -582,7 +576,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
-		/* MODEM: update job status and reboot */
+		/* MODEM delta: update job status and reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
@@ -592,7 +586,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
-		/* MODEM: this event is received when the initial
+		/* MODEM delta: this event is received when the initial
 		 * fragment is downloaded and dfu_target_modem_init() is
 		 * called.
 		 */
@@ -1204,6 +1198,9 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 			 * occur or the user will call:
 			 * nrf_cloud_modem_fota_completed()
 			 */
+			if (current_fota.info.type == NRF_CLOUD_FOTA_MODEM_FULL) {
+				nrf_cloud_fota_fmfu_apply();
+			}
 			send_event(NRF_CLOUD_FOTA_EVT_DONE, &current_fota);
 			break;
 		default:

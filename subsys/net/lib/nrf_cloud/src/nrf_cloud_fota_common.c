@@ -4,10 +4,13 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <zephyr.h>
 #include <stdbool.h>
 #include <nrf_modem.h>
 #include <modem/nrf_modem_lib.h>
 #include <zephyr/dfu/mcuboot.h>
+#include <dfu/dfu_target_full_modem.h>
+#include <dfu/fmfu_fdev.h>
 #if defined(CONFIG_FOTA_DOWNLOAD)
 #include <net/fota_download.h>
 #endif
@@ -18,7 +21,14 @@ LOG_MODULE_REGISTER(nrf_cloud_fota_common, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 #if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
 static char fmfu_buf[CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE_BUF_SIZE];
+struct dfu_target_fmfu_fdev fmfu_dev;
 #endif
+
+bool nrf_cloud_fota_is_type_modem(const enum nrf_cloud_fota_type type)
+{
+	return ((type == NRF_CLOUD_FOTA_MODEM_DELTA) ||
+		(type == NRF_CLOUD_FOTA_MODEM_FULL));
+}
 
 int nrf_cloud_bootloader_fota_slot_set(struct nrf_cloud_settings_fota_job * const job)
 {
@@ -67,7 +77,7 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 	int err;
 
-	if (job->type == NRF_CLOUD_FOTA_MODEM_DELTA || job->type == NRF_CLOUD_FOTA_MODEM_FULL) {
+	if (nrf_cloud_fota_is_type_modem(job->type)) {
 #if defined(CONFIG_NRF_MODEM_LIB)
 		int modem_lib_init_result = nrf_modem_lib_get_init_ret();
 
@@ -177,8 +187,40 @@ int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_de
 	ret = dfu_target_full_modem_cfg(&params);
 	if (ret) {
 		LOG_ERR("Failed to initialize full modem FOTA: %d", ret);
+	} else {
+		fmfu_dev = *fmfu_dev_inf;
 	}
 
 	return ret;
+}
+
+int nrf_cloud_fota_fmfu_apply(void)
+{
+	int err;
+
+	err = nrf_modem_lib_shutdown();
+	if (err != 0) {
+		LOG_ERR("nrf_modem_lib_shutdown() failed: %d", err);
+		return err;
+	}
+
+	err = nrf_modem_lib_init(FULL_DFU_MODE);
+	if (err != 0) {
+		LOG_ERR("nrf_modem_lib_init(FULL_DFU_MODE) failed: %d", err);
+		return err;
+	}
+
+	err = fmfu_fdev_load(fmfu_buf, sizeof(fmfu_buf), fmfu_dev.dev, 0);
+	if (err != 0) {
+		LOG_ERR("fmfu_fdev_load() failed: %d", err);
+		return err;
+	}
+
+	err = nrf_modem_lib_shutdown();
+	if (err != 0) {
+		LOG_WRN("nrf_modem_lib_shutdown() failed: %d\n", err);
+	}
+
+	return 0;
 }
 #endif

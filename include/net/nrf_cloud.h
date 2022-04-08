@@ -697,6 +697,9 @@ int nrf_cloud_handle_error_message(const char *const buf,
 				   enum nrf_cloud_error *const err);
 
 int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf);
+int nrf_cloud_fota_fmfu_apply(void);
+
+bool nrf_cloud_fota_is_type_modem(const enum nrf_cloud_fota_type type);
 
 /** @} */
 
