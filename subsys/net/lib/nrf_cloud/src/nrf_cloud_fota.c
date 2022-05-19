@@ -221,7 +221,7 @@ int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb)
 		/* No job is pending validation */
 		ret = 0;
 
-		if (saved_job.type == NRF_CLOUD_FOTA_MODEM &&
+		if (nrf_cloud_fota_is_type_modem(saved_job.type) &&
 		    (saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_PASS ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_FAIL ||
 		     saved_job.validate == NRF_CLOUD_FOTA_VALIDATE_UNKNOWN)) {
@@ -255,7 +255,7 @@ int nrf_cloud_fota_uninit(void)
 
 int nrf_cloud_modem_fota_completed(const bool fota_success)
 {
-	if (saved_job.type != NRF_CLOUD_FOTA_MODEM ||
+	if (!nrf_cloud_fota_is_type_modem(saved_job.type) ||
 	    saved_job.validate != NRF_CLOUD_FOTA_VALIDATE_PENDING) {
 		return -EOPNOTSUPP;
 	}
@@ -566,7 +566,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 			(void)send_job_update(&current_fota);
 		}
 
-		/* MCUBOOT: download finished, update job status and reboot */
+		/* MCUBOOT or MODEM full: download finished, update job status and reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
@@ -575,7 +575,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
-		/* MODEM: update job status and reboot */
+		/* MODEM delta: update job status and reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
@@ -585,7 +585,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		break;
 
 	case FOTA_DOWNLOAD_EVT_ERASE_DONE:
-		/* MODEM: this event is received when the initial
+		/* MODEM delta: this event is received when the initial
 		 * fragment is downloaded and dfu_target_modem_init() is
 		 * called.
 		 */
@@ -827,11 +827,16 @@ static int start_job(struct nrf_cloud_fota_job *const job)
 	case NRF_CLOUD_FOTA_APPLICATION:
 		img_type = DFU_TARGET_IMAGE_TYPE_MCUBOOT;
 		break;
-	case NRF_CLOUD_FOTA_MODEM:
+	case NRF_CLOUD_FOTA_MODEM_DELTA:
 		img_type = DFU_TARGET_IMAGE_TYPE_MODEM_DELTA;
+		break;
+	case NRF_CLOUD_FOTA_MODEM_FULL:
+		img_type = DFU_TARGET_IMAGE_TYPE_FULL_MODEM;
 		break;
 	default:
 		LOG_ERR("Unhandled FOTA type: %d", job->info.type);
+		job->status = NRF_CLOUD_FOTA_REJECTED;
+		job->error = NRF_CLOUD_FOTA_ERROR_BAD_TYPE;
 		return -EFTYPE;
 	}
 
@@ -930,6 +935,8 @@ static const char * const get_error_string(const enum nrf_cloud_fota_error err)
 		return "Error applying update";
 	case NRF_CLOUD_FOTA_ERROR_MISMATCH:
 		return "FW file does not match specified FOTA type";
+	case NRF_CLOUD_FOTA_ERROR_BAD_TYPE:
+		return "Unknown FOTA type";
 	case NRF_CLOUD_FOTA_ERROR_NONE:
 	default:
 		return "";
@@ -1192,6 +1199,9 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 			 * occur or the user will call:
 			 * nrf_cloud_modem_fota_completed()
 			 */
+			if (current_fota.info.type == NRF_CLOUD_FOTA_MODEM_FULL) {
+				nrf_cloud_fota_fmfu_apply();
+			}
 			send_event(NRF_CLOUD_FOTA_EVT_DONE, &current_fota);
 			break;
 		default:

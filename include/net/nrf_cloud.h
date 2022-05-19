@@ -14,6 +14,7 @@
 #include <modem/modem_info.h>
 #endif
 #include <cJSON.h>
+#include <dfu/dfu_target_full_modem.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -217,10 +218,12 @@ enum nrf_cloud_fota_type {
 
 	/** Application update. */
 	NRF_CLOUD_FOTA_APPLICATION = NRF_CLOUD_FOTA_TYPE__FIRST,
-	/** Modem update. */
-	NRF_CLOUD_FOTA_MODEM = 1,
+	/** Delta modem update */
+	NRF_CLOUD_FOTA_MODEM_DELTA = 1,
 	/** Bootloader update. */
 	NRF_CLOUD_FOTA_BOOTLOADER = 2,
+	/** Full modem update */
+	NRF_CLOUD_FOTA_MODEM_FULL = 3,
 
 	NRF_CLOUD_FOTA_TYPE__INVALID
 };
@@ -337,8 +340,9 @@ struct nrf_cloud_svc_info_fota {
 	uint8_t bootloader:1;
 	uint8_t modem:1;
 	uint8_t application:1;
+	uint8_t modem_full:1;
 
-	uint8_t _rsvd:5;
+	uint8_t _rsvd:4;
 };
 
 /**@brief Controls which values are added to the UI array in the "serviceInfo" shadow section */
@@ -426,6 +430,10 @@ struct nrf_cloud_init_param {
 	 * is enabled; otherwise, NULL.
 	 */
 	char *client_id;
+	/** Flash device information required for full modem FOTA updates.
+	 * Only used if CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE is enabled.
+	*/
+	struct dfu_target_fmfu_fdev *fmfu_dev_inf;
 };
 
 /**
@@ -688,6 +696,32 @@ int nrf_cloud_handle_error_message(const char *const buf,
 				   const char *const app_id,
 				   const char *const msg_type,
 				   enum nrf_cloud_error *const err);
+
+/**
+ * @brief Function to set the flash device used for full modem FOTA updates.
+ *
+ * @param[in] fmfu_dev_inf Flash device information.
+ *
+ * @retval 0 Flash device was successfully set.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_dev_inf);
+
+/**
+ * @brief Function to install a full modem update from flash. If successful,
+ *        reboot the device to complete the update.
+ *
+ * @retval 0 Modem update installed successfully.
+ * @return A negative value indicates an error. Modem update not installed.
+ */
+int nrf_cloud_fota_fmfu_apply(void);
+
+/**
+ * @brief Function to determine if FOTA type is modem related.
+ *
+ * @return true if FOTA is modem type, otherwise false.
+ */
+bool nrf_cloud_fota_is_type_modem(const enum nrf_cloud_fota_type type);
 
 /** @} */
 
