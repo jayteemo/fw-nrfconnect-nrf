@@ -77,7 +77,7 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 	int err;
 
-	if (nrf_cloud_fota_is_type_modem(job->type)) {
+	if (job->type == NRF_CLOUD_FOTA_MODEM_DELTA) {
 #if defined(CONFIG_NRF_MODEM_LIB)
 		int modem_lib_init_result = nrf_modem_lib_get_init_ret();
 
@@ -103,7 +103,20 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 #endif
 		*reboot_required = true;
 
-		LOG_INF("Modem FOTA update complete on reboot");
+		LOG_INF("Modem delta FOTA update complete on reboot");
+	} else if (job->type == NRF_CLOUD_FOTA_MODEM_FULL) {
+
+		if (IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)) {
+			err = nrf_cloud_fota_fmfu_apply();
+
+			job->validate = err ? NRF_CLOUD_FOTA_VALIDATE_FAIL :
+				     	      NRF_CLOUD_FOTA_VALIDATE_PASS;
+
+		} else {
+			LOG_ERR("Not configured for full modem FOTA");
+			job->validate = NRF_CLOUD_FOTA_VALIDATE_FAIL;
+			err = -ESRCH;
+		}
 
 	} else if (job->type == NRF_CLOUD_FOTA_APPLICATION) {
 
@@ -175,6 +188,9 @@ int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_de
 {
 	if (!fmfu_dev_inf) {
 		return -EINVAL;
+	} else if (!fmfu_dev_inf->dev) {
+		LOG_ERR("Flash device is NULL");
+		return -ENODEV;
 	}
 
 	int ret;

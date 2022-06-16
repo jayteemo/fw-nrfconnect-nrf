@@ -704,6 +704,7 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 
 	char *temp;
 	int err = -ENOMSG;
+	char *job_id = NULL;
 	size_t job_id_len;
 	int offset = !ble_id ? 1 : 0;
 	cJSON *array = cJSON_Parse(payload_in);
@@ -714,11 +715,17 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 		goto cleanup;
 	}
 
+	*array_out = array;
+
 	temp = cJSON_PrintUnformatted(array);
 	if (temp) {
 		LOG_DBG("JSON array: %s", log_strdup(temp));
 		cJSON_FreeString(temp);
 	}
+
+	/* Get the job ID separately, it may be needed to reject an invalid job */
+	get_string_from_array(array, RCV_ITEM_IDX_JOB_ID - offset, &job_id);
+	job_info->id = job_id;
 
 #if CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES
 	if (ble_id) {
@@ -738,8 +745,7 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 	}
 #endif
 
-	if (get_string_from_array(array, RCV_ITEM_IDX_JOB_ID - offset,
-				  &job_info->id) ||
+	if ((job_id == NULL) ||
 	    get_string_from_array(array, RCV_ITEM_IDX_FILE_HOST - offset,
 				  &job_info->host) ||
 	    get_string_from_array(array, RCV_ITEM_IDX_FILE_PATH - offset,
@@ -765,8 +771,6 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 		goto cleanup;
 	}
 
-	*array_out = array;
-
 	LOG_DBG("Job ID: %s, type: %d, size: %d",
 		log_strdup(job_info->id),
 		job_info->type,
@@ -778,12 +782,15 @@ static int parse_job_info(struct nrf_cloud_fota_job_info *const job_info,
 	return 0;
 
 cleanup:
-	*array_out = NULL;
-	memset(job_info, 0, sizeof(*job_info));
-	job_info->type = NRF_CLOUD_FOTA_TYPE__INVALID;
-	if (array) {
-		cJSON_Delete(array);
+	/* If a job ID exists, save it so the job can be rejected */
+	if (job_id == NULL) {
+		memset(job_info, 0, sizeof(*job_info));
+		*array_out = NULL;
+		if (array) {
+			cJSON_Delete(array);
+		}
 	}
+	job_info->type = NRF_CLOUD_FOTA_TYPE__INVALID;
 	return err;
 }
 
@@ -818,7 +825,7 @@ static void send_event(const enum nrf_cloud_fota_evt_id id,
 static int start_job(struct nrf_cloud_fota_job *const job)
 {
 	__ASSERT_NO_MSG(job != NULL);
-	int ret;
+	int ret = 0;
 
 	enum dfu_target_image_type img_type;
 
@@ -831,13 +838,22 @@ static int start_job(struct nrf_cloud_fota_job *const job)
 		img_type = DFU_TARGET_IMAGE_TYPE_MODEM_DELTA;
 		break;
 	case NRF_CLOUD_FOTA_MODEM_FULL:
-		img_type = DFU_TARGET_IMAGE_TYPE_FULL_MODEM;
+		if (IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)) {
+			img_type = DFU_TARGET_IMAGE_TYPE_FULL_MODEM;
+		} else {
+			LOG_ERR("Not configured for full modem FOTA");
+			ret = -EFTYPE;
+		}
 		break;
 	default:
 		LOG_ERR("Unhandled FOTA type: %d", job->info.type);
+		ret = -EFTYPE;
+	}
+
+	if (ret == -EFTYPE) {
 		job->status = NRF_CLOUD_FOTA_REJECTED;
 		job->error = NRF_CLOUD_FOTA_ERROR_BAD_TYPE;
-		return -EFTYPE;
+		return ret;
 	}
 
 	ret = fota_download_start_with_image_type(job->info.host,
@@ -935,8 +951,10 @@ static const char * const get_error_string(const enum nrf_cloud_fota_error err)
 		return "Error applying update";
 	case NRF_CLOUD_FOTA_ERROR_MISMATCH:
 		return "FW file does not match specified FOTA type";
+	case NRF_CLOUD_FOTA_ERROR_BAD_JOB_INFO:
+		return "Job info is invalid";
 	case NRF_CLOUD_FOTA_ERROR_BAD_TYPE:
-		return "Unknown FOTA type";
+		return "FOTA type not supported";
 	case NRF_CLOUD_FOTA_ERROR_NONE:
 	default:
 		return "";
@@ -1026,11 +1044,32 @@ int nrf_cloud_fota_update_check(void)
 	return publish(&param);
 }
 
+static int full_modem_update_apply(void)
+{
+	int ret = -ENODEV;
+
+	if (saved_job.type == NRF_CLOUD_FOTA_MODEM_FULL) {
+		bool reboot_required = false;
+		int ret = nrf_cloud_pending_fota_job_process(&saved_job, &reboot_required);
+
+		if (ret == 0) {
+			(void)save_validate_status(saved_job.id, saved_job.type,
+						   ret ? NRF_CLOUD_FOTA_VALIDATE_FAIL :
+							 NRF_CLOUD_FOTA_VALIDATE_PASS);
+		} else if (ret != ENODEV) {
+			LOG_ERR("Failed to install full modem FOTA update");
+		}
+	}
+
+	return ret;
+}
+
 static int handle_mqtt_evt_publish(const struct mqtt_evt *evt)
 {
 	int ret = 0;
 	char *payload = NULL;
 	bool skip = false;
+	bool reject_job = false;
 	bt_addr_t *ble_id = NULL;
 	cJSON *payload_array = NULL;
 	struct nrf_cloud_fota_job_info *job_info = &current_fota.info;
@@ -1080,18 +1119,25 @@ static int handle_mqtt_evt_publish(const struct mqtt_evt *evt)
 		goto send_ack;
 	}
 
-	ret = parse_job_info(job_info, ble_id, payload, &payload_array);
-	if (ret == 0 && strcmp(last_job, job_info->id) == 0) {
+	if (parse_job_info(job_info, ble_id, payload, &payload_array)) {
+		/* Error parsing job, if a job ID exists, reject the job */
+		reject_job = (job_info->id != NULL);
+	} else if (strncmp(last_job, job_info->id, sizeof(last_job)) == 0) {
+		/* Job parsed and already processed */
 		skip = true;
 		LOG_INF("Job %s already completed... skipping",
 			log_strdup(last_job));
 	}
 
 send_ack:
+	/* Cleanup the payload buffer which is no longer needed */
 	if (payload) {
 		nrf_cloud_free(payload);
 	}
 
+	/* Send the ACK if required and then continue processing, which may result
+	 * in an additional MQTT transaction
+	 */
 	if (p->message.topic.qos == MQTT_QOS_0_AT_MOST_ONCE) {
 		LOG_DBG("No ack required");
 	} else {
@@ -1102,6 +1148,20 @@ send_ack:
 			if (!ret) {
 				ret = ack_res;
 			}
+		}
+	}
+
+	if (reject_job) {
+		if (ble_id) {
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+			ble_job.error = NRF_CLOUD_FOTA_ERROR_BAD_JOB_INFO;
+			(void)nrf_cloud_fota_ble_job_update(ble_job, NRF_CLOUD_FOTA_REJECTED);
+#endif
+		} else {
+			current_fota.error = NRF_CLOUD_FOTA_ERROR_BAD_JOB_INFO;
+			current_fota.status = NRF_CLOUD_FOTA_REJECTED;
+			(void)send_job_update(&current_fota);
+			cleanup_job(&current_fota);
 		}
 	}
 
@@ -1194,14 +1254,14 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 					NRF_CLOUD_FOTA_VALIDATE_DONE);
 			break;
 		case NRF_CLOUD_FOTA_VALIDATE_PENDING:
+			/* Full modem updates can be applied immediately */
+			(void)full_modem_update_apply();
+
 			/* This event should cause reboot or modem-reinit.
 			 * Do not cleanup the job since a reboot should
 			 * occur or the user will call:
 			 * nrf_cloud_modem_fota_completed()
 			 */
-			if (current_fota.info.type == NRF_CLOUD_FOTA_MODEM_FULL) {
-				nrf_cloud_fota_fmfu_apply();
-			}
 			send_event(NRF_CLOUD_FOTA_EVT_DONE, &current_fota);
 			break;
 		default:

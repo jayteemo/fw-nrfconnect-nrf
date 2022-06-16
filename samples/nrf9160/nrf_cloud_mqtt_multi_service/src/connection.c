@@ -6,6 +6,7 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <modem/lte_lc.h>
+#include <modem/nrf_modem_lib.h>
 #include <zephyr/net/socket.h>
 #include <net/nrf_cloud.h>
 #include <date_time.h>
@@ -292,7 +293,8 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 
 		LOG_DBG("NRF_CLOUD_EVT_FOTA_DONE, FOTA type: %s",
 			fota_type == NRF_CLOUD_FOTA_APPLICATION	  ?		"Application"	:
-			fota_type == NRF_CLOUD_FOTA_MODEM	  ?		"Modem"		:
+			fota_type == NRF_CLOUD_FOTA_MODEM_DELTA	  ?		"Modem (Delta)"	:
+			fota_type == NRF_CLOUD_FOTA_MODEM_FULL	  ?		"Modem (Full)"	:
 			fota_type == NRF_CLOUD_FOTA_BOOTLOADER	  ?		"Bootloader"	:
 										"Invalid");
 
@@ -418,9 +420,10 @@ static void update_shadow(void)
 {
 	int err;
 	struct nrf_cloud_svc_info_fota fota_info = {
-		.application = fota_capable(),
-		.bootloader = fota_capable() && boot_fota_capable(),
-		.modem = fota_capable()
+		.application =	app_fota_capable(),
+		.bootloader =	boot_fota_capable(),
+		.modem =	modem_delta_fota_capable(),
+		.modem_full =	modem_full_fota_capable()
 	};
 	struct nrf_cloud_svc_info_ui ui_info = {
 		.gps = location_tracking_enabled(),
@@ -601,8 +604,19 @@ static int connect_cloud(void)
 
 	/* Initialize nrf_cloud library. */
 	struct nrf_cloud_init_param params = {
-		.event_handler = cloud_event_handler
+		.event_handler = cloud_event_handler,
 	};
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+	struct dfu_target_fmfu_fdev fmfu_dev_inf = {
+		.size = 0,
+		.offset = 0,
+		.dev = device_get_binding(DT_LABEL(DT_INST(0, jedec_spi_nor)))
+	};
+
+	params.fmfu_dev_inf = &fmfu_dev_inf;
+#endif
+
 	err = nrf_cloud_init(&params);
 	if (err) {
 		LOG_ERR("Cloud lib could not be initialized, error: %d", err);
@@ -645,6 +659,11 @@ static int connect_cloud(void)
 static int setup_lte(void)
 {
 	int err;
+
+	err = nrf_modem_lib_init(NORMAL_MODE);
+	if (err) {
+		LOG_INF("Modem library initialization returned %d", err);
+	}
 
 	LOG_INF("Setting up LTE");
 

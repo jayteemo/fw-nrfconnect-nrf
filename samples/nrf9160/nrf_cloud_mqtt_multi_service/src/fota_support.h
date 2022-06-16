@@ -13,19 +13,28 @@
  *
  * @return bool - Whether we are capable of application or modem FOTA.
  */
-static inline bool fota_capable(void)
+static inline bool app_fota_capable(void)
 {
-	return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) && IS_ENABLED(CONFIG_BOOTLOADER_MCUBOOT);
+	return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) &&
+	       IS_ENABLED(CONFIG_BOOTLOADER_MCUBOOT);
 }
-
-/**
- * @brief Check whether we are capable of Firmware Over The Air (FOTA) bootloader update.
- *
- * @return bool - Whether we are capable of bootloader FOTA.
- */
 static inline bool boot_fota_capable(void)
 {
-	return IS_ENABLED(CONFIG_BUILD_S1_VARIANT) && IS_ENABLED(CONFIG_SECURE_BOOT);
+	return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) &&
+	       IS_ENABLED(CONFIG_BOOTLOADER_MCUBOOT) &&
+	       IS_ENABLED(CONFIG_BUILD_S1_VARIANT) &&
+	       IS_ENABLED(CONFIG_SECURE_BOOT);
+}
+static inline bool modem_delta_fota_capable(void)
+{
+	return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) &&
+	       IS_ENABLED(CONFIG_NRF_MODEM);
+}
+static inline bool modem_full_fota_capable(void)
+{
+	return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA) &&
+	       IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE) &&
+	       IS_ENABLED(CONFIG_NRF_MODEM);
 }
 
 /**

@@ -213,7 +213,13 @@ static void lwm2m_update_modem_fota_counter(void)
 static void handle_nrf_modem_lib_init_ret(void)
 {
 #if defined(CONFIG_NRF_MODEM_LIB)
-	int ret = nrf_modem_lib_get_init_ret();
+	int ret;
+
+	if (IS_ENABLED(CONFIG_NRF_MODEM_LIB_SYS_INIT)) {
+		ret = nrf_modem_lib_get_init_ret();
+	} else {
+		ret = nrf_modem_lib_init(NORMAL_MODE);
+	}
 
 	/* Handle return values relating to modem firmware update */
 	switch (ret) {

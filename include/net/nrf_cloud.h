@@ -222,8 +222,14 @@ enum nrf_cloud_fota_type {
 	NRF_CLOUD_FOTA_MODEM_DELTA = 1,
 	/** Bootloader update. */
 	NRF_CLOUD_FOTA_BOOTLOADER = 2,
+
+	/* Types not handled by this library
+	 * NRF_CLOUD_FOTA_BLE_BOOT = 3,
+	 * NRF_CLOUD_FOTA_BLE_SOFTDEVICE = 4,
+	 */
+
 	/** Full modem update */
-	NRF_CLOUD_FOTA_MODEM_FULL = 3,
+	NRF_CLOUD_FOTA_MODEM_FULL = 5,
 
 	NRF_CLOUD_FOTA_TYPE__INVALID
 };
@@ -709,7 +715,7 @@ int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_de
 
 /**
  * @brief Function to install a full modem update from flash. If successful,
- *        reboot the device to complete the update.
+ *        reboot the device or re-initialize the modem library to complete the update.
  *
  * @retval 0 Modem update installed successfully.
  * @return A negative value indicates an error. Modem update not installed.

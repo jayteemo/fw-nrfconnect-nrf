@@ -730,6 +730,10 @@ static void handle_download_succeeded_and_reboot(void)
 		(void)update_job_status();
 	}
 
+	if (pending_job.type == NRF_CLOUD_FOTA_MODEM_FULL) {
+		return;
+	}
+
 	LOG_INF("Rebooting in 10s to complete FOTA update...");
 	k_sleep(K_SECONDS(10));
 	sys_reboot(SYS_REBOOT_COLD);
@@ -770,6 +774,7 @@ void main(void)
 		return;
 	}
 
+connect:
 	err = connect_to_network();
 	if (err) {
 		return;
@@ -849,6 +854,12 @@ void main(void)
 		 */
 		if (fota_status == NRF_CLOUD_FOTA_SUCCEEDED) {
 			handle_download_succeeded_and_reboot();
+			if (pending_job.type == NRF_CLOUD_FOTA_MODEM_FULL) {
+				LOG_INF("modem lib init res: %d",
+					nrf_modem_lib_init(NORMAL_MODE));
+				LOG_INF("reconnecting...");
+				goto connect;
+			}
 		}
 
 		/* Job was not successful, send status to nRF Cloud */

@@ -121,7 +121,7 @@ int nrf_cloud_init(const struct nrf_cloud_init_param *param)
 			return err;
 		}
 	} else {
-		LOG_WRN("Full modem FOTA not initialized; flash device not specified");
+		LOG_WRN("Full modem FOTA not initialized; flash device info not provided");
 	}
 #endif
 
