@@ -579,9 +579,10 @@ int nrf_cloud_disconnect(void);
 int nrf_cloud_process(void);
 
 /**
- * @brief The application has handled re-init after a modem FOTA update and the
- *        LTE link has been re-established.
+ * @brief The application has handled reinit after a modem FOTA update and the
+ *        LTE link has been reestablished.
  *        This function must be called in order to complete the modem update.
+ *        Depends on CONFIG_NRF_CLOUD_FOTA.
  *
  * @param[in] fota_success true if modem update was successful, false otherwise.
  *
@@ -738,7 +739,12 @@ int nrf_cloud_fota_fmfu_dev_set(const struct dfu_target_fmfu_fdev *const fmfu_de
 
 /**
  * @brief Function to install a full modem update from flash. If successful,
- *        reboot the device to complete the update.
+ *        reboot the device or reinit the modem to complete the update.
+ *        This function is intended to be used by custom REST-based FOTA implementations.
+ *        If CONFIG_NRF_CLOUD_FOTA is enabled, call @ref nrf_cloud_fota_pending_job_validate
+ *        to install a downloaded NRF_CLOUD_FOTA_MODEM_FULL update after the
+ *        @ref NRF_CLOUD_EVT_FOTA_DONE event is received.
+ *        Depends on CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE.
  *
  * @retval 0 Modem update installed successfully.
  * @return A negative value indicates an error. Modem update not installed.

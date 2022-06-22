@@ -80,7 +80,7 @@ int nrf_cloud_fota_fmfu_apply(void)
 
 	return 0;
 }
-#endif
+#endif /* CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE */
 
 static enum nrf_cloud_fota_validate_status boot_fota_validate_get(
 	const enum nrf_cloud_fota_bootloader_status_flags bl_flags)
@@ -231,7 +231,7 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 		job->validate = modem_delta_fota_validate_get();
 
 		*reboot_required = true;
-		LOG_INF("Modem (delta) FOTA update complete on reboot");
+		LOG_INF("Modem (delta) FOTA complete on modem library reinit or reboot");
 
 	} else if (job->type == NRF_CLOUD_FOTA_MODEM_FULL) {
 
@@ -239,7 +239,7 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 
 		if (IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)) {
 			*reboot_required = true;
-			LOG_INF("Modem (full) FOTA update complete on reboot");
+			LOG_INF("Modem (full) FOTA complete on modem library reinit or reboot");
 		} else {
 			LOG_ERR("Not configured for full modem FOTA");
 			return -ESRCH;

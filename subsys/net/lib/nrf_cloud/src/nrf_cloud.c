@@ -437,9 +437,11 @@ int nct_input(const struct nct_evt *evt)
 	return nfsm_handle_incoming_event(evt, current_state);
 }
 
-void nct_apply_update(const struct nrf_cloud_evt * const evt)
+void nct_send_event(const struct nrf_cloud_evt * const evt)
 {
-	app_event_handler(evt);
+	if (app_event_handler && evt) {
+		app_event_handler(evt);
+	}
 }
 
 int nrf_cloud_process(void)

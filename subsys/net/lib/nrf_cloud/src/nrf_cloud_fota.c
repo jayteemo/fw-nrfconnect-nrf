@@ -175,16 +175,23 @@ static int fota_settings_set(const char *key, size_t len_rd,
 
 static int load_fota_settings(void)
 {
-	int ret = settings_subsys_init();
+	static bool settings_loaded = false;
+	int ret = 0;
 
-	if (ret) {
-		LOG_ERR("Settings init failed: %d", ret);
-		return ret;
-	}
+	if (!settings_loaded) {
+		ret = settings_subsys_init();
 
-	ret = settings_load_subtree(settings_handler_fota.name);
-	if (ret) {
-		LOG_ERR("Cannot load settings: %d", ret);
+		if (ret) {
+			LOG_ERR("Settings init failed: %d", ret);
+			return ret;
+		}
+
+		ret = settings_load_subtree(settings_handler_fota.name);
+		if (ret) {
+			LOG_ERR("Cannot load settings: %d", ret);
+		} else {
+			settings_loaded = true;
+		}
 	}
 
 	return ret;
@@ -226,7 +233,11 @@ int nrf_cloud_fota_pending_job_validate(enum nrf_cloud_fota_type * const fota_ty
 		return -EIO;
 	}
 
-	return pending_fota_job_validate();
+	err = pending_fota_job_validate();
+
+	cleanup_job(&current_fota);
+
+	return err;
 }
 
 static void fota_reboot(void)
@@ -620,10 +631,11 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 			/* Send 100% downloaded update */
 			current_fota.dl_progress = 100;
 			current_fota.sent_dl_progress = 100;
+			send_event(NRF_CLOUD_FOTA_EVT_DL_PROGRESS, &current_fota);
 			(void)send_job_update(&current_fota);
 		}
 
-		/* MCUBOOT or MODEM full: download finished, update job status and reboot */
+		/* MCUBOOT or MODEM full: download finished, update job status and install/reboot */
 		current_fota.status = NRF_CLOUD_FOTA_IN_PROGRESS;
 		save_validate_status(current_fota.info.id,
 				     current_fota.info.type,
@@ -698,6 +710,7 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		}
 
 		current_fota.sent_dl_progress = current_fota.dl_progress;
+		send_event(NRF_CLOUD_FOTA_EVT_DL_PROGRESS, &current_fota);
 		ret = send_job_update(&current_fota);
 		break;
 	default:
@@ -1101,17 +1114,6 @@ int nrf_cloud_fota_update_check(void)
 	return publish(&param);
 }
 
-static void full_modem_update_apply(void)
-{
-	if (saved_job.type == NRF_CLOUD_FOTA_MODEM_FULL) {
-		int ret = pending_fota_job_validate();
-
-		if ((ret < 0) && (ret != ENODEV)) {
-			LOG_ERR("Failed to install full modem FOTA update");
-		}
-	}
-}
-
 static int handle_mqtt_evt_publish(const struct mqtt_evt *evt)
 {
 	int ret = 0;
@@ -1302,14 +1304,13 @@ int nrf_cloud_fota_mqtt_evt_handler(const struct mqtt_evt *evt)
 					NRF_CLOUD_FOTA_VALIDATE_DONE);
 			break;
 		case NRF_CLOUD_FOTA_VALIDATE_PENDING:
-			/* Full modem updates can be applied immediately */
-			full_modem_update_apply();
-
 			/* This event should cause reboot or modem-reinit.
-			 * Do not cleanup the job since a reboot should
-			 * occur or the user will call:
-			 * nrf_cloud_modem_fota_completed()
-			 */
+			* Do not cleanup the job since a reboot should
+			* occur or the user will call:
+			* nrf_cloud_modem_fota_completed()
+			* or
+			* nrf_cloud_fota_pending_job_validate()
+			*/
 			send_event(NRF_CLOUD_FOTA_EVT_DONE, &current_fota);
 			break;
 		default:
