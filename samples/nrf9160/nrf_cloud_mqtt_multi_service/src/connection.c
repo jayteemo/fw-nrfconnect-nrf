@@ -6,6 +6,7 @@
 #include <zephyr/kernel.h>
 #include <stdio.h>
 #include <modem/lte_lc.h>
+#include <modem/nrf_modem_lib.h>
 #include <zephyr/net/socket.h>
 #include <net/nrf_cloud.h>
 #include <date_time.h>
@@ -36,6 +37,7 @@ LOG_MODULE_REGISTER(connection, CONFIG_MQTT_MULTI_SERVICE_LOG_LEVEL);
 #define CLOUD_READY			(1 << 2)
 #define CLOUD_ASSOCIATION_REQUEST	(1 << 3)
 #define CLOUD_DISCONNECTED		(1 << 4)
+#define FOTA_INSTALL_PENDING		(1 << 5)
 
 /* Time either is or is not known. This is only fired once, and is never cleared. */
 #define DATE_TIME_KNOWN			(1 << 1)
@@ -95,6 +97,17 @@ bool await_date_time_known(k_timeout_t timeout)
 static void notify_cloud_connected(void)
 {
 	k_event_post(&cloud_connection_events, CLOUD_CONNECTED);
+}
+
+static void notify_fota_install_pending(void)
+{
+	k_event_post(&cloud_connection_events, FOTA_INSTALL_PENDING);
+}
+
+static bool is_fota_install_pending(void)
+{
+	return k_event_wait(&cloud_connection_events, FOTA_INSTALL_PENDING,
+			    false, K_NO_WAIT) != 0;
 }
 
 /**
@@ -264,8 +277,22 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 		break;
 	case NRF_CLOUD_EVT_TRANSPORT_DISCONNECTED:
 		LOG_DBG("NRF_CLOUD_EVT_TRANSPORT_DISCONNECTED");
-		/* Notify that we have lost contact with nRF Cloud. */
-		disconnect_cloud();
+		if (is_fota_install_pending()) {
+			LOG_INF("Disconnected, completing FOTA installation");
+
+			int ret = nrf_cloud_fota_pending_job_validate(NULL);
+
+			if (ret < 0) {
+				LOG_ERR("FOTA update installation failed, error: %d", ret);
+			} else {
+				LOG_INF("FOTA update installed successfully");
+			}
+
+			on_fota_downloaded();
+		} else {
+			/* Notify that we have lost contact with nRF Cloud. */
+			disconnect_cloud();
+		}
 		break;
 	case NRF_CLOUD_EVT_ERROR:
 		LOG_DBG("NRF_CLOUD_EVT_ERROR: %d", nrf_cloud_evt->status);
@@ -292,12 +319,18 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 
 		LOG_DBG("NRF_CLOUD_EVT_FOTA_DONE, FOTA type: %s",
 			fota_type == NRF_CLOUD_FOTA_APPLICATION	  ?		"Application"	:
-			fota_type == NRF_CLOUD_FOTA_MODEM_DELTA	  ?		"Modem (delta)"	:
+			fota_type == NRF_CLOUD_FOTA_MODEM_DELTA	  ?		"Modem (Delta)"	:
+			fota_type == NRF_CLOUD_FOTA_MODEM_FULL	  ?		"Modem (Full)"	:
 			fota_type == NRF_CLOUD_FOTA_BOOTLOADER	  ?		"Bootloader"	:
 										"Invalid");
 
-		/* Notify fota_support of the completed download. */
-		on_fota_downloaded();
+		if (fota_type == NRF_CLOUD_FOTA_MODEM_FULL) {
+			notify_fota_install_pending();
+			nrf_cloud_disconnect();
+		} else {
+			/* Notify fota_support of the completed download. */
+			on_fota_downloaded();
+		}
 		break;
 	}
 	case NRF_CLOUD_EVT_FOTA_ERROR:
@@ -418,9 +451,10 @@ static void update_shadow(void)
 {
 	int err;
 	struct nrf_cloud_svc_info_fota fota_info = {
-		.application = fota_capable(),
-		.bootloader = fota_capable() && boot_fota_capable(),
-		.modem = fota_capable()
+		.application =	app_fota_capable(),
+		.bootloader =	boot_fota_capable(),
+		.modem =	modem_delta_fota_capable(),
+		.modem_full =	modem_full_fota_capable()
 	};
 	struct nrf_cloud_svc_info_ui ui_info = {
 		.gps = location_tracking_enabled(),
@@ -603,6 +637,17 @@ static int connect_cloud(void)
 	struct nrf_cloud_init_param params = {
 		.event_handler = cloud_event_handler
 	};
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_FULL_MODEM_UPDATE)
+	struct dfu_target_fmfu_fdev fmfu_dev_inf = {
+		.size = 0,
+		.offset = 0,
+		.dev = device_get_binding(DT_LABEL(DT_INST(0, jedec_spi_nor)))
+	};
+
+	params.fmfu_dev_inf = &fmfu_dev_inf;
+#endif
+
 	err = nrf_cloud_init(&params);
 	if (err) {
 		LOG_ERR("Cloud lib could not be initialized, error: %d", err);
@@ -645,6 +690,11 @@ static int connect_cloud(void)
 static int setup_lte(void)
 {
 	int err;
+
+	err = nrf_modem_lib_init(NORMAL_MODE);
+	if (err) {
+		LOG_INF("Modem library initialization returned %d", err);
+	}
 
 	LOG_INF("Setting up LTE");
 
