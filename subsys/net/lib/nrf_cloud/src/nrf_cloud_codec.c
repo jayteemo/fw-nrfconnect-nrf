@@ -1506,6 +1506,52 @@ static int nrf_cloud_parse_cell_pos_json(const cJSON *const cell_pos_obj,
 	return 0;
 }
 
+enum nrf_cloud_dev_ctrl_msg nrf_cloud_parse_dev_ctrl_msg(struct nrf_cloud_data const *const msg)
+{
+	enum nrf_cloud_dev_ctrl_msg msg_type = NRF_CLOUD_DEV_CTRL_MSG_NONE;
+
+	/* The candidate buffer must be a null-terminated string less than
+	 * a certain length and it must contain "DEVICE".
+	 */
+	if ((msg == NULL) || (msg->ptr == NULL) ||
+	    (msg->len > NRF_CLOUD_JSON_MSG_DEV_CTRL_MAX_LEN) ||
+	    (memchr(msg->ptr, '\0', NRF_CLOUD_JSON_MSG_DEV_CTRL_MAX_LEN) == NULL) ||
+	    (strstr(msg->ptr, "\"" NRF_CLOUD_JSON_APPID_VAL_DEVICE "\"") == NULL)) {
+		return msg_type;
+	}
+
+	/* If the quick test passes, use cJSON to check the rest */
+	cJSON *json_obj = cJSON_Parse(msg->ptr);
+
+	if (!json_obj) {
+		return msg_type;
+	}
+
+	if (!json_item_string_exists(json_obj, NRF_CLOUD_JSON_APPID_KEY,
+				     NRF_CLOUD_JSON_APPID_VAL_DEVICE)) {
+		/* Not a DEVICE mesage */
+	} else if (json_item_string_exists(json_obj, NRF_CLOUD_JSON_MSG_TYPE_KEY,
+					   NRF_CLOUD_JSON_MSG_TYPE_VAL_DISCONNECT)) {
+		msg_type = NRF_CLOUD_DEV_CTRL_MSG_DISCON;
+	} else if (json_item_string_exists(json_obj, NRF_CLOUD_JSON_MSG_TYPE_KEY,
+					   NRF_CLOUD_JSON_MSG_TYPE_VAL_REDIRECT)) {
+		char * ip_addr;
+
+		/* Get the new IP address */
+		// TODO: get proper JSON msg definition
+		if (get_string_from_obj(json_obj, "data", &ip_addr) == 0) {
+			nct_ip_address_set(ip_addr);
+			msg_type = NRF_CLOUD_DEV_CTRL_MSG_REDIR;
+		} else {
+			LOG_ERR("Invalid format for '%s' message",
+				NRF_CLOUD_JSON_MSG_TYPE_VAL_REDIRECT);
+		}
+	}
+
+	cJSON_Delete(json_obj);
+	return msg_type;
+}
+
 int nrf_cloud_handle_error_message(const char *const buf,
 				   const char *const app_id,
 				   const char *const msg_type,
@@ -1522,7 +1568,6 @@ int nrf_cloud_handle_error_message(const char *const buf,
 
 	root_obj = cJSON_Parse(buf);
 	if (!root_obj) {
-		LOG_DBG("No JSON found");
 		return -ENODATA;
 	}
 
@@ -1668,42 +1713,6 @@ cleanup:
 
 	cJSON_Delete(root_obj);
 
-	return ret;
-}
-
-bool nrf_cloud_detect_disconnection_request(const char *const buf)
-{
-	if (buf == NULL) {
-		return false;
-	}
-
-	/* The candidate buffer must be a null-terminated string less than
-	 * a certain length
-	 */
-	if (memchr(buf, '\0', NRF_CLOUD_JSON_MSG_MAX_LEN_DISCONNECT) == NULL) {
-		return false;
-	}
-
-	/* Fast test to avoid parsing EVERY message with cJSON. */
-	if (strstr(buf, NRF_CLOUD_JSON_APPID_VAL_DEVICE) == NULL ||
-	    strstr(buf, NRF_CLOUD_JSON_MSG_TYPE_VAL_DISCONNECT) == NULL) {
-		return false;
-	}
-
-	/* If the quick test passes, use cJSON to get certainty */
-	bool ret = true;
-	cJSON *discon_request_obj = cJSON_Parse(buf);
-
-	/* Check for nRF Cloud disconnection request MQTT message */
-	if (!json_item_string_exists(discon_request_obj, NRF_CLOUD_JSON_MSG_TYPE_KEY,
-				     NRF_CLOUD_JSON_MSG_TYPE_VAL_DISCONNECT) ||
-	    !json_item_string_exists(discon_request_obj, NRF_CLOUD_JSON_APPID_KEY,
-				     NRF_CLOUD_JSON_APPID_VAL_DEVICE)) {
-		/* Not a disconnection request message */
-		ret = false;
-	}
-
-	cJSON_Delete(discon_request_obj);
 	return ret;
 }
 

@@ -814,6 +814,13 @@ static void cloud_event_handler(const struct nrf_cloud_evt *evt)
 	case NRF_CLOUD_EVT_FOTA_DONE:
 		LOG_DBG("NRF_CLOUD_EVT_FOTA_DONE");
 		break;
+	case NRF_CLOUD_EVT_REDIRECT_REQUEST:
+		LOG_DBG("NRF_CLOUD_EVT_REDIRECT_REQUEST");
+		break;
+	case NRF_CLOUD_EVT_DISCONNECT_REQUIRED:
+		LOG_DBG("NRF_CLOUD_EVT_DISCONNECT_REQUIRED");
+		/* A disconnect event should occur next */
+		break;
 	default:
 		break;
 	}

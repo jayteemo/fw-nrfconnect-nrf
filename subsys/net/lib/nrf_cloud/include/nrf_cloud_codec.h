@@ -45,7 +45,15 @@ extern "C" {
 #define NRF_CLOUD_JSON_MSG_TYPE_KEY		"messageType"
 #define NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA	"DATA"
 #define NRF_CLOUD_JSON_MSG_TYPE_VAL_DISCONNECT	"DISCON"
-#define NRF_CLOUD_JSON_MSG_MAX_LEN_DISCONNECT   200
+#define NRF_CLOUD_JSON_MSG_TYPE_VAL_REDIRECT	"REDIR"
+
+#define NRF_CLOUD_JSON_MSG_DEV_CTRL_MAX_LEN   100
+
+enum nrf_cloud_dev_ctrl_msg {
+	NRF_CLOUD_DEV_CTRL_MSG_NONE,
+	NRF_CLOUD_DEV_CTRL_MSG_DISCON,
+	NRF_CLOUD_DEV_CTRL_MSG_REDIR,
+};
 
 #define NRF_CLOUD_JSON_DATA_KEY			"data"
 #define NRF_CLOUD_JSON_ERR_KEY			"err"
@@ -205,8 +213,8 @@ int nrf_cloud_format_single_cell_pos_req_json(cJSON * const req_obj_out);
 int nrf_cloud_parse_cell_pos_response(const char *const buf,
 				      struct nrf_cloud_cell_pos_result *result);
 
-/** @brief Checks whether the provided MQTT payload is an nRF Cloud disconnection request */
-bool nrf_cloud_detect_disconnection_request(const char *const buf);
+/** @brief Checks whether the provided MQTT payload is an nRF Cloud device control message */
+enum nrf_cloud_dev_ctrl_msg nrf_cloud_parse_dev_ctrl_msg(struct nrf_cloud_data const *const msg);
 
 /** @brief Obtains a pointer to the string at the specified index in the cJSON array.
  * No memory is allocated, pointer is valid as long as the cJSON array is valid.

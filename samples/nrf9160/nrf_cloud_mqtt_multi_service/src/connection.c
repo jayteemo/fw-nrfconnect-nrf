@@ -305,6 +305,15 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 	case NRF_CLOUD_EVT_FOTA_ERROR:
 		LOG_DBG("NRF_CLOUD_EVT_FOTA_ERROR");
 		break;
+	case NRF_CLOUD_EVT_REDIRECT_REQUEST:
+		LOG_DBG("NRF_CLOUD_EVT_REDIRECT_REQUEST");
+		/* Disconnect and reconnect with new IP address */
+		disconnect_cloud();
+		break;
+	case NRF_CLOUD_EVT_DISCONNECT_REQUIRED:
+		LOG_DBG("NRF_CLOUD_EVT_DISCONNECT_REQUIRED");
+		/* A disconnect event should occur next */
+		break;
 	default:
 		LOG_DBG("Unknown event type: %d", nrf_cloud_evt->type);
 		break;

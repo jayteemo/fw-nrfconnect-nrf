@@ -407,6 +407,15 @@ static void cloud_event_handler(const struct nrf_cloud_evt *evt)
 		/* Reconnect to nRF Cloud. */
 		k_work_schedule(&connect_work, K_NO_WAIT);
 		break;
+	case NRF_CLOUD_EVT_REDIRECT_REQUEST:
+		LOG_DBG("NRF_CLOUD_EVT_REDIRECT_REQUEST");
+		/* Disconnect and reconnect with new IP address */
+		(void)nrf_cloud_disconnect();
+		break;
+	case NRF_CLOUD_EVT_DISCONNECT_REQUIRED:
+		LOG_DBG("NRF_CLOUD_EVT_DISCONNECT_REQUIRED");
+		/* A disconnect event should occur next */
+		break;
 	case NRF_CLOUD_EVT_ERROR:
 		LOG_DBG("NRF_CLOUD_EVT_ERROR, status: %d", evt->status);
 		atomic_set(&send_data_enable, 0);

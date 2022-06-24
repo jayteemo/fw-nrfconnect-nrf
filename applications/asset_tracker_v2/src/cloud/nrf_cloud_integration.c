@@ -238,6 +238,15 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 			notify = true;
 		}
 		break;
+	case NRF_CLOUD_EVT_REDIRECT_REQUEST:
+		LOG_DBG("NRF_CLOUD_EVT_REDIRECT_REQUEST");
+		/* Disconnect and reconnect with new IP address */
+		(void)nrf_cloud_disconnect();
+		break;
+	case NRF_CLOUD_EVT_DISCONNECT_REQUIRED:
+		LOG_DBG("NRF_CLOUD_EVT_DISCONNECT_REQUIRED");
+		/* A disconnect event should occur next */
+		break;
 	default:
 		LOG_ERR("Unknown nRF Cloud event type: %d", evt->type);
 		break;

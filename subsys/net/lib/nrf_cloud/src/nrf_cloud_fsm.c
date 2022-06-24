@@ -538,16 +538,23 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 		.topic = nct_evt->param.dc->topic,
 	};
 
-	bool discon_req = nrf_cloud_detect_disconnection_request(nct_evt->param.dc->data.ptr);
+	enum nrf_cloud_dev_ctrl_msg ctrl_msg =
+		nrf_cloud_parse_dev_ctrl_msg(&nct_evt->param.dc->data);
 
-	/* All data is forwared to the app... unless a callback is registered */
-	if (cell_pos_cb_send(nct_evt->param.dc->data.ptr) == 0) {
-		return 0;
+	if (ctrl_msg == NRF_CLOUD_DEV_CTRL_MSG_REDIR) {
+		cloud_evt.type = NRF_CLOUD_EVT_REDIRECT_REQUEST;
+	} else if (ctrl_msg == NRF_CLOUD_DEV_CTRL_MSG_DISCON) {
+		cloud_evt.type = NRF_CLOUD_EVT_DISCONNECT_REQUIRED;
+	} else if (ctrl_msg == NRF_CLOUD_DEV_CTRL_MSG_NONE) {
+		/* All data is forwared to the app... unless a callback is registered */
+		if (cell_pos_cb_send(nct_evt->param.dc->data.ptr) == 0) {
+			return 0;
+		}
 	}
 
 	nfsm_set_current_state_and_notify(nfsm_get_current_state(), &cloud_evt);
 
-	if (discon_req) {
+	if (ctrl_msg == NRF_CLOUD_DEV_CTRL_MSG_DISCON) {
 		LOG_DBG("Device deleted from nRF Cloud");
 		int err = nrf_cloud_disconnect();
 
