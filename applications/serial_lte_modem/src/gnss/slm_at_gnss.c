@@ -23,6 +23,8 @@ LOG_MODULE_REGISTER(slm_gnss, CONFIG_SLM_LOG_LEVEL);
 #define SERVICE_INFO_GPS \
 	"{\"state\":{\"reported\":{\"device\": {\"serviceInfo\":{\"ui\":[\"GPS\"]}}}}}"
 
+#define NO_TIMESTAMP -1
+
 /**@brief GNSS operations. */
 enum slm_gnss_operation {
 	GPS_STOP,
