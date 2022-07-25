@@ -426,9 +426,9 @@ enum nrf_cloud_gnss_type {
 	NRF_CLOUD_GNSS_TYPE_PVT,
 	/** Specifies a data type of @ref nrf_cloud_gnss_nmea */
 	NRF_CLOUD_GNSS_TYPE_NMEA,
-	/** Specifies a data type of @ref nrf_modem_gnss_pvt_data_frame */
+	/** Specifies a data type of nrf_modem_gnss_pvt_data_frame */
 	NRF_CLOUD_GNSS_TYPE_MODEM_PVT,
-	/** Specifies a data type of @ref nrf_modem_gnss_nmea_data_frame */
+	/** Specifies a data type of nrf_modem_gnss_nmea_data_frame */
 	NRF_CLOUD_GNSS_TYPE_MODEM_NMEA,
 };
 
