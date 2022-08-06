@@ -75,6 +75,10 @@ BUILD_ASSERT(IMEI_CLIENT_ID_LEN <= NRF_CLOUD_CLIENT_ID_MAX_LEN,
 #define NCT_UPDATE_TOPIC AWS "%s/shadow/update"
 #define NCT_SHADOW_GET AWS "%s/shadow/get"
 
+/* TODO: REMOVE, FOR TESTING ONLY */
+#define TEMP_TOPIC "prod/851bd200-a89d-4076-9226-bb621828b4f3/m/d/50563059-3934-4841-8096-12151b190153/+/rcv"
+#define STRLEN_TEMP_TOPIC (sizeof(TEMP_TOPIC) - 1)
+
 /* Buffers to hold stage and tenant strings. */
 static char stage[NRF_CLOUD_STAGE_ID_MAX_LEN];
 static char tenant[NRF_CLOUD_TENANT_ID_MAX_LEN];
@@ -1295,8 +1299,14 @@ int nct_dc_connect(void)
 
 	struct mqtt_topic subscribe_topic = {
 		.topic = {
+		/*
 			.utf8 = nct.dc_rx_endp.utf8,
 			.size = nct.dc_rx_endp.size
+		*/
+		/* TODO: remove below... temp for testing until BE is updated */
+			.utf8 = TEMP_TOPIC,
+			.size = STRLEN_TEMP_TOPIC
+
 		},
 		.qos = MQTT_QOS_1_AT_LEAST_ONCE
 	};
@@ -1331,8 +1341,22 @@ int nct_dc_disconnect(void)
 
 	LOG_DBG("nct_dc_disconnect");
 
+	struct mqtt_topic subscribe_topic = {
+		.topic = {
+		/*
+			.utf8 = nct.dc_rx_endp.utf8,
+			.size = nct.dc_rx_endp.size
+		*/
+		/* TODO: remove below... temp for testing until BE is updated */
+			.utf8 = TEMP_TOPIC,
+			.size = STRLEN_TEMP_TOPIC
+
+		},
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE
+	};
+
 	const struct mqtt_subscription_list subscription_list = {
-		.list = (struct mqtt_topic *)&nct.dc_rx_endp,
+		.list = &subscribe_topic,
 		.list_count = 1,
 		.message_id = NCT_MSG_ID_DC_UNSUB
 	};

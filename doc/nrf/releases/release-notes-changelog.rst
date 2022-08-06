@@ -149,6 +149,7 @@ nRF9160: Asset Tracker v2
     * The conversions of RSRP and RSRQ now use common macros that follow the conversion algorithms defined in the `AT Commands Reference Guide`_.
     * Bootstrapping has been disabled by default to be able to connect to the default LwM2M service AVSystem's `Coiote Device Management`_ using free tier accounts.
     * Added support for full modem FOTA updates for nRF Cloud builds.
+    * Added handling for the new data receive events in the :ref:`lib_nrf_cloud` library.
 
   * Fixed:
 
@@ -171,10 +172,12 @@ nRF9160: Serial LTE modem
 
     * The AT response and the URC sent when the application enters and exits data mode.
     * ``WAKEUP_PIN`` and ``INTERFACE_PIN`` are now defined as *Active Low*. Both are *High* when the SLM application starts.
+    * Added handling for the new data receive events in the :ref:`lib_nrf_cloud` library.
 
   * Removed:
 
     * The software toggle of ``INDICATE_PIN`` in case of reset.
+    * A-GPS and P-GPS processing; it is now handled by the :ref:`lib_nrf_cloud` library.
 
 nRF5340 Audio
 -------------
@@ -350,6 +353,8 @@ nRF9160 samples
 
     * Changed timeout parameters from seconds to milliseconds in ``location`` and ``rest`` commands.
     * The conversions of RSRP and RSRQ now use common macros that follow the conversion algorithms defined in the `AT Commands Reference Guide`_.
+    * Added handling for the new data receive events in the :ref:`lib_nrf_cloud` library.
+    * Removed A-GPS and P-GPS processing; it is now handled by the :ref:`lib_nrf_cloud` library.
 
 * :ref:`nrf_cloud_mqtt_multi_service` sample:
 
@@ -359,6 +364,8 @@ nRF9160 samples
     * Minor logging and function structure improvements
     * :ref:`lib_nrf_cloud` library is no longer de-initialized and re-initialized on disconnect and reconnect.
     * The :ref:lib_nrf_cloud library function :c:func:nrf_cloud_gnss_msg_json_encode is used to send PVT location data instead of building an NMEA sentence.
+    * Added handling for the new data receive events in the :ref:`lib_nrf_cloud` library.
+    * Removed A-GPS and P-GPS processing; it is now handled by the :ref:`lib_nrf_cloud` library.
 
   * Added:
 
@@ -374,6 +381,13 @@ nRF9160 samples
 * :ref:`at_monitor_sample` sample:
 
   * The conversions of RSRP and RSRQ now use common macros that follow the conversion algorithms defined in the `AT Commands Reference Guide`_.
+
+* :ref:`lte_sensor_gateway` sample:
+
+  * Updated:
+
+    * Added handling for the new data receive events in the :ref:`lib_nrf_cloud` library.
+    * Removed A-GPS and P-GPS processing; it is now handled by the :ref:`lib_nrf_cloud` library.
 
 Thread samples
 --------------
@@ -632,6 +646,9 @@ Libraries for networking
 
       * The conversions of RSRP and RSRQ now use common macros that follow the conversion algorithms defined in the `AT Commands Reference Guide`_.
       * Function :c:func:`nrf_cloud_fota_is_type_enabled` no longer depends on :kconfig:option:`CONFIG_NRF_CLOUD_FOTA`.
+      * The library now subscribes to a wildcard cloud-to-device (c2d) topic. This enables the device to receive location services data on separate topics.
+      * Replaced event :c:enum:`NRF_CLOUD_EVT_RX_DATA` with :c:enum:`NRF_CLOUD_EVT_RX_DATA_GENERAL`. Added events :c:enum:`NRF_CLOUD_EVT_RX_DATA_CELL_POS` and :c:enum:`NRF_CLOUD_EVT_RX_DATA_SHADOW`.
+      * The library now processes A-GPS and P-GPS data; it is no longer passed to the application.
 
   * :ref:`lib_multicell_location` library:
 
