@@ -163,7 +163,7 @@ int nrf_cloud_uninit(void)
 
 		err = k_sem_take(&uninit_disconnect, K_SECONDS(30));
 		if (err == -EAGAIN) {
-			LOG_WRN("Did not receive expected disconnect event during cloud unint");
+			LOG_WRN("Did not receive expected disconnect event during cloud uninit");
 			err = -EISCONN;
 		}
 	}
