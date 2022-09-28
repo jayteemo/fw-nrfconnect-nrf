@@ -30,6 +30,9 @@ zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_CELL_POS
 	src/nrf_cloud_cell_pos.c)
 zephyr_library_sources_ifdef(
+	CONFIG_NRF_CLOUD_GROUND_FIX
+	src/nrf_cloud_ground_fix.c)
+zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_FOTA
 	src/nrf_cloud_fota.c)
 zephyr_library_sources_ifdef(

@@ -109,11 +109,11 @@ static bool persistent_session;
  */
 static bool c2d_topic_modified;
 
-#if defined(CONFIG_NRF_CLOUD_CELL_POS) && defined(CONFIG_NRF_CLOUD_MQTT)
-static nrf_cloud_cell_pos_response_t cell_pos_cb;
-void nfsm_set_cell_pos_response_cb(nrf_cloud_cell_pos_response_t cb)
+#if defined(CONFIG_NRF_CLOUD_GROUND_FIX) && defined(CONFIG_NRF_CLOUD_MQTT)
+static nrf_cloud_ground_fix_response_t ground_fix_cb;
+void nfsm_set_ground_fix_response_cb(nrf_cloud_ground_fix_response_t cb)
 {
-	cell_pos_cb = cb;
+	ground_fix_cb = cb;
 }
 #endif
 
@@ -528,7 +528,7 @@ static int dc_connection_handler(const struct nct_evt *nct_evt)
 	return 0;
 }
 
-void agps_process(const char * const buf, const size_t buf_len)
+static void agps_process(const char * const buf, const size_t buf_len)
 {
 #if defined(CONFIG_NRF_CLOUD_AGPS)
 	int ret = nrf_cloud_agps_process(buf, buf_len);
@@ -562,7 +562,7 @@ void agps_process(const char * const buf, const size_t buf_len)
 #endif
 }
 
-void pgps_process(const char * const buf, const size_t buf_len)
+static void pgps_process(const char * const buf, const size_t buf_len)
 {
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 	int ret = nrf_cloud_pgps_process(buf, buf_len);
@@ -581,24 +581,24 @@ void pgps_process(const char * const buf, const size_t buf_len)
 #endif
 }
 
-int cell_pos_process(const char * const buf)
+static int ground_fix_process(const char * const buf)
 {
-#if defined(CONFIG_NRF_CLOUD_CELL_POS) && defined(CONFIG_NRF_CLOUD_MQTT)
-	if (cell_pos_cb) {
-		struct nrf_cloud_cell_pos_result res;
-		int ret = nrf_cloud_cell_pos_process(buf, &res);
+#if defined(CONFIG_NRF_CLOUD_GROUND_FIX) && defined(CONFIG_NRF_CLOUD_MQTT)
+	if (ground_fix_cb) {
+		struct nrf_cloud_ground_fix_result res;
+		int ret = nrf_cloud_ground_fix_process(buf, &res);
 
 		if (ret <= 0) {
-			/* A cell-pos response was received, send to callback */
-			cell_pos_cb(&res);
+			/* A ground fix response was received, send to callback */
+			ground_fix_cb(&res);
 
-			LOG_DBG("Cellular positioning data sent to provided callback");
+			LOG_DBG("Ground fix data sent to provided callback");
 
 			/* Clear the callback after use */
-			nfsm_set_cell_pos_response_cb(NULL);
+			nfsm_set_ground_fix_response_cb(NULL);
 			return 0;
 		}
-		/* ret == 1 indicates that no cell pos data was found */
+		/* ret == 1 indicates that no ground fix data was found */
 	}
 #endif
 	return -EFTYPE;
@@ -623,12 +623,12 @@ static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 	case NRF_CLOUD_RCV_TOPIC_PGPS:
 		pgps_process(cloud_evt.data.ptr, cloud_evt.data.len);
 		return 0;
-	case NRF_CLOUD_RCV_TOPIC_CELL_POS:
-		if (cell_pos_process(cloud_evt.data.ptr) == 0) {
-			/* Data was sent to cell pos cb, do not send to application */
+	case NRF_CLOUD_RCV_TOPIC_GROUND_FIX:
+		if (ground_fix_process(cloud_evt.data.ptr) == 0) {
+			/* Data was sent to cb, do not send to application */
 			return 0;
 		}
-		cloud_evt.type = NRF_CLOUD_EVT_RX_DATA_CELL_POS;
+		cloud_evt.type = NRF_CLOUD_EVT_RX_DATA_GROUND_FIX;
 		break;
 	case NRF_CLOUD_RCV_TOPIC_UNHANDLED:
 		LOG_DBG("Received data on unhandled topic: %s",
