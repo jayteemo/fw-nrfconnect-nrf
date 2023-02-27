@@ -353,6 +353,20 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 		return -EINVAL;
 	}
 
+	struct nrf_cloud_data send_data ={ .ptr = msg->data.ptr,
+					   .len = msg->data.len };
+
+	/* If an object is included, encode and send */
+	if (msg->obj) {
+		err = nrf_cloud_obj_cloud_encode(msg->obj);
+		if (err) {
+			LOG_ERR("Failed to encode data for cloud");
+			return err;
+		}
+		send_data.ptr = msg->obj->encoded_data.ptr;
+		send_data.len = msg->obj->encoded_data.len;
+	}
+
 	switch (msg->topic_type) {
 	case NRF_CLOUD_TOPIC_STATE: {
 		if (current_state < STATE_CC_CONNECTED) {
@@ -361,8 +375,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 		}
 		const struct nct_cc_data shadow_data = {
 			.opcode = NCT_CC_OPCODE_UPDATE_REQ,
-			.data.ptr = msg->data.ptr,
-			.data.len = msg->data.len,
+			.data.ptr = send_data.ptr,
+			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
 		};
 
@@ -379,8 +393,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			break;
 		}
 		const struct nct_dc_data buf = {
-			.data.ptr = msg->data.ptr,
-			.data.len = msg->data.len,
+			.data.ptr = send_data.ptr,
+			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
 		};
 
@@ -422,6 +436,10 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 	default:
 		LOG_ERR("Unknown topic type");
 		err = -ENODATA;
+	}
+
+	if (msg->obj) {
+		(void)nrf_cloud_obj_cloud_encoded_free(msg->obj);
 	}
 
 	return err;

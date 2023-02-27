@@ -892,6 +892,53 @@ int json_send_to_cloud(cJSON *const request)
 }
 #endif /* CONFIG_NRF_CLOUD_MQTT */
 
+static int nrf_cloud_pvt_data_encode(const struct nrf_cloud_gnss_pvt * const pvt,
+			      cJSON * const pvt_data_obj)
+{
+	if (!pvt || !pvt_data_obj) {
+		return -EINVAL;
+	}
+
+	if (json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_LON, pvt->lon) ||
+	    json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_LAT, pvt->lat) ||
+	    json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_ACCURACY, pvt->accuracy) ||
+	    (pvt->has_alt &&
+	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_ALTITUDE, pvt->alt)) ||
+	    (pvt->has_speed &&
+	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_SPEED, pvt->speed)) ||
+	    (pvt->has_heading &&
+	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_HEADING, pvt->heading))) {
+		LOG_DBG("Failed to encode PVT data");
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+#if defined(CONFIG_NRF_MODEM)
+static int nrf_cloud_modem_pvt_data_encode(const struct nrf_modem_gnss_pvt_data_frame	* const mdm_pvt,
+				    cJSON * const pvt_data_obj)
+{
+	if (!mdm_pvt || !pvt_data_obj) {
+		return -EINVAL;
+	}
+
+	struct nrf_cloud_gnss_pvt pvt = {
+		.lon =		mdm_pvt->longitude,
+		.lat =		mdm_pvt->latitude,
+		.accuracy =	mdm_pvt->accuracy,
+		.alt =		mdm_pvt->altitude,
+		.has_alt =	1,
+		.speed =	mdm_pvt->speed,
+		.has_speed =	1,
+		.heading =	mdm_pvt->heading,
+		.has_heading =	1
+	};
+
+	return nrf_cloud_pvt_data_encode(&pvt, pvt_data_obj);
+}
+#endif
+
 static int nrf_cloud_encode_service_info_fota(const struct nrf_cloud_svc_info_fota *const fota,
 					      cJSON *const svc_inf_obj)
 {
@@ -2392,53 +2439,6 @@ bool nrf_cloud_disconnection_request_decode(const char *const buf)
 	return ret;
 }
 
-#if defined(CONFIG_NRF_MODEM)
-int nrf_cloud_modem_pvt_data_encode(const struct nrf_modem_gnss_pvt_data_frame	* const mdm_pvt,
-				    cJSON * const pvt_data_obj)
-{
-	if (!mdm_pvt || !pvt_data_obj) {
-		return -EINVAL;
-	}
-
-	struct nrf_cloud_gnss_pvt pvt = {
-		.lon =		mdm_pvt->longitude,
-		.lat =		mdm_pvt->latitude,
-		.accuracy =	mdm_pvt->accuracy,
-		.alt =		mdm_pvt->altitude,
-		.has_alt =	1,
-		.speed =	mdm_pvt->speed,
-		.has_speed =	1,
-		.heading =	mdm_pvt->heading,
-		.has_heading =	1
-	};
-
-	return nrf_cloud_pvt_data_encode(&pvt, pvt_data_obj);
-}
-#endif
-
-int nrf_cloud_pvt_data_encode(const struct nrf_cloud_gnss_pvt * const pvt,
-			      cJSON * const pvt_data_obj)
-{
-	if (!pvt || !pvt_data_obj) {
-		return -EINVAL;
-	}
-
-	if (json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_LON, pvt->lon) ||
-	    json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_LAT, pvt->lat) ||
-	    json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_ACCURACY, pvt->accuracy) ||
-	    (pvt->has_alt &&
-	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_ALTITUDE, pvt->alt)) ||
-	    (pvt->has_speed &&
-	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_SPEED, pvt->speed)) ||
-	    (pvt->has_heading &&
-	     json_add_num_cs(pvt_data_obj, NRF_CLOUD_JSON_GNSS_PVT_KEY_HEADING, pvt->heading))) {
-		LOG_DBG("Failed to encode PVT data");
-		return -ENOMEM;
-	}
-
-	return 0;
-}
-
 int nrf_cloud_gnss_msg_json_encode(const struct nrf_cloud_gnss_data * const gnss,
 				   cJSON * const gnss_msg_obj)
 {
@@ -2595,4 +2595,557 @@ int nrf_cloud_alert_encode(const struct nrf_cloud_alert_info *alert,
 	output->len = 0;
 #endif /* CONFIG_NRF_CLOUD_ALERTS */
 	return 0;
+}
+
+int nrf_cloud_obj_input_decode(struct nrf_cloud_obj *const obj,
+	const struct nrf_cloud_data *const input)
+{
+	if (!obj || !input || !input->ptr || !input->len) {
+		return -EINVAL;
+	}
+
+	/* Only parse null-terminated data */
+	if (memchr(input->ptr, '\0', input->len + 1) == NULL) {
+		return -EBADMSG;
+	}
+
+	obj->json = cJSON_Parse(input->ptr);
+	if (!obj->json) {
+		return -ENOMSG;
+	}
+
+	return 0;
+}
+
+int nrf_cloud_obj_msg_check(const struct nrf_cloud_obj *const obj, const char *const app_id,
+	const char *const msg_type)
+{
+	if (!obj || !obj->json || (!app_id && !msg_type)) {
+		return -EINVAL;
+	}
+
+	char *str = NULL;
+	bool match = true;
+
+	if (app_id) {
+		(void)get_string_from_obj(obj->json, NRF_CLOUD_JSON_APPID_KEY, &str);
+		match &= (str && (strcmp(str, app_id) == 0));
+	}
+
+	if (msg_type) {
+		str = NULL;
+		(void)get_string_from_obj(obj->json, NRF_CLOUD_JSON_MSG_TYPE_KEY, &str);
+		match &= (str && (strcmp(str, msg_type) == 0));
+	}
+
+	return match ? 0 : -ENOMSG;
+}
+
+int nrf_cloud_obj_str_get(const struct nrf_cloud_obj *const obj, const char *const key,
+	char **str)
+{
+	if (!obj || !obj->json || !key || !str) {
+		return -EINVAL;
+	}
+	return get_string_from_obj(obj->json, key, str);
+}
+
+int nrf_cloud_obj_msg_init(struct nrf_cloud_obj *const obj, const char *const app_id,
+	const char *const msg_type)
+{
+	if (!obj || !app_id) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+		case NRF_CLOUD_OBJ_TYPE_JSON:
+		case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO?
+		{
+			int err;
+			cJSON *new_obj = cJSON_CreateObject();
+
+			err = json_add_str_cs(new_obj, NRF_CLOUD_JSON_APPID_KEY, app_id);
+
+			if (!err && msg_type) {
+				err = json_add_str_cs(new_obj, NRF_CLOUD_JSON_MSG_TYPE_KEY,
+						      msg_type);
+			}
+
+			if (err) {
+				obj->json = NULL;
+				cJSON_Delete(new_obj);
+				return -ENOMEM;
+			}
+
+			obj->json = new_obj;
+			return 0;
+		}
+		default: break;
+	}
+
+	return -ENOTSUP;
+}
+
+int nrf_cloud_obj_init(struct nrf_cloud_obj *const obj)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+		case NRF_CLOUD_OBJ_TYPE_JSON:
+		case NRF_CLOUD_OBJ_TYPE_CBOR:
+		{
+			obj->json = cJSON_CreateObject();
+			return (obj->json ? 0 : -ENOMEM);
+		}
+		default:
+			break;
+	}
+
+	return -EFTYPE;
+}
+
+int nrf_cloud_obj_bulk_init(struct nrf_cloud_obj *const bulk)
+{
+	if (!bulk) {
+		return -EINVAL;
+	}
+
+	switch (bulk->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO?
+	{
+		bulk->json = cJSON_CreateArray();
+		return (bulk->json ? 0 : -ENOMEM);
+	}
+	default: break;
+	}
+
+	return -ENOTSUP;
+}
+
+int nrf_cloud_obj_cloud_encoded_free(struct nrf_cloud_obj *const obj)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO
+	{
+		if (obj->encoded_data.ptr) {
+			cJSON_free((void *)obj->encoded_data.ptr);
+			obj->encoded_data.ptr = NULL;
+		}
+
+		obj->encoded_data.len = 0;
+		return 0;
+	}
+	default: break;
+	}
+
+	return -EFTYPE;
+}
+
+int nrf_cloud_obj_free(struct nrf_cloud_obj *const obj)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+
+	(void)nrf_cloud_obj_cloud_encoded_free(obj);
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO
+	{
+		cJSON_Delete(obj->json);
+		obj->json = NULL;
+		return 0;
+	}
+	default: break;
+	}
+
+	return -ENOTSUP;
+}
+
+int nrf_cloud_obj_bulk_add(struct nrf_cloud_obj *const bulk, struct nrf_cloud_obj *const obj)
+{
+	if (!bulk || !obj) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO
+	{
+		if (!bulk->json || !obj->json) {
+			return -EACCES;
+		}
+
+		if (!cJSON_IsArray(bulk->json)) {
+			return -EFTYPE;
+		}
+
+		return (cJSON_AddItemToArray(bulk->json, obj->json) ? 0 : -EIO);
+	}
+	default: break;
+	}
+
+	return -EFTYPE;
+}
+
+int nrf_cloud_obj_ts_add(struct nrf_cloud_obj *const obj, const int64_t time_ms)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+
+	switch (obj->type) {
+	case NRF_CLOUD_OBJ_TYPE_JSON:
+	case NRF_CLOUD_OBJ_TYPE_CBOR: // TODO
+	{
+		if (!obj->json) {
+			return -EACCES;
+		}
+
+		/* TODO: if time_ms <= 0, obtain valid timestamp (if Kconfigured) */
+		if (json_add_num_cs(obj->json, NRF_CLOUD_MSG_TIMESTAMP_KEY, time_ms)) {
+			return -ENOMEM;
+		}
+
+		return 0;
+	}
+	default: break;
+	}
+
+	return -EFTYPE;
+}
+
+static cJSON* data_obj_get(cJSON *const root_obj)
+{
+	cJSON *dest = NULL;
+
+	dest = cJSON_GetObjectItem(root_obj, NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
+
+	if (!dest) {
+		dest = cJSON_AddObjectToObjectCS(root_obj, NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
+	}
+
+	return dest;
+}
+
+/* Get or create the destination for the data */
+#define GET_DATA_DEST() 				\
+	cJSON *dest = obj->json; 			\
+				 			\
+	if (data_child) {				\
+		dest = data_obj_get(obj->json);		\
+		if (!dest) {				\
+			return -ENOMEM;			\
+		}					\
+	}						\
+
+int nrf_cloud_obj_num_add(struct nrf_cloud_obj *const obj, const char *const key,
+			  const double val, const bool data_child)
+{
+	if (!obj || !key) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	return cJSON_AddNumberToObjectCS(dest, key, val) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_str_add(struct nrf_cloud_obj *const obj, const char *const key,
+			  const char *const val, const bool data_child)
+{
+	if (!obj || !key || !val) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	return cJSON_AddStringToObjectCS(dest, key, val) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_bool_add(struct nrf_cloud_obj *const obj, const char *const key,
+			   const bool val, const bool data_child)
+{
+	if (!obj || !key) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	return cJSON_AddBoolToObject(dest, key, val) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_null_add(struct nrf_cloud_obj *const obj, const char *const key,
+			   const bool data_child)
+{
+	if (!obj || !key) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	return cJSON_AddNullToObject(dest, key) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_object_add(struct nrf_cloud_obj *const obj, const char *const key,
+			     struct nrf_cloud_obj *const obj_to_add, const bool data_child)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	if (data_child && (key == NULL)) {
+		return cJSON_AddItemToArray(dest, obj_to_add->json) ? 0 : -ENOMEM;
+	}
+
+	return cJSON_AddItemToObjectCS(dest, key, obj_to_add->json) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_int_array_add	(struct nrf_cloud_obj *const obj, const char *const key,
+				 const uint32_t ints[], const uint32_t ints_cnt, const bool data_child)
+{
+	if (!obj || !key || !ints || !ints_cnt) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	cJSON *array = cJSON_CreateIntArray(ints, ints_cnt);
+
+	return cJSON_AddItemToObjectCS(dest, key, array) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_str_array_add	(struct nrf_cloud_obj *const obj, const char *const key,
+				 const char *const strs[], const uint32_t strs_cnt, const bool data_child)
+{
+	if (!obj || !key || !strs || !strs_cnt) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	GET_DATA_DEST()
+
+	cJSON *array = cJSON_CreateStringArray(strs, strs_cnt);
+
+	return cJSON_AddItemToObjectCS(dest, key, array) ? 0 : -ENOMEM;
+}
+
+int nrf_cloud_obj_cloud_encode(struct nrf_cloud_obj *const obj)
+{
+	if (!obj) {
+		return -EINVAL;
+	}
+	if (!obj->json) {
+		return -EACCES;
+	}
+
+	obj->encoded_data.ptr = cJSON_PrintUnformatted(obj->json);
+
+	if (obj->encoded_data.ptr == NULL) {
+		return -ENOMEM;
+	}
+
+	obj->encoded_data.len = strlen(obj->encoded_data.ptr);
+
+	return 0;
+}
+
+int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
+				  const struct nrf_cloud_gnss_data * const gnss)
+{
+	if (!gnss || !obj) {
+		return -EINVAL;
+	}
+	if (!NRF_CLOUD_OBJ_TYPE_VALID(obj)) {
+		return -EFTYPE;
+	}
+
+	int ret;
+
+	/* Add the app ID, message type, and timestamp */
+	ret = nrf_cloud_obj_msg_init(obj, NRF_CLOUD_JSON_APPID_VAL_GNSS, NRF_CLOUD_JSON_MSG_TYPE_VAL_DATA);
+	if (ret) {
+		goto cleanup;
+	}
+
+	if (gnss->ts_ms > NRF_CLOUD_NO_TIMESTAMP) {
+		/* Add timestamp to message object */
+		ret = nrf_cloud_obj_ts_add(obj, gnss->ts_ms);
+		if (ret) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
+	}
+
+	/* Add the specified GNSS data type */
+	switch (gnss->type) {
+	case NRF_CLOUD_GNSS_TYPE_MODEM_PVT:
+	case NRF_CLOUD_GNSS_TYPE_PVT:
+		NRF_CLOUD_OBJ_JSON_DEFINE(pvt_obj);
+
+		/* Encode PVT data */
+		if (gnss->type == NRF_CLOUD_GNSS_TYPE_PVT) {
+			ret = nrf_cloud_obj_pvt_json_encode(&pvt_obj, &gnss->pvt);
+		} else {
+#if defined(CONFIG_NRF_MODEM)
+			ret = nrf_cloud_obj_modem_pvt_json_encode(&pvt_obj, gnss->mdm_pvt);
+#else
+			ret = -ENOSYS;
+#endif
+		}
+
+		if (ret) {
+			nrf_cloud_obj_free(&pvt_obj);
+			goto cleanup;
+		}
+
+		/* Add the data object to the message */
+		ret = nrf_cloud_obj_object_add(obj, NRF_CLOUD_JSON_DATA_KEY, &pvt_obj, false);
+		if (ret) {
+			ret = ENOMEM;
+			goto cleanup;
+		}
+
+		break;
+
+	case NRF_CLOUD_GNSS_TYPE_MODEM_NMEA:
+	case NRF_CLOUD_GNSS_TYPE_NMEA:
+		const char *nmea = NULL;
+
+		if (gnss->type == NRF_CLOUD_GNSS_TYPE_MODEM_NMEA) {
+#if defined(CONFIG_NRF_MODEM)
+			if (gnss->mdm_nmea) {
+				nmea = gnss->mdm_nmea->nmea_str;
+			}
+#endif
+		} else {
+			nmea = gnss->nmea.sentence;
+		}
+
+		if (nmea == NULL) {
+			ret = -EINVAL;
+			goto cleanup;
+		}
+
+		if (memchr(nmea, '\0', NRF_MODEM_GNSS_NMEA_MAX_LEN) == NULL) {
+			ret = -EFBIG;
+			goto cleanup;
+		}
+
+		/* Add the NMEA sentence to the message */
+		ret = nrf_cloud_obj_str_add(obj, NRF_CLOUD_JSON_DATA_KEY, nmea, false);
+		if (ret) {
+			ret = -ENOMEM;
+			goto cleanup;
+		}
+
+		break;
+	default:
+		ret = -EPROTO;
+		goto cleanup;
+	}
+
+	return 0;
+
+cleanup:
+	/* On failure, remove any items added to the provided object */
+	nrf_cloud_obj_free(obj);
+	return ret;
+}
+
+int nrf_cloud_obj_pvt_json_encode(struct nrf_cloud_obj *const pvt_out,
+	const struct nrf_cloud_gnss_pvt * const pvt)
+{
+	if (!pvt || !pvt_out) {
+		return -EINVAL;
+	}
+	if (pvt_out->type != NRF_CLOUD_OBJ_TYPE_JSON) {
+		return -EFTYPE;
+	}
+
+	int err;
+	bool initd = false;
+
+	if (!pvt_out->json) {
+		err = nrf_cloud_obj_init(pvt_out);
+		if (err) {
+			return -ENOMEM;
+		}
+		initd = true;
+	}
+
+	err = nrf_cloud_pvt_data_encode(pvt, pvt_out->json);
+
+	if (err && initd) {
+		(void)nrf_cloud_obj_free(pvt_out);
+	}
+
+	return err;
+}
+
+int nrf_cloud_obj_modem_pvt_json_encode(struct nrf_cloud_obj *const pvt_out,
+	const struct nrf_modem_gnss_pvt_data_frame * const mdm_pvt)
+{
+#if defined(CONFIG_NRF_MODEM)
+	if (!pvt_out) {
+		return -EINVAL;
+	}
+	if (pvt_out->type != NRF_CLOUD_OBJ_TYPE_JSON) {
+		return -EFTYPE;
+	}
+
+	int err;
+	bool initd = false;
+
+	if (!pvt_out->json) {
+		err = nrf_cloud_obj_init(pvt_out);
+		if (err) {
+			return -ENOMEM;
+		}
+		initd = true;
+	}
+
+	err = nrf_cloud_modem_pvt_data_encode(mdm_pvt, pvt_out->json);
+
+	if (err && initd) {
+		(void)nrf_cloud_obj_free(pvt_out);
+	}
+
+	return err;
+#else
+	ARG_UNUSED(pvt_out);
+	ARG_UNUSED(mdm_pvt);
+	return -ENOSYS;
+#endif
 }

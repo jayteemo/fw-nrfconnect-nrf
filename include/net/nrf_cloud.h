@@ -21,6 +21,8 @@
 #endif
 #include <net/nrf_cloud_os.h>
 
+//#include <zcbor_common.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -367,6 +369,41 @@ struct nrf_cloud_sensor_data {
 	 */
 	uint16_t tag;
 };
+enum nrf_cloud_obj_type {
+	NRF_CLOUD_OBJ_TYPE__UNDEFINED,
+
+	NRF_CLOUD_OBJ_TYPE_JSON,
+	NRF_CLOUD_OBJ_TYPE_CBOR,
+
+	NRF_CLOUD_OBJ_TYPE__LAST,
+};
+
+/** @brief Object used for building nRF Cloud messages. */
+struct nrf_cloud_obj {
+
+	/* TBD: not sure if the union is necessary/useful yet,
+	 * so right now we just have a wrapper around cJSON
+	 */
+	enum nrf_cloud_obj_type type;
+	union {
+		cJSON *json;
+		void *cbor; //struct zcbor_state_t cbor;
+	};
+
+	struct nrf_cloud_data encoded_data;
+};
+
+#define NRF_CLOUD_OBJ_JSON_DEFINE(name) \
+	struct nrf_cloud_obj name = { .type = NRF_CLOUD_OBJ_TYPE_JSON, .json = NULL, \
+				      .encoded_data = { .ptr = NULL, .len = 0 } }
+
+#define NRF_CLOUD_OBJ_CBOR_DEFINE(name) \
+	struct nrf_cloud_obj name = { .type = NRF_CLOUD_OBJ_TYPE_CBOR, \
+				      .encoded_data = { .ptr = NULL, .len = 0 } }
+
+#define NRF_CLOUD_OBJ_TYPE_VALID(obj_ptr) \
+	(bool)((obj->type > NRF_CLOUD_OBJ_TYPE__UNDEFINED) && \
+	       (obj->type < NRF_CLOUD_OBJ_TYPE__LAST))
 
 /** @brief Asynchronous events received from the module. */
 struct nrf_cloud_evt {
@@ -382,8 +419,11 @@ struct nrf_cloud_evt {
 
 /** @brief Structure used to send pre-encoded data to nRF Cloud. */
 struct nrf_cloud_tx_data {
-	/** Data that is to be published. */
+	/** Data object to be encoded and published */
+	struct nrf_cloud_obj *obj;
+	/** Data that is to be published if an object is not provided */
 	struct nrf_cloud_data data;
+
 	/** Endpoint topic type published to. */
 	enum nrf_cloud_topic_type topic_type;
 	/** Quality of Service of the message. */
@@ -962,6 +1002,65 @@ bool nrf_cloud_fota_is_type_enabled(const enum nrf_cloud_fota_type type);
  */
 int nrf_cloud_gnss_msg_json_encode(const struct nrf_cloud_gnss_data * const gnss,
 				   cJSON * const gnss_msg_obj);
+
+int nrf_cloud_obj_pvt_json_encode(struct nrf_cloud_obj *const pvt_out,
+	const struct nrf_cloud_gnss_pvt * const pvt);
+
+int nrf_cloud_obj_modem_pvt_json_encode(struct nrf_cloud_obj *const pvt_out,
+	const struct nrf_modem_gnss_pvt_data_frame * const mdm_pvt);
+
+/* Decode data received from nRF Cloud */
+int nrf_cloud_obj_input_decode(struct nrf_cloud_obj *const obj, const struct nrf_cloud_data *const input);
+/* Check for a desired app ID and/or message type */
+int nrf_cloud_obj_msg_check(const struct nrf_cloud_obj *const obj, const char *const app_id,
+			    const char *const msg_type);
+/* Get the string value using the provided key */
+int nrf_cloud_obj_str_get(const struct nrf_cloud_obj *const obj, const char *const key,
+			  char **str);
+
+/* Initialize a message object: app_id req'd, msg_type can be NULL */
+int nrf_cloud_obj_msg_init(struct nrf_cloud_obj *const obj, const char *const app_id,
+			   const char *const msg_type);
+/* Initialize a bulk container object */
+int nrf_cloud_obj_bulk_init(struct nrf_cloud_obj *const bulk);
+/* Initialize an object */
+int nrf_cloud_obj_init(struct nrf_cloud_obj *const obj);
+/* Free an object */
+int nrf_cloud_obj_free(struct nrf_cloud_obj *const obj);
+/* Add an object to the bulk container */
+int nrf_cloud_obj_bulk_add(struct nrf_cloud_obj *const bulk, struct nrf_cloud_obj *const obj);
+
+/* Add timestamp */
+int nrf_cloud_obj_ts_add(struct nrf_cloud_obj *const obj, const int64_t time_ms);
+
+/* For simplicity, require all key values be constant */
+int nrf_cloud_obj_num_add(struct nrf_cloud_obj *const obj, const char *const key,
+			  const double val, const bool data_child);
+int nrf_cloud_obj_str_add(struct nrf_cloud_obj *const obj, const char *const key,
+			  const char *const val, const bool data_child);
+int nrf_cloud_obj_bool_add(struct nrf_cloud_obj *const obj, const char *const key,
+			   const bool val, const bool data_child);
+int nrf_cloud_obj_null_add(struct nrf_cloud_obj *const obj, const char *const key,
+			   const bool data_child);
+int nrf_cloud_obj_object_add(struct nrf_cloud_obj *const obj, const char *const key,
+			     struct nrf_cloud_obj *const obj_to_add, const bool data_child);
+
+int nrf_cloud_obj_int_array_add(struct nrf_cloud_obj *const obj, const char *const key,
+				const uint32_t ints[], const uint32_t ints_cnt,
+				const bool data_child);
+int nrf_cloud_obj_str_array_add(struct nrf_cloud_obj *const obj, const char *const key,
+				const char *const strs[], const uint32_t strs_cnt,
+				const bool data_child);
+
+/* Encode to nrf_cloud_data */
+int nrf_cloud_obj_cloud_encode(struct nrf_cloud_obj *const obj);
+/* Free encoded data */
+int nrf_cloud_obj_cloud_encoded_free(struct nrf_cloud_obj *const obj);
+
+/* Create a GNSS message object */
+int nrf_cloud_obj_gnss_msg_create(struct nrf_cloud_obj *const obj,
+				  const struct nrf_cloud_gnss_data * const gnss);
+
 /** @} */
 
 #ifdef __cplusplus

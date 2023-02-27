@@ -204,16 +204,6 @@ cJSON *json_create_req_obj(const char *const app_id, const char *const msg_type)
 /** @brief Parse received REST data for an nRF Cloud error code */
 int nrf_cloud_rest_error_decode(const char *const buf, enum nrf_cloud_error *const err);
 
-/** @brief Encode PVT data to be sent to nRF Cloud */
-int nrf_cloud_pvt_data_encode(const struct nrf_cloud_gnss_pvt * const pvt,
-			      cJSON * const pvt_data_obj);
-
-#if defined(CONFIG_NRF_MODEM)
-/** @brief Encode a modem PVT data frame to be sent to nRF Cloud */
-int nrf_cloud_modem_pvt_data_encode(const struct nrf_modem_gnss_pvt_data_frame	* const mdm_pvt,
-				    cJSON * const pvt_data_obj);
-#endif
-
 /** @brief Replace legacy c2d topic with wilcard topic string.
  * Return true, if the topic was modified; otherwise false.
  */
