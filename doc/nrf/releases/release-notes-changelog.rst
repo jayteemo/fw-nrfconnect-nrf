@@ -172,7 +172,11 @@ Bluetooth mesh samples
 nRF9160 samples
 ---------------
 
-|no_changes_yet_note|
+* :ref:`nrf_cloud_mqtt_multi_service` sample:
+
+  * Updated:
+
+    * The :c:struct:`nrf_cloud_obj` structure and associated functions are now used to encode and decode nRF Cloud data.
 
 Trusted Firmware-M (TF-M) samples
 ---------------------------------
