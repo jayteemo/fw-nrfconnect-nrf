@@ -770,32 +770,6 @@ int nrf_cloud_process(void);
 int nrf_cloud_modem_fota_completed(const bool fota_success);
 
 /**
- * @brief Add service info into the provided cJSON object.
- *
- * @param[in]     svc_inf     Service info to add.
- * @param[in,out] svc_inf_obj cJSON object to which service info will be added.
- *
- * @retval 0 If successful.
- * @return A negative value indicates an error.
- */
-int nrf_cloud_service_info_json_encode(const struct nrf_cloud_svc_info * const svc_inf,
-				       cJSON * const svc_inf_obj);
-
-/**
- * @brief Add modem info into the provided cJSON object.
- *
- * @note To add modem info, CONFIG_MODEM_INFO must be enabled.
- *
- * @param[in]     mod_inf     Modem info to add.
- * @param[in,out] mod_inf_obj cJSON object to which modem info will be added.
- *
- * @retval 0 If successful.
- * @return A negative value indicates an error.
- */
-int nrf_cloud_modem_info_json_encode(const struct nrf_cloud_modem_info * const mod_inf,
-				     cJSON * const mod_inf_obj);
-
-/**
  * @brief Function to retrieve the current device ID.
  *
  * @param[in,out] id_buf Buffer to receive the device ID.
