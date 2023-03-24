@@ -40,3 +40,8 @@ zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_REST
 	src/nrf_cloud_rest.c)
 zephyr_include_directories(./include)
+
+# Include nRF modem library header file for PC builds.
+if (CONFIG_BOARD_QEMU_X86 OR CONFIG_BOARD_NATIVE_POSIX)
+        target_include_directories(${PROJECT_NAME} PUBLIC ${NRFXLIB_DIR}/nrf_modem/include/)
+endif()
