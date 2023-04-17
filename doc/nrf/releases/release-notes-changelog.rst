@@ -178,6 +178,12 @@ nRF9160 samples
 
     * The :c:struct:`nrf_cloud_obj` structure and associated functions are now used to encode and decode nRF Cloud data.
 
+* :ref:`modem_shell_application` sample:
+
+  * Updated:
+
+    * The sample now uses the :ref:`lib_nrf_cloud` library function :c:func:`nrf_cloud_obj_pgps_request_create` to create a P-GPS request.
+
 Trusted Firmware-M (TF-M) samples
 ---------------------------------
 
