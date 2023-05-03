@@ -39,7 +39,8 @@ LOG_MODULE_REGISTER(nrf_cloud_rest_fota, CONFIG_NRF_CLOUD_REST_FOTA_SAMPLE_LOG_L
 /* FOTA job status strings that provide additional details for nrf_cloud_fota_status values */
 const char * const FOTA_STATUS_DETAILS_TIMEOUT = "Download did not complete in the allotted time";
 const char * const FOTA_STATUS_DETAILS_DL_ERR  = "Error occurred while downloading the file";
-const char * const FOTA_STATUS_DETAILS_MDM_REJ = "Modem rejected the update; invalid delta?";
+const char * const FOTA_STATUS_DETAILS_MDM_REJ = "Modem rejected the update";
+const char * const FOTA_STATUS_DETAILS_MDM_DELTA_REJ = "Modem rejected the update; invalid delta?";
 const char * const FOTA_STATUS_DETAILS_MDM_ERR = "Modem was unable to apply the update";
 const char * const FOTA_STATUS_DETAILS_MCU_REJ = "Device rejected the update";
 const char * const FOTA_STATUS_DETAILS_MCU_ERR = "Update could not be validated";
@@ -166,8 +167,10 @@ static void http_fota_dl_handler(const struct fota_download_evt *evt)
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
 		LOG_INF("FOTA download finished");
-		fota_status = NRF_CLOUD_FOTA_SUCCEEDED;
-		k_sem_give(&fota_download_sem);
+		if (fota_status == NRF_CLOUD_FOTA_DOWNLOADING) {
+			fota_status = NRF_CLOUD_FOTA_SUCCEEDED;
+			k_sem_give(&fota_download_sem);
+		}
 		break;
 	case FOTA_DOWNLOAD_EVT_ERASE_PENDING:
 		LOG_INF("FOTA download erase pending");
@@ -183,13 +186,19 @@ static void http_fota_dl_handler(const struct fota_download_evt *evt)
 		fota_status = NRF_CLOUD_FOTA_FAILED;
 		fota_status_details = FOTA_STATUS_DETAILS_DL_ERR;
 
-		if (evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE) {
+		if (evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE ||
+		    evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INTERNAL) {
+
 			fota_status = NRF_CLOUD_FOTA_REJECTED;
-			if (nrf_cloud_fota_is_type_modem(job.type)) {
+
+			if (job.type == NRF_CLOUD_FOTA_MODEM_DELTA) {
+				fota_status_details = FOTA_STATUS_DETAILS_MDM_DELTA_REJ;
+			} else if (job.type == NRF_CLOUD_FOTA_MODEM_DELTA) {
 				fota_status_details = FOTA_STATUS_DETAILS_MDM_REJ;
 			} else {
 				fota_status_details = FOTA_STATUS_DETAILS_MCU_REJ;
 			}
+
 		} else if (evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_TYPE_MISMATCH) {
 			fota_status_details = FOTA_STATUS_DETAILS_MISMATCH;
 		}
@@ -611,6 +620,9 @@ static int update_job_status(void)
 		}
 	}
 
+	/* Reset status */
+	fota_status = NRF_CLOUD_FOTA_QUEUED;
+
 	return err;
 }
 
@@ -644,6 +656,8 @@ static int start_download(void)
 		return -ENODEV;
 	}
 
+	fota_status = NRF_CLOUD_FOTA_DOWNLOADING;
+
 	return 0;
 }
 
@@ -652,7 +666,12 @@ static int wait_for_download(void)
 	int err = k_sem_take(&fota_download_sem,
 			K_MINUTES(CONFIG_REST_FOTA_DL_TIMEOUT_MIN));
 	if (err == -EAGAIN) {
-		fota_download_cancel();
+
+		fota_status = NRF_CLOUD_FOTA_TIMED_OUT;
+		fota_status_details = FOTA_STATUS_DETAILS_TIMEOUT;
+
+		(void)fota_download_cancel();
+
 		return -ETIMEDOUT;
 	} else if (err != 0) {
 		LOG_ERR("k_sem_take error: %d", err);
@@ -730,6 +749,7 @@ static void error_reboot(void)
 int main(void)
 {
 	int err;
+	bool report_failure = false;
 
 	LOG_INF("nRF Cloud REST FOTA Sample, version: %s",
 		CONFIG_REST_FOTA_SAMPLE_VERSION);
@@ -776,7 +796,9 @@ int main(void)
 		}
 
 		/* If a FOTA job is in progress, handle it first */
-		if (validate_in_progress_job()) {
+		if (report_failure || validate_in_progress_job()) {
+			report_failure = false;
+
 			err = update_job_status();
 			if (err) {
 				error_reboot();
@@ -815,8 +837,8 @@ int main(void)
 		if (err == -ETIMEDOUT) {
 			LOG_ERR("Timeout; FOTA download took longer than %d minutes",
 				CONFIG_REST_FOTA_DL_TIMEOUT_MIN);
-			fota_status = NRF_CLOUD_FOTA_TIMED_OUT;
-			fota_status_details = FOTA_STATUS_DETAILS_TIMEOUT;
+		} else if (err == -ENOLCK) {
+			error_reboot();
 		}
 
 		/* On download success, save job info and reboot to complete installation.
@@ -827,11 +849,6 @@ int main(void)
 		}
 
 		/* Job was not successful, send status to nRF Cloud */
-		err = update_job_status();
-		if (err) {
-			error_reboot();
-		}
-
-		wait_after_job_update();
+		report_failure = true;
 	}
 }
