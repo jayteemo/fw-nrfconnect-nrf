@@ -40,6 +40,34 @@ enum nrf_cloud_rcv_topic {
 	NRF_CLOUD_RCV_TOPIC_UNKNOWN
 };
 
+enum nrf_cloud_download_type {
+	NRF_CLOUD_DL_TYPE_NONE,
+	NRF_CLOUD_DL_TYPE_FOTA,
+	NRF_CLOUD_DL_TYPE_DL_CLIENT
+};
+
+#include <net/download_client.h>
+
+struct nrf_cloud_download_fota {
+	enum dfu_target_image_type expected_type;
+};
+
+struct nrf_cloud_download_data {
+	enum nrf_cloud_download_type type;
+
+	const char *host;
+	const char *path;
+
+	struct download_client_cfg dl_cfg;
+
+	union {
+		struct nrf_cloud_download_fota fota;
+		struct download_client *dlc;
+	};
+};
+
+int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl_data);
+
 /** @brief Initialize the codec used encoding the data to the cloud. */
 int nrf_cloud_codec_init(struct nrf_cloud_os_mem_hooks *hooks);
 

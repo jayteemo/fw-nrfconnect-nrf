@@ -994,10 +994,26 @@ static int start_job(struct nrf_cloud_fota_job *const job)
 		return ret;
 	}
 
+
+	struct nrf_cloud_download_data dl = {
+		.type = NRF_CLOUD_DL_TYPE_FOTA,
+		.host = job->info.host,
+		.path = job->info.path,
+		.dl_cfg = {
+			.sec_tag = CONFIG_NRF_CLOUD_SEC_TAG,
+			.pdn_id = 0,
+			.frag_size_override = CONFIG_NRF_CLOUD_FOTA_DOWNLOAD_FRAGMENT_SIZE,
+		},
+		.fota = { .expected_type = img_type }
+	};
+
+	ret = nrf_cloud_download_start(&dl);
+/*
 	ret = fota_download_start_with_image_type(job->info.host,
 		job->info.path, CONFIG_NRF_CLOUD_SEC_TAG, 0,
 		CONFIG_NRF_CLOUD_FOTA_DOWNLOAD_FRAGMENT_SIZE,
 		img_type);
+*/
 	if (ret) {
 		LOG_ERR("Failed to start FOTA download: %d", ret);
 		job->status = NRF_CLOUD_FOTA_FAILED;

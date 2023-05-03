@@ -15,6 +15,7 @@
 #include "nrf_cloud_transport.h"
 #include "nrf_cloud_pgps_schema_v1.h"
 #include "nrf_cloud_pgps_utils.h"
+#include "nrf_cloud_codec_internal.h"
 
 #include <zephyr/logging/log.h>
 
@@ -468,24 +469,38 @@ int npgps_download_start(const char *host, const char *file, int sec_tag,
 	int err;
 
 	socket_retries_left = SOCKET_RETRIES;
-
+/*
 	struct download_client_cfg config = {
 		.sec_tag = sec_tag,
 		.pdn_id = pdn_id,
 		.frag_size_override = fragment_size,
 		.set_tls_hostname = (sec_tag != -1),
 	};
+*/
+	struct nrf_cloud_download_data dl = {
+		.type = NRF_CLOUD_DL_TYPE_DL_CLIENT,
+		.host = host,
+		.path = file,
+		.dl_cfg = {
+			.sec_tag = sec_tag,
+			.pdn_id = pdn_id,
+			.frag_size_override = fragment_size,
+			.set_tls_hostname = (sec_tag != -1),
+		},
+		.dlc = &dlc
+	};
 
-	err = download_client_connect(&dlc, host, &config);
+	err = nrf_cloud_download_start(&dl);
+	//err = download_client_connect(&dlc, host, &config);
 	if (err != 0) {
 		return err;
 	}
 
-	err = download_client_start(&dlc, file, 0);
-	if (err != 0) {
-		download_client_disconnect(&dlc);
-		return err;
-	}
+	//err = download_client_start(&dlc, file, 0);
+	//if (err != 0) {
+	//	download_client_disconnect(&dlc);
+	//	return err;
+	//}
 
 	return 0;
 }

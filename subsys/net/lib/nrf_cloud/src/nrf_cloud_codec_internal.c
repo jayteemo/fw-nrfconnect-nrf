@@ -3026,3 +3026,59 @@ int nrf_cloud_json_to_url_params_convert(char *const buf, const size_t buf_size,
 
 	return 0;
 }
+
+#include <net/download_client.h>
+#include <net/fota_download.h>
+static struct nrf_cloud_download_data active_dl = { .type = NRF_CLOUD_DL_TYPE_NONE };
+
+int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl_data)
+{
+	if (!dl_data || !dl_data->path) {
+		return -EINVAL;
+	}
+
+	int ret;
+	bool start = (active_dl.type == NRF_CLOUD_DL_TYPE_NONE);
+
+	/* FOTA has priority*/
+	if ((active_dl.type != NRF_CLOUD_DL_TYPE_FOTA) &&
+	    (dl_data->type == NRF_CLOUD_DL_TYPE_FOTA)) {
+		start = true;
+	}
+
+	if (!start) {
+		return -EBUSY;
+	}
+
+	if (active_dl.type == NRF_CLOUD_DL_TYPE_DL_CLIENT) {
+		if (active_dl.dlc == NULL) {
+			return -EINVAL;
+		}
+		LOG_INF("Stopping active download, incoming FOTA update download has priority");
+		ret = download_client_disconnect(active_dl.dlc);
+		k_sleep(K_MSEC(100));
+		if (ret) {
+			LOG_ERR("download_client_disconnect() failed, error %d", ret);
+		}
+	}
+
+	//memcpy(&active_dl, dl_data, sizeof(active_dl));
+	active_dl = *dl_data;
+
+	if (active_dl.type == NRF_CLOUD_DL_TYPE_FOTA) {
+		ret = fota_download_start_with_image_type(active_dl.host, active_dl.path,
+							  active_dl.dl_cfg.sec_tag,
+							  active_dl.dl_cfg.pdn_id,
+							  active_dl.dl_cfg.frag_size_override,
+							  active_dl.fota.expected_type);
+	} else if (active_dl.type == NRF_CLOUD_DL_TYPE_DL_CLIENT) {
+		ret = download_client_connect(active_dl.dlc,
+					      active_dl.host,
+					      &active_dl.dl_cfg);
+		ret = download_client_start(active_dl.dlc, active_dl.path, 0);
+	} else {
+
+	}
+
+	return ret;
+}
