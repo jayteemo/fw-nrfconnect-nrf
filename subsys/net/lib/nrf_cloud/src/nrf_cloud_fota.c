@@ -681,9 +681,13 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 
 	switch (evt->id) {
 	case FOTA_DOWNLOAD_EVT_FINISHED:
-		LOG_INF("Download complete");
-		if (current_fota.status == NRF_CLOUD_FOTA_DOWNLOADING &&
-		    current_fota.sent_dl_progress != 100) {
+		LOG_INF("FOTA download finished");
+
+		if (current_fota.status != NRF_CLOUD_FOTA_DOWNLOADING) {
+			break;
+		}
+
+		if (current_fota.sent_dl_progress != 100) {
 			/* Send 100% downloaded update */
 			current_fota.dl_progress = 100;
 			current_fota.sent_dl_progress = 100;
@@ -722,7 +726,8 @@ static void http_fota_handler(const struct fota_download_evt *evt)
 		current_fota.status = NRF_CLOUD_FOTA_FAILED;
 
 		if (last_fota_dl_evt == FOTA_DOWNLOAD_EVT_ERASE_DONE ||
-		    evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE) {
+		    evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INVALID_UPDATE ||
+		    evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_INTERNAL) {
 			current_fota.status = NRF_CLOUD_FOTA_REJECTED;
 		} else if (evt->cause == FOTA_DOWNLOAD_ERROR_CAUSE_TYPE_MISMATCH) {
 			current_fota.error = NRF_CLOUD_FOTA_ERROR_MISMATCH;
