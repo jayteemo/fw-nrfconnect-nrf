@@ -46,15 +46,20 @@ enum nrf_cloud_enc_src {
 	NRF_CLOUD_ENC_SRC_PRE_ENCODED,
 };
 
+struct nrf_cloud_cbor {
+	uint_fast32_t states;
+	/* TODO:
+	struct zcbor_state_t *zcb;
+	*/
+};
+
 /** @brief Object used for building nRF Cloud messages. */
 struct nrf_cloud_obj {
 
 	enum nrf_cloud_obj_type type;
 	union {
 		cJSON *json;
-		/* TODO:
-		 * struct zcbor_state_t cbor;
-		 */
+		struct nrf_cloud_cbor cbor;
 	};
 
 	/** Source of encoded data */
@@ -80,10 +85,11 @@ struct nrf_cloud_obj {
  *
  * @param _name	Name of the object.
  */
-#define NRF_CLOUD_OBJ_CBOR_DEFINE(_name) \
+#define NRF_CLOUD_OBJ_CBOR_DEFINE(_name, _states) \
 	struct nrf_cloud_obj _name = { .type = NRF_CLOUD_OBJ_TYPE_CBOR, \
 				       .enc_src = NRF_CLOUD_ENC_SRC_NONE, \
-				       .encoded_data = { .ptr = NULL, .len = 0 } }
+				       .encoded_data = { .ptr = NULL, .len = 0 } \
+				       .cbor = { .states = _states } }
 
 /** @brief Define an nRF Cloud codec object of the specified type.
  *
