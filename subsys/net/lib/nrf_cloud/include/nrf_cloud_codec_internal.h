@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
+#include <zephyr/bluetooth/bluetooth.h>
 #include <net/nrf_cloud_defs.h>
 #include <net/nrf_cloud.h>
 #include <net/nrf_cloud_alert.h>
@@ -28,6 +29,7 @@
 #include "nrf_cloud_fsm.h"
 #include "nrf_cloud_agps_schema_v1.h"
 #include "nrf_cloud_log_internal.h"
+#include "nrf_cloud_fota.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -134,15 +136,52 @@ int nrf_cloud_dev_status_json_encode(const struct nrf_cloud_device_status *const
 /** @brief Free memory allocated by @ref nrf_cloud_shadow_dev_status_encode */
 void nrf_cloud_device_status_free(struct nrf_cloud_data *status);
 
-/** @brief Free memory allocated by @ref nrf_cloud_rest_fota_execution_decode */
+/** @brief Free memory allocated by @ref nrf_cloud_rest_fota_execution_decode or
+ * @ref nrf_cloud_fota_job_decode
+ */
 void nrf_cloud_fota_job_free(struct nrf_cloud_fota_job_info *const job);
+
+/** @brief Create an nRF Cloud MQTT FOTA job update payload which is to be sent
+ * on the FOTA jobs update topic.
+ * If successful, memory is allocated for the provided object.
+ * The @ref nrf_cloud_obj_free function should be called when finished with the object.
+ */
+int nrf_cloud_obj_fota_job_update_create(struct nrf_cloud_obj *const obj,
+					 const struct nrf_cloud_fota_job * const update);
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_BLE_DEVICES)
+/** @brief Create an nRF Cloud MQTT BLE FOTA job request payload which is to be sent
+ * on the FOTA jobs request topic.
+ * If successful, memory is allocated for the provided object.
+ * The @ref nrf_cloud_obj_free function should be called when finished with the object.
+ */
+int nrf_cloud_obj_fota_ble_job_request_create(struct nrf_cloud_obj *const obj,
+					       const bt_addr_t *const ble_id);
+
+/** @brief Create an nRF Cloud MQTT BLE FOTA job update payload which is to be sent
+ * on the BLE FOTA jobs update topic.
+ * If successful, memory is allocated for the provided object.
+ * The @ref nrf_cloud_obj_free function should be called when finished with the object.
+ */
+int nrf_cloud_obj_fota_ble_job_update_create(struct nrf_cloud_obj *const obj,
+					     const struct nrf_cloud_fota_ble_job *const ble_job,
+					     const enum nrf_cloud_fota_status status);
+#endif
 
 /** @brief Parse the response from a FOTA execution request REST call.
  * If successful, memory will be allocated for the data in @ref nrf_cloud_fota_job_info.
  * The user is responsible for freeing the memory by calling @ref nrf_cloud_fota_job_free.
  */
 int nrf_cloud_rest_fota_execution_decode(const char *const response,
-					struct nrf_cloud_fota_job_info *const job);
+					 struct nrf_cloud_fota_job_info *const job);
+
+/** @brief Parse the data received on the MQTT FOTA topic.
+ * Memory will be allocated for the data in @ref nrf_cloud_fota_job_info.
+ * The user is responsible for freeing the memory by calling @ref nrf_cloud_fota_job_free.
+ */
+int nrf_cloud_fota_job_decode(struct nrf_cloud_fota_job_info *const job_info,
+			      bt_addr_t *const ble_id,
+			      const struct nrf_cloud_data *const input);
 
 /** @brief Add cellular network info to the provided cJSON object.
  * If the cell_inf parameter is NULL, the codec will obtain the current network
@@ -184,8 +223,16 @@ bool nrf_cloud_disconnection_request_decode(const char *const buf);
 /** @brief Obtain a pointer to the string at the specified index in the cJSON array.
  * No memory is allocated, pointer is valid as long as the cJSON array is valid.
  */
-int get_string_from_array(const cJSON * const array, const int index,
-			  char **string_out);
+int json_array_str_get(const cJSON * const array, const int index, char **string_out);
+
+/** @brief Obtain the integer value at the specified index in the cJSON array. */
+int json_array_num_get(const cJSON *const array, const int index, int *number_out);
+
+/** @brief Add a string value to the provided cJSON array. */
+int json_array_str_add(cJSON *const array, const char *const string);
+
+/** @brief Add an integer value to the provided cJSON array. */
+int json_array_num_add(cJSON *const array, const int number);
 
 /** @brief Obtain a pointer to the string of the specified key in the cJSON object.
  * No memory is allocated, pointer is valid as long as the cJSON object is valid.
