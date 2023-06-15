@@ -314,7 +314,8 @@ static int agps_send_to_modem(struct nrf_cloud_apgs_element *agps_data)
 		return send_to_modem(&utc, sizeof(utc),
 				     NRF_MODEM_GNSS_AGPS_UTC_PARAMETERS);
 	}
-	case NRF_CLOUD_AGPS_EPHEMERIDES: {
+	case NRF_CLOUD_AGPS_EPHEMERIDES:
+	case NRF_CLOUD_AGNSS_QZSS_EPHEMERIDES: { // TODO: use same ephe mask?
 		struct nrf_modem_gnss_agps_data_ephemeris ephemeris;
 
 		processed.sv_mask_ephe |= (1 << (agps_data->ephemeris->sv_id - 1));
@@ -327,18 +328,22 @@ static int agps_send_to_modem(struct nrf_cloud_apgs_element *agps_data)
 		}
 #endif
 		copy_ephemeris(&ephemeris, agps_data);
-		LOG_DBG("A-GPS type: NRF_CLOUD_AGPS_EPHEMERIDES %d",
+
+		LOG_DBG("A-GNSS type: %s EPHEMERIDES %d",
+			(agps_data->type == NRF_CLOUD_AGPS_EPHEMERIDES) ? "GPS" : "QZSS",
 			agps_data->ephemeris->sv_id);
 
 		return send_to_modem(&ephemeris, sizeof(ephemeris),
 				     NRF_MODEM_GNSS_AGPS_EPHEMERIDES);
 	}
-	case NRF_CLOUD_AGPS_ALMANAC: {
+	case NRF_CLOUD_AGPS_ALMANAC:
+	case NRF_CLOUD_AGNSS_QZSS_ALMANAC: { // TODO: use same alm mask?
 		struct nrf_modem_gnss_agps_data_almanac almanac;
 
 		processed.sv_mask_alm |= (1 << (agps_data->almanac->sv_id - 1));
 		copy_almanac(&almanac, agps_data);
-		LOG_DBG("A-GPS type: NRF_CLOUD_AGPS_ALMANAC %d",
+		LOG_DBG("A-GNSS type: %s ALMANAC %d",
+			(agps_data->type == NRF_CLOUD_AGPS_ALMANAC) ? "GPS" : "QZSS",
 			agps_data->almanac->sv_id);
 
 		return send_to_modem(&almanac, sizeof(almanac),
@@ -395,6 +400,14 @@ static int agps_send_to_modem(struct nrf_cloud_apgs_element *agps_data)
 		return send_to_modem(agps_data->integrity,
 				     sizeof(*(agps_data->integrity)),
 				     NRF_MODEM_GNSS_AGPS_INTEGRITY);
+	case NRF_CLOUD_AGNSS_QZSS_INTEGRITY:
+		LOG_DBG("A-GNSS type: NRF_CLOUD_AGNSS_QZSS_INTEGRITY");
+
+		processed.data_flags |= NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST;
+		// TODO: use new struct?
+		return send_to_modem(agps_data->integrity,
+				     sizeof(*(agps_data->integrity)),
+				     NRF_MODEM_GNSS_AGNSS_INTEGRITY);
 	default:
 		LOG_WRN("Unknown AGPS data type: %d", agps_data->type);
 		break;
@@ -440,10 +453,12 @@ static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
 		len += sizeof(struct nrf_cloud_agps_utc);
 		break;
 	case NRF_CLOUD_AGPS_EPHEMERIDES:
+	case NRF_CLOUD_AGNSS_QZSS_EPHEMERIDES:
 		element->ephemeris = (struct nrf_cloud_agps_ephemeris *)(buf + len);
 		len += sizeof(struct nrf_cloud_agps_ephemeris);
 		break;
 	case NRF_CLOUD_AGPS_ALMANAC:
+	case NRF_CLOUD_AGNSS_QZSS_ALMANAC:
 		element->almanac = (struct nrf_cloud_agps_almanac *)(buf + len);
 		len += sizeof(struct nrf_cloud_agps_almanac);
 		break;
@@ -477,6 +492,13 @@ static size_t get_next_agps_element(struct nrf_cloud_apgs_element *element,
 			(struct nrf_cloud_agps_integrity *)(buf + len);
 		len += sizeof(struct nrf_cloud_agps_integrity);
 		break;
+	case NRF_CLOUD_AGNSS_QZSS_INTEGRITY:
+		// TODO: use new struct?
+		element->integrity =
+			(struct nrf_cloud_agps_integrity *)(buf + len);
+		len += sizeof(struct nrf_cloud_agps_integrity);
+		break;
+
 	default:
 		LOG_DBG("Unhandled A-GPS data type: %d", element->type);
 		elements_left_to_process = 0;

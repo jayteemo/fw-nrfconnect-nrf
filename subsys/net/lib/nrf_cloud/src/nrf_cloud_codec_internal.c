@@ -2606,6 +2606,8 @@ static int agps_types_array_json_encode(cJSON * const obj,
 		    (types[i] > NRF_CLOUD_AGPS__LAST)) {
 			LOG_INF("Ignoring unknown A-GPS type: %d", types[i]);
 			continue;
+		} else if (types[i] == NRF_CLOUD_AGPS__RSVD_PREDICTION_DATA) {
+			continue;
 		}
 
 		cJSON *num = cJSON_CreateNumber(types[i]);
@@ -2766,9 +2768,9 @@ int nrf_cloud_agps_type_array_get(const struct nrf_modem_gnss_agps_data_frame * 
 	if (!request || !array || !array_size) {
 		return -EINVAL;
 	}
-	if (array_size < NRF_CLOUD_AGPS__LAST) {
+	if (array_size < NRF_CLOUD_AGPS__TYPES_COUNT) {
 		LOG_ERR("Array size (%d) too small, must be >= %d",
-			array_size, NRF_CLOUD_AGPS__LAST);
+			array_size, NRF_CLOUD_AGPS__TYPES_COUNT);
 		return -ERANGE;
 	}
 
@@ -2782,10 +2784,14 @@ int nrf_cloud_agps_type_array_get(const struct nrf_modem_gnss_agps_data_frame * 
 
 	if (request->sv_mask_ephe) {
 		array[cnt++] = NRF_CLOUD_AGPS_EPHEMERIDES;
+		// TODO: how to determine if QZSS ephemerides are requested?
+		array[cnt++] = NRF_CLOUD_AGNSS_QZSS_EPHEMERIDES;
 	}
 
 	if (request->sv_mask_alm) {
 		array[cnt++] = NRF_CLOUD_AGPS_ALMANAC;
+		// TODO: how to determine if QZSS almanac is requested?
+		array[cnt++] = NRF_CLOUD_AGNSS_QZSS_ALMANAC;
 	}
 
 	if (request->data_flags & NRF_MODEM_GNSS_AGPS_KLOBUCHAR_REQUEST) {
@@ -2807,6 +2813,13 @@ int nrf_cloud_agps_type_array_get(const struct nrf_modem_gnss_agps_data_frame * 
 
 	if (request->data_flags & NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST) {
 		array[cnt++] = NRF_CLOUD_AGPS_INTEGRITY;
+	}
+
+	if (request->data_flags & NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST) {
+		// TODO: select both?
+		//       will NRF_MODEM_GNSS_AGPS_INTEGRITY_REQUEST not be received if this flag is set?
+		array[cnt++] = NRF_CLOUD_AGPS_INTEGRITY;
+		array[cnt++] = NRF_CLOUD_AGNSS_QZSS_INTEGRITY;
 	}
 
 	if (cnt == 0) {

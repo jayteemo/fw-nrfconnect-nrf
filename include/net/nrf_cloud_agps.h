@@ -22,6 +22,15 @@ extern "C" {
 /** Exclude the mask angle from the A-GPS request */
 #define NRF_CLOUD_AGPS_MASK_ANGLE_NONE	0xFF
 
+// TODO: remove
+#ifndef NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST
+#define NRF_MODEM_GNSS_AGNSS_INTEGRITY_REQUEST 0x40
+#endif
+// TODO: remove
+#ifndef NRF_MODEM_GNSS_AGNSS_INTEGRITY
+#define NRF_MODEM_GNSS_AGNSS_INTEGRITY 9
+#endif
+
 /** @defgroup nrf_cloud_agps nRF Cloud A-GPS
  * @{
  */
