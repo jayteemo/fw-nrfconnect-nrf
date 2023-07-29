@@ -39,6 +39,14 @@ BUILD_ASSERT(CONFIG_AT_CMD_REQUEST_RESPONSE_BUFFER_LENGTH >= AT_CMD_REQUEST_ERR_
 #define TEMP_ALERT_HYSTERESIS 1.5f
 #define TEMP_ALERT_LOWER_LIMIT (TEMP_ALERT_LIMIT - TEMP_ALERT_HYSTERESIS)
 
+#if defined(CONFIG_NRF_CLOUD_MQTT)
+#define MSG_OBJ_DEFINE(_obj_name) \
+	NRF_CLOUD_OBJ_JSON_DEFINE(_obj_name);
+#elif defined(CONFIG_NRF_CLOUD_COAP)
+#define MSG_OBJ_DEFINE(_obj_name) \
+	NRF_CLOUD_OBJ_COAP_CBOR_DEFINE(_obj_name);
+#endif
+
 /**
  * @brief Construct a device message object with automatically generated timestamp
  *
@@ -97,7 +105,7 @@ static int send_sensor_sample(const char *const sensor, double value)
 {
 	int ret;
 
-	NRF_CLOUD_OBJ_JSON_DEFINE(msg_obj);
+	MSG_OBJ_DEFINE(msg_obj);
 
 	/* Create a timestamped message container object for the sensor sample. */
 	ret = create_timestamped_device_message(&msg_obj, sensor,
@@ -144,7 +152,7 @@ static int send_gnss(const struct location_event_data * const loc_gnss)
 			.has_heading	= 0
 		}
 	};
-	NRF_CLOUD_OBJ_JSON_DEFINE(msg_obj);
+	MSG_OBJ_DEFINE(msg_obj);
 
 	/* Add the timestamp */
 	(void)date_time_now(&gnss_pvt.ts_ms);

@@ -34,6 +34,7 @@ enum nrf_cloud_obj_type {
 	NRF_CLOUD_OBJ_TYPE__UNDEFINED,
 
 	NRF_CLOUD_OBJ_TYPE_JSON,
+	NRF_CLOUD_OBJ_TYPE_COAP_CBOR,
 
 	NRF_CLOUD_OBJ_TYPE__LAST,
 };
@@ -48,12 +49,23 @@ enum nrf_cloud_enc_src {
 	NRF_CLOUD_ENC_SRC_PRE_ENCODED,
 };
 
+/** @brief Object to support nRF Cloud CoAP CBOR messages */
+struct nrf_cloud_obj_coap_cbor {
+	char *app_id;
+	char *str_val;
+	struct nrf_cloud_gnss_pvt *pvt;
+	double *float_val;
+	int *int_val;
+	int64_t *ts;
+};
+
 /** @brief Object used for building nRF Cloud messages. */
 struct nrf_cloud_obj {
 
 	enum nrf_cloud_obj_type type;
 	union {
 		cJSON *json;
+		struct nrf_cloud_obj_coap_cbor *coap_cbor;
 	};
 
 	/** Source of encoded data */
@@ -70,6 +82,12 @@ struct nrf_cloud_obj {
  */
 #define NRF_CLOUD_OBJ_JSON_DEFINE(_name) \
 	struct nrf_cloud_obj _name = { .type = NRF_CLOUD_OBJ_TYPE_JSON, .json = NULL, \
+				       .enc_src = NRF_CLOUD_ENC_SRC_NONE, \
+				       .encoded_data = { .ptr = NULL, .len = 0 } }
+
+#define NRF_CLOUD_OBJ_COAP_CBOR_DEFINE(_name) \
+	struct nrf_cloud_obj _name = { .type = NRF_CLOUD_OBJ_TYPE_COAP_CBOR, \
+				       .coap_cbor = NULL, \
 				       .enc_src = NRF_CLOUD_ENC_SRC_NONE, \
 				       .encoded_data = { .ptr = NULL, .len = 0 } }
 
