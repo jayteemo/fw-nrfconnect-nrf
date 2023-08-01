@@ -76,6 +76,25 @@ struct nrf_cloud_fota_job_update {
 	char *payload;
 };
 
+/** @brief How the control section is handled when either a trimmed shadow
+ *  or a delta shadow is received.
+ */
+enum nrf_cloud_ctrl_status {
+	/** Data not present in shadow. */
+	NRF_CLOUD_CTRL_NOT_PRESENT = 0,
+	/** This was not a delta, so no need to send update back. */
+	NRF_CLOUD_CTRL_NO_REPLY = 1,
+	/** Send shadow update confirmation back. */
+	NRF_CLOUD_CTRL_REPLY = 2,
+};
+
+struct shadow_update_status {
+	/** Indicates if a config section was found. */
+	bool cfg;
+	/** Status of the control section. */
+	nrf_cloud_ctrl_status ctrl;
+};
+
 /** @brief Initialize the codec used encoding the data to the cloud. */
 int nrf_cloud_codec_init(struct nrf_cloud_os_mem_hooks *hooks);
 

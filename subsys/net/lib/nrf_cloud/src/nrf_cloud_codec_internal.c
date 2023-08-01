@@ -437,6 +437,48 @@ int nrf_cloud_requested_state_decode(const struct nrf_cloud_data *input,
 	return 0;
 }
 
+int nrf_cloud_shadow_update_decode(struct nrf_cloud_data const *const input,
+				   struct nrf_cloud_data *const output,
+				   struct shadow_update_status *const status)
+{
+	__ASSERT_NO_MSG(output != NULL);
+	__ASSERT_NO_MSG(input != NULL);
+
+
+	cJSON *state_obj = NULL;
+	cJSON *config_obj = NULL;
+	cJSON *control_obj = NULL;
+
+	cJSON *input_obj = input ? cJSON_Parse(input->ptr) : NULL;
+
+	if (input_obj == NULL) {
+		return -ESRCH; /* invalid input or no JSON parsed */
+	}
+
+	/* A delta update will have the data inside of state. */
+	state_obj = cJSON_GetObjectItem(input_obj, NRF_CLOUD_JSON_KEY_STATE);
+
+	/* A shadow/get/accepted on initial connect will have data inside of desired. */
+	if (state_obj == NULL) {
+		state_obj = cJSON_GetObjectItem(input_obj, NRF_CLOUD_JSON_KEY_DES);
+	}
+
+	if (state_obj) {
+		control_obj = cJSON_GetObjectItem(state_obj, NRF_CLOUD_JSON_KEY_CTRL);
+		config_obj = cJSON_GetObjectItem(state_obj, NRF_CLOUD_JSON_KEY_CFG);
+	}
+
+	/* If there is no delta and no desired, but there is reported, use that for control */
+	if (control_obj == NULL) {
+		state_obj = cJSON_GetObjectItem(input_obj, NRF_CLOUD_JSON_KEY_REP);
+		if (state_obj) {
+			control_obj = cJSON_GetObjectItem(state_obj, NRF_CLOUD_JSON_KEY_CTRL);
+		}
+	}
+
+
+}
+
 int nrf_cloud_shadow_config_response_encode(struct nrf_cloud_data const *const input,
 					    struct nrf_cloud_data *const output,
 					    bool *const has_config)

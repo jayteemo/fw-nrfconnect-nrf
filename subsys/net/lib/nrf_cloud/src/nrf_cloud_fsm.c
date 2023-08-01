@@ -197,6 +197,32 @@ static int state_ua_pin_wait(void)
 	return 0;
 }
 
+static int handle_shadow_update(const struct nct_evt *const evt)
+{
+	int err;
+	struct nct_cc_data msg = {
+		.opcode = NCT_CC_OPCODE_UPDATE_REQ,
+		.message_id = NCT_MSG_ID_STATE_REPORT,
+	};
+
+	if (evt == NULL) {
+		return -EINVAL;
+	}
+
+	if (evt->param.cc == NULL) {
+		return -ENOENT;
+	}
+
+	if (msg.data.ptr) {
+		err = nct_cc_send(&msg);
+		nrf_cloud_free((void *)msg.data.ptr);
+
+		if (err) {
+			LOG_ERR("nct_cc_send failed %d", err);
+		}
+	}
+}
+
 static int handle_device_config_update(const struct nct_evt *const evt,
 				       bool *const config_found)
 {
@@ -237,6 +263,21 @@ static int handle_device_config_update(const struct nct_evt *const evt,
 	return err;
 }
 
+static int alert_ctrl_get(void)
+{
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
+	ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
+#else
+	ctrl_data.alerts_enabled = false;
+#endif /* CONFIG_NRF_CLOUD_ALERT */
+}
+static void alert_ctrl_set(bool enable)
+{
+#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
+	nrf_cloud_alert_control_set(enable);
+#endif /* CONFIG_NRF_CLOUD_ALERT */
+}
+
 static int handle_device_control_update(const struct nct_evt *const evt,
 					bool *const control_found)
 {
@@ -252,12 +293,7 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 		return -ENOENT;
 	}
 
-#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
-	ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
-#else
-	ctrl_data.alerts_enabled = false;
-#endif /* CONFIG_NRF_CLOUD_ALERT */
-
+	ctrl_data.alerts_enabled = alert_ctrl_get();
 	ctrl_data.log_level = nrf_cloud_log_control_get();
 
 	err = nrf_cloud_shadow_control_decode(&evt->param.cc->data, &status, &ctrl_data);
@@ -267,17 +303,13 @@ static int handle_device_control_update(const struct nct_evt *const evt,
 
 	*control_found = (status != NRF_CLOUD_CTRL_NOT_PRESENT);
 	if (*control_found) {
-#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
-		nrf_cloud_alert_control_set(ctrl_data.alerts_enabled);
-#endif /* CONFIG_NRF_CLOUD_ALERT */
+		alert_ctrl_set(ctrl_data.alerts_enabled);
 		nrf_cloud_log_control_set(ctrl_data.log_level);
 	} else {
-#if IS_ENABLED(CONFIG_NRF_CLOUD_ALERT)
-		ctrl_data.alerts_enabled = nrf_cloud_alert_control_get();
-#else
-		ctrl_data.alerts_enabled = false;
-#endif
+
+		ctrl_data.alerts_enabled = alert_ctrl_get();
 		ctrl_data.log_level = nrf_cloud_log_control_get();
+
 		nrf_cloud_log_enable(ctrl_data.log_level != LOG_LEVEL_NONE);
 		/* First boot, so update shadow with our current settings. */
 		status = NRF_CLOUD_CTRL_REPLY;
@@ -490,6 +522,8 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 	LOG_DBG("CC RX on topic %s: %s",
 		(const char *)nct_evt->param.cc->topic.ptr,
 		(const char *)nct_evt->param.cc->data.ptr);
+
+	err = handle_shadow_update(nct_evt);
 	handle_device_config_update(nct_evt, &config_found);
 	handle_device_control_update(nct_evt, &control_found);
 
