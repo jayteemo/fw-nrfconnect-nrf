@@ -350,6 +350,7 @@ Cellular samples (renamed from nRF9160 samples)
     * The ``disable_response`` parameter to the :c:struct:`nrf_cloud_rest_location_request` structure.
       If set to true, no location data is returned to the device when the :c:func:`nrf_cloud_rest_location_get` function is called.
     * A Kconfig option :kconfig:option:`REST_CELL_LOCATION_SAMPLE_VERSION` for the sample version.
+    * Reporting of device and connection info to the device shadow.
 
   * Updated the sample to print its version when started.
 
@@ -581,6 +582,7 @@ Libraries for networking
     * :c:func:`nrf_cloud_obj_pgps_request_create` function that creates a P-GPS request for nRF Cloud.
     * A new internal codec function :c:func:`nrf_cloud_obj_location_request_payload_add`, which excludes local Wi-Fi access point MAC addresses from the location request.
     * Support for CoAP CBOR type handling to nrf_cloud_obj.
+    * Reporting of protocol (MQTT, REST, or CoAP) as well as method (LTE or Wi-Fi) to the device shadow.
 
   * Updated:
 
