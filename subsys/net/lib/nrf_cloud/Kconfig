@@ -69,6 +69,10 @@ config NRF_CLOUD_DEVICE_STATUS_ENCODE_VOLTAGE
 	depends on MODEM_INFO_ADD_DEVICE
 	default y
 
+config NRF_CLOUD_REPORT_CONNECTION
+	bool "Report network protocol and connection method in device shadow"
+	default y
+
 endif
 
 if NRF_CLOUD_AGPS || NRF_CLOUD_PGPS

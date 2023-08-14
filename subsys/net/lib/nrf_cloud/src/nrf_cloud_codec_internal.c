@@ -36,11 +36,10 @@ static bool modem_inf_initd;
 static int init_modem_info(void);
 #endif
 
-#if defined(CONFIG_NRF_CLOUD_MQTT)
-#ifdef CONFIG_NRF_CLOUD_GATEWAY
+#if defined(CONFIG_NRF_CLOUD_MQTT) && defined(CONFIG_NRF_CLOUD_GATEWAY)
 static gateway_state_handler_t gateway_state_handler;
 #endif
-#endif
+static int shadow_connection_info_update(cJSON * device_obj);
 
 static const char *const sensor_type_str[] = {
 	[NRF_CLOUD_SENSOR_GNSS] = NRF_CLOUD_JSON_APPID_VAL_GNSS,
@@ -97,6 +96,26 @@ static const char *const job_status_strings[] = {
 };
 #define JOB_STATUS_STRING_COUNT (sizeof(job_status_strings) / \
 				 sizeof(*job_status_strings))
+
+/* Define a string representing the network protocol we are using. */
+#if defined(CONFIG_NRF_CLOUD_MQTT)
+#define NRF_CLOUD_JSON_VAL_CFGD_PROTO_VAL NRF_CLOUD_JSON_VAL_PROTO_MQTT
+#elif defined(CONFIG_NRF_CLOUD_REST)
+#define NRF_CLOUD_JSON_VAL_CFGD_PROTO_VAL NRF_CLOUD_JSON_VAL_PROTO_REST
+#elif defined(CONFIG_NRF_CLOUD_COAP)
+#define NRF_CLOUD_JSON_VAL_CFGD_PROTO_VAL NRF_CLOUD_JSON_VAL_PROTO_COAP
+#else
+#define NRF_CLOUD_JSON_VAL_CFGD_PROTO_VAL "Unknown"
+#endif
+
+/* Define a string represention what connection method we are using. */
+#if defined(CONFIG_NRF_MODEM_LIB)
+#define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL NRF_CLOUD_JSON_VAL_METHOD_LTE
+#elif defined(CONFIG_WIFI)
+#define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL NRF_CLOUD_JSON_VAL_METHOD_WIFI
+#else
+#define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL "Unknown"
+#endif
 
 int nrf_cloud_codec_init(struct nrf_cloud_os_mem_hooks *hooks)
 {
@@ -255,7 +274,12 @@ static int info_encode(cJSON * const root_obj, const struct nrf_cloud_modem_info
 		}
 
 		ret = nrf_cloud_service_info_json_encode(svc_inf, svc_inf_obj);
+		if (ret) {
+			return -ENOMEM;
+		}
 	}
+
+	ret = shadow_connection_info_update(root_obj);
 
 	return ret;
 }
@@ -968,7 +992,27 @@ int json_send_to_cloud(cJSON *const request)
 
 	return err;
 }
+
 #endif /* CONFIG_NRF_CLOUD_MQTT */
+
+static int shadow_connection_info_update(cJSON *device_obj)
+{
+	int ret = 0;
+
+#if defined(CONFIG_NRF_CLOUD_REPORT_CONNECTION)
+	cJSON *connection_obj = cJSON_AddObjectToObjectCS(device_obj, NRF_CLOUD_JSON_KEY_CONN_INFO);
+
+	if (!connection_obj) {
+		return -ENOMEM;
+	}
+
+	ret += json_add_str_cs(connection_obj, NRF_CLOUD_JSON_KEY_PROTOCOL,
+			       NRF_CLOUD_JSON_VAL_CFGD_PROTO_VAL);
+	ret += json_add_str_cs(connection_obj, NRF_CLOUD_JSON_KEY_METHOD,
+			       NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL);
+#endif
+	return ret;
+}
 
 int nrf_cloud_pvt_data_encode(const struct nrf_cloud_gnss_pvt * const pvt,
 			      cJSON * const pvt_data_obj)
