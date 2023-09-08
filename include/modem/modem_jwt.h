@@ -8,6 +8,7 @@
 
 #include <zephyr/types.h>
 #include <modem/modem_attest_token.h>
+#include <net/nrf_jwt.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,47 +22,6 @@ extern "C" {
  * @{
  *
  */
-
-/**@brief The type of key to be used for signing the JWT. */
-enum jwt_key_type {
-	JWT_KEY_TYPE_CLIENT_PRIV = 2,
-	JWT_KEY_TYPE_ENDORSEMENT = 8,
-};
-
-/**@brief JWT signing algorithm */
-enum jwt_alg_type {
-	JWT_ALG_TYPE_ES256 = 0,
-};
-
-/** @brief JWT parameters required for JWT generation and pointer to generated JWT */
-struct jwt_data {
-	/** Modem sec tag to use for JWT signing */
-	unsigned int sec_tag;
-	/** Key type in the specified sec tag */
-	enum jwt_key_type key;
-	/** JWT signing algorithm */
-	enum jwt_alg_type alg;
-
-	/** Defines how long the JWT will be valid; in seconds (from generation).
-	 * The 'iat' and 'exp' claims will be populated only if the modem has a
-	 * valid date and time.
-	 */
-	uint32_t exp_delta_s;
-
-	/**  NULL terminated 'sub' claim; the principal that is the subject of the JWT */
-	const char *subject;
-	/**  NULL terminated 'aud' claim; intended recipient of the JWT */
-	const char *audience;
-
-	/** Buffer to which the NULL terminated JWT will be copied.
-	 * If a buffer is provided by the user, the size must also be set.
-	 * If buffer is NULL, memory will be allocated and user must free memory
-	 * when finished by calling @ref modem_jwt_free.
-	 */
-	char *jwt_buf;
-	/** Size of the user provided buffer or size of the allocated buffer */
-	size_t jwt_sz;
-};
 
 /**
  * @brief Generates a JWT using the supplied parameters. If successful,

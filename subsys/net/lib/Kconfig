@@ -44,5 +44,6 @@ rsource "wifi_credentials/Kconfig"
 rsource "wifi_mgmt_ext/Kconfig"
 rsource "mqtt_helper/Kconfig"
 rsource "nrf_provisioning/Kconfig"
+rsource "nrf_jwt/Kconfig"
 
 endmenu

@@ -300,6 +300,21 @@ static void monitor_temperature(double temp)
 	}
 }
 
+static int generate_jwt(void)
+{
+	static char jwt[900];
+	int err = nrf_cloud_jwt_generate(NRF_CLOUD_JWT_VALID_TIME_S_MAX, jwt, sizeof(jwt));
+
+	if (err < 0) {
+		LOG_ERR("Failed to generate JWT, error: %d", err);
+		return err;
+	}
+
+	LOG_INF("JWT:\n%s", jwt);
+
+	return 0;
+}
+
 void main_application_thread_fn(void)
 {
 	if (IS_ENABLED(CONFIG_AT_CMD_REQUESTS)) {
@@ -322,6 +337,7 @@ void main_application_thread_fn(void)
 		LOG_WRN("Failed to determine valid date time. Proceeding anyways");
 	} else {
 		LOG_INF("Current date and time determined");
+		(void)generate_jwt();
 	}
 
 	const char *protocol = "";

@@ -1,0 +1,46 @@
+#
+# Copyright (c) 2021 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig NRF_JWT
+	bool "nRF JWT Library"
+
+if NRF_JWT
+config NRF_JWT_PSA
+	bool "Enable JWT signing with PSA key"
+	select BASE64
+	select NRF_SECURITY
+	select MBEDTLS_PSA_CRYPTO_C
+	select MBEDTLS_ENABLE_HEAP
+	select PSA_WANT_ALG_ECDSA
+	select PSA_WANT_KEY_TYPE_ECC_KEY_PAIR
+	select PSA_WANT_ECC_SECP_R1_256
+	select PSA_WANT_ALG_SHA_256
+	select CJSON_LIB
+	depends on NEWLIB_LIBC
+	depends on NEWLIB_LIBC_FLOAT_PRINTF
+
+config NRF_JWT_DER
+	bool "Enable JWT signing with raw key (DER)"
+	select BASE64
+	select TINYCRYPT
+	select TINYCRYPT_SHA256
+	select TINYCRYPT_ECC_DSA
+	select TINYCRYPT_CTR_PRNG
+	select TINYCRYPT_AES
+	select CJSON_LIB
+	depends on NEWLIB_LIBC
+	depends on NEWLIB_LIBC_FLOAT_PRINTF
+
+config NRF_JWT_MODEM
+	bool "Enable JWT creation and signing in the modem"
+	select MODEM_JWT
+
+module=NRF_JWT
+module-dep=LOG
+module-str=nRF JWT
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # NRF_JWT
