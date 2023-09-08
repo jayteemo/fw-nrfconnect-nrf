@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <psa/crypto.h>
 #include <psa/crypto_extra.h>
+#include <zephyr/sys/base64.h>
+#include <cJSON.h>
 
 #ifdef CONFIG_BUILD_WITH_TFM
 #include <tfm_ns_interface.h>
@@ -39,14 +41,20 @@ LOG_MODULE_REGISTER(ecdsa, LOG_LEVEL_DBG);
 #define NRF_CRYPTO_EXAMPLE_ECDSA_SIGNATURE_SIZE (64)
 #define NRF_CRYPTO_EXAMPLE_ECDSA_HASH_SIZE (32)
 
+#define BASE64_ENCODE_SZ(n) (((4 * n / 3) + 3) & ~3)
+
 /* Below text is used as plaintext for signing/verification */
-static uint8_t m_plain_text[NRF_CRYPTO_EXAMPLE_ECDSA_TEXT_SIZE] = {
-	"Example string to demonstrate basic usage of ECDSA."
-};
+//static uint8_t m_plain_text[NRF_CRYPTO_EXAMPLE_ECDSA_TEXT_SIZE] = {
+//	"Example string to demonstrate basic usage of ECDSA."
+//};
 
 static uint8_t m_pub_key[NRF_CRYPTO_EXAMPLE_ECDSA_PUBLIC_KEY_SIZE];
 
 static uint8_t m_signature[NRF_CRYPTO_EXAMPLE_ECDSA_SIGNATURE_SIZE];
+
+#define B64_SIG_SZ (BASE64_ENCODE_SZ(NRF_CRYPTO_EXAMPLE_ECDSA_SIGNATURE_SIZE) + 1)
+static uint8_t m_b64_signature[B64_SIG_SZ] = {0};
+
 static uint8_t m_hash[NRF_CRYPTO_EXAMPLE_ECDSA_HASH_SIZE];
 
 static psa_key_handle_t keypair_handle;
@@ -118,6 +126,8 @@ int generate_ecdsa_keypair(void)
 		return APP_ERROR;
 	}
 
+	LOG_HEXDUMP_INF(m_pub_key, olen, "Public key: ");
+
 	/* After the key handle is acquired the attributes are not needed */
 	psa_reset_key_attributes(&key_attributes);
 
@@ -149,7 +159,7 @@ int import_ecdsa_pub_key(void)
 	return APP_SUCCESS;
 }
 
-int sign_message(void)
+int sign_message(char * msg)
 {
 	uint32_t output_len;
 	psa_status_t status;
@@ -158,8 +168,8 @@ int sign_message(void)
 
 	/* Compute the SHA256 hash*/
 	status = psa_hash_compute(PSA_ALG_SHA_256,
-				  m_plain_text,
-				  sizeof(m_plain_text),
+				  msg,
+				  strlen(msg),
 				  m_hash,
 				  sizeof(m_hash),
 				  &output_len);
@@ -182,7 +192,7 @@ int sign_message(void)
 	}
 
 	LOG_INF("Signing the message successful!");
-	PRINT_HEX("Plaintext", m_plain_text, sizeof(m_plain_text));
+	LOG_INF("Message: %s", msg);
 	PRINT_HEX("SHA256 hash", m_hash, sizeof(m_hash));
 	PRINT_HEX("Signature", m_signature, sizeof(m_signature));
 
@@ -212,6 +222,31 @@ int verify_message(void)
 	return APP_SUCCESS;
 }
 
+static void base64_url_format(char *const base64_string)
+{
+	if (base64_string == NULL) {
+		return;
+	}
+
+	char *found = NULL;
+
+	/* replace '+' with "-" */
+	for (found = base64_string; (found = strchr(found, '+'));) {
+		*found = '-';
+	}
+
+	/* replace '/' with "_" */
+	for (found = base64_string; (found = strchr(found, '/'));) {
+		*found = '_';
+	}
+
+	/* remove padding '=' */
+	found = strchr(base64_string, '=');
+	if (found) {
+		*found = '\0';
+	}
+}
+
 int main(void)
 {
 	int status;
@@ -236,17 +271,68 @@ int main(void)
 		return APP_ERROR;
 	}
 
-	status = sign_message();
+ 	size_t len = 0;
+	cJSON *jwt_hdr = cJSON_CreateObject();
+	cJSON *jwt_pay = cJSON_CreateObject();
+
+	/* Build the JWT header */
+	cJSON_AddStringToObjectCS(jwt_hdr, "alg", "ES256");
+	cJSON_AddStringToObjectCS(jwt_hdr, "typ", "JWT");
+
+	/* Build the JWT payload */
+	cJSON_AddStringToObjectCS(jwt_pay, "sub", "nrf-351358811125498");
+
+	char *hdr_str = cJSON_PrintUnformatted(jwt_hdr);
+	char *pay_str = cJSON_PrintUnformatted(jwt_pay);
+	size_t hdr_len = strlen(hdr_str);
+	size_t pay_len = strlen(pay_str);
+
+	size_t b64_hdr_sz = BASE64_ENCODE_SZ(hdr_len) + 1;
+	size_t b64_pay_sz = BASE64_ENCODE_SZ(pay_len) + 1;
+	char *b64_hdr = k_calloc(1, b64_hdr_sz);
+	char *b64_pay = k_calloc(1, b64_pay_sz);
+
+	/* Convert to base64 URL */
+	base64_encode(b64_pay, b64_pay_sz, &b64_pay_sz, pay_str, pay_len);
+	base64_url_format(b64_hdr);
+	base64_encode(b64_hdr, b64_hdr_sz, &b64_hdr_sz, hdr_str, hdr_len);
+	base64_url_format(b64_pay);
+
+	size_t msg_to_sign_sz = strlen(b64_hdr) + 1 + strlen(b64_pay) + 1;
+	char *msg_to_sign = k_calloc(1, msg_to_sign_sz);
+
+	/* Build the base64 URL JWT to sign:
+	 * <base64_header>.<base64_payload>
+	 */
+	snprintk(msg_to_sign, msg_to_sign_sz, "%s.%s", b64_hdr, b64_pay);
+
+	/* Perform signing, result will be in m_signature */
+	status = sign_message(msg_to_sign);
 	if (status != APP_SUCCESS) {
 		LOG_INF(APP_ERROR_MESSAGE);
 		return APP_ERROR;
 	}
 
+	/* Convert signature to base64 URL and display full JWT */
+	base64_encode(m_b64_signature, sizeof(m_b64_signature), &len, m_signature, sizeof(m_signature));
+	base64_url_format(m_b64_signature);
+	LOG_INF("JWT:\n%s.%s", msg_to_sign, m_b64_signature);
+
+	/* Verify with public key */
 	status = verify_message();
 	if (status != APP_SUCCESS) {
 		LOG_INF(APP_ERROR_MESSAGE);
 		return APP_ERROR;
 	}
+
+	/* Cleanup */
+	cJSON_Delete(jwt_pay);
+	cJSON_Delete(jwt_hdr);
+	cJSON_free(hdr_str);
+	cJSON_free(pay_str);
+	k_free(b64_hdr);
+	k_free(b64_pay);
+	k_free(msg_to_sign);
 
 	status = crypto_finish();
 	if (status != APP_SUCCESS) {
