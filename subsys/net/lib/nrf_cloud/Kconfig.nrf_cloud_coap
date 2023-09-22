@@ -47,6 +47,15 @@ config NRF_CLOUD_COAP_SEND_SSIDS
 	  require the access point MAC addresses. By not including SSIDs
 	  the amount of data sent to the cloud is greatly reduced.
 
+config NRF_CLOUD_COAP_WIFI_ADD_CREDS_FROM_FILE
+	select EXPERIMENTAL
+	bool "Add CA and private key from included file"
+	help
+	  Enable run-time provisioning of CA and private key from the
+	  certificates header file selected by using NRF_CLOUD_CERTIFICATES_FILE
+	  Please note that this option stores your device's private key in unprotected memory.
+	  It is not secure, and for testing purposes only.
+
 endif
 
 module = NRF_CLOUD_COAP

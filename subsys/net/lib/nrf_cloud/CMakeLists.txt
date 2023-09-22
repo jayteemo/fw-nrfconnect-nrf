@@ -21,6 +21,9 @@ zephyr_library_sources_ifdef(
 	CONFIG_MODEM_JWT
 	src/nrf_cloud_jwt.c)
 zephyr_library_sources_ifdef(
+	CONFIG_NRF_JWT
+	src/nrf_cloud_jwt.c)
+zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_MQTT
 	src/nrf_cloud.c
 	src/nrf_cloud_fsm.c
