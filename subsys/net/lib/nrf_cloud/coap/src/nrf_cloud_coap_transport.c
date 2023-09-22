@@ -21,8 +21,10 @@
 #endif
 #include <modem/lte_lc.h>
 #include <zephyr/random/rand32.h>
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <nrf_socket.h>
 #include <nrf_modem_at.h>
+#endif
 #include <date_time.h>
 #include <net/nrf_cloud.h>
 #include <net/nrf_cloud_coap.h>

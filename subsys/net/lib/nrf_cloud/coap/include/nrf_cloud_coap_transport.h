@@ -16,8 +16,12 @@ extern "C" {
 #endif
 
 #include <net/nrf_cloud_rest.h>
+#if defined(CONFIG_NRF_CLOUD_AGPS)
 #include <net/nrf_cloud_agps.h>
+#endif
+#if defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_pgps.h>
+#endif
 #include <zephyr/net/coap_client.h>
 
 /**
