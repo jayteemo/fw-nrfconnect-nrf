@@ -225,7 +225,7 @@ static void on_pdn_activated(void)
 		return;
 	} else if (ret) {
 		LOG_ERR("ipv4_addr_add, error: %d", ret);
-		fatal_error_notify_and_disconnect();
+		//fatal_error_notify_and_disconnect();
 		return;
 	}
 

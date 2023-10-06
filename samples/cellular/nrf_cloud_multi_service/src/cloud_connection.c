@@ -20,6 +20,13 @@
 #include "location_tracking.h"
 #include "led_control.h"
 
+#include <modem/lte_lc.h>
+#include <modem/nrf_modem_lib.h>
+#include <net/nrf_provisioning.h>
+#include "nrf_provisioning_at.h"
+#include <zephyr/logging/log_ctrl.h>
+#include <zephyr/sys/reboot.h>
+
 LOG_MODULE_REGISTER(cloud_connection, CONFIG_MULTI_SERVICE_LOG_LEVEL);
 
 /* Internal state */
@@ -29,6 +36,7 @@ LOG_MODULE_REGISTER(cloud_connection, CONFIG_MULTI_SERVICE_LOG_LEVEL);
 #define CLOUD_READY			BIT(1)
 #define CLOUD_DISCONNECTED		BIT(2)
 #define DATE_TIME_KNOWN			BIT(3)
+#define PROVISIONING_COMPLETE		BIT(4)
 static K_EVENT_DEFINE(cloud_events);
 
 /* Atomic status flag tracking whether an initial association is in progress. */
@@ -56,6 +64,11 @@ bool await_cloud_disconnected(k_timeout_t timeout)
 bool await_date_time_known(k_timeout_t timeout)
 {
 	return k_event_wait(&cloud_events, DATE_TIME_KNOWN, false, timeout) != 0;
+}
+
+bool await_prov_ready(k_timeout_t timeout)
+{
+	return k_event_wait(&cloud_events, PROVISIONING_COMPLETE, false, timeout) != 0;
 }
 
 /* Delayable work item for handling cloud readiness timeout.
@@ -117,6 +130,11 @@ void disconnect_cloud(void)
 	/* Clear the initial association flag, no longer accurate. */
 	atomic_set(&initial_association, false);
 
+	/* If not provisioned, no need to disconnect from the cloud */
+	if (await_prov_ready(K_NO_WAIT) == false) {
+		LOG_INF("Not yet provisioned...");
+		return;
+	}
 	/* Disconnect from nRF Cloud -- Blocking call
 	 * Will no-op and return -EACCES if already disconnected.
 	 */
@@ -282,7 +300,9 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb,
 		 * immediately.
 		 */
 		if (!IS_ENABLED(CONFIG_DATE_TIME_AUTO_UPDATE)) {
-			date_time_update_async(NULL);
+			if (await_cloud_ready(K_NO_WAIT) == true) {
+				date_time_update_async(NULL);
+			}
 		}
 
 	} else if (event == NET_EVENT_L4_DISCONNECTED) {
@@ -504,8 +524,177 @@ static int setup_cloud(void)
 	return 0;
 }
 
+#if !defined(CONFIG_NRF_PROVISIONING_AUTO_INIT)
+static int modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data);
+static void device_mode_cb(void *user_data);
+static struct nrf_provisioning_dm_change dmode = { .cb = device_mode_cb };
+static struct nrf_provisioning_mm_change mmode = { .cb = modem_mode_cb };
+
+static void wait_for_network_down(void)
+{
+	while (await_network_ready(K_NO_WAIT) == true) {
+		k_sleep(K_SECONDS(1));
+	}
+	LOG_INF("NETWORK_READY event is cleared");
+}
+
+static int modem_mode_cb(enum lte_lc_func_mode new_mode, void *user_data)
+{
+	enum lte_lc_func_mode fmode;
+	char time_buf[64];
+	int ret;
+
+	(void)user_data;
+
+	if (lte_lc_func_mode_get(&fmode)) {
+		LOG_ERR("Failed to read modem functional mode");
+		ret = -EFAULT;
+		return ret;
+	}
+
+	if (fmode == new_mode) {
+		ret = fmode;
+	} else if (new_mode == LTE_LC_FUNC_MODE_NORMAL) {
+
+		LOG_INF("going online...");
+
+		/* Non-blocking, conn manager has a handler registered... */
+		ret = lte_lc_connect_async(NULL);
+		if (ret) {
+			LOG_ERR("lte_lc_connect_async() failed, error: %d", ret);
+		}
+
+		(void)await_network_ready(K_FOREVER);
+
+		LOG_INF("Modem connection restored");
+
+		LOG_INF("Waiting for modem to acquire network time...");
+
+		do {
+			k_sleep(K_SECONDS(3));
+			ret = nrf_provisioning_at_time_get(time_buf, sizeof(time_buf));
+		} while (ret != 0);
+
+		LOG_INF("Network time obtained");
+		k_sleep(K_SECONDS(3));
+		ret = fmode;
+	} else {
+
+		ret = lte_lc_func_mode_set(new_mode);
+		if (new_mode == LTE_LC_FUNC_MODE_OFFLINE) {
+			LOG_INF("going offline...");
+			k_sleep(K_SECONDS(5));
+			wait_for_network_down();
+		}
+
+		if (ret == 0) {
+			LOG_DBG("Modem set to requested state %d", new_mode);
+			ret = fmode;
+		}
+	}
+
+	return ret;
+}
+
+static void device_mode_cb(void *user_data)
+{
+	ARG_UNUSED(user_data);
+	LOG_INF("Provisioning complete.");
+
+	/* Disconnect from network gracefully */
+	int ret = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
+
+	if (ret != 0) {
+		LOG_ERR("Unable to set modem offline, error %d", ret);
+	} else {
+		wait_for_network_down();
+	}
+
+	LOG_INF("Provisioning done, rebooting...");
+	while (log_process()) {
+		;
+	}
+
+	sys_reboot(SYS_REBOOT_WARM);
+}
+#endif /* CONFIG_NRF_PROVISIONING_AUTO_INIT */
+
+void init_provisioning(void)
+{
+	if (!IS_ENABLED(CONFIG_NRF_PROVISIONING_AUTO_INIT)) {
+		k_event_clear(&cloud_events, PROVISIONING_COMPLETE);
+
+		LOG_INF("Initializing the nRF Provisioning library...");
+		int ret = nrf_provisioning_init(&mmode, &dmode);
+
+		if (ret) {
+			LOG_ERR("Failed to initialize provisioning client, error: %d", ret);
+		}
+	}
+}
+
+static bool cred_check(struct nrf_cloud_credentials_status *const cs)
+{
+	int ret;
+
+	ret = nrf_cloud_credentials_check(cs);
+	if (ret) {
+		LOG_ERR("nRF Cloud credentials check failed, error: %d", ret);
+		return false;
+	}
+	if (cs->ca && cs->client_cert && cs->prv_key) {
+		k_event_post(&cloud_events, PROVISIONING_COMPLETE);
+		return true;
+	}
+
+	return false;
+}
+
+static void await_credentials(void)
+{
+	static bool print = true;
+	struct nrf_cloud_credentials_status cs;
+
+	if (!cred_check(&cs)) {
+
+		if (print) {
+			LOG_WRN("Missing required nRF Cloud credential(s) in sec tag %u:",
+				cs.sec_tag);
+
+			if (!cs.ca) {
+				LOG_WRN("\t-CA Cert");
+			}
+			if (!cs.client_cert) {
+				LOG_WRN("\t-Client Cert");
+			}
+			if (!cs.prv_key) {
+				LOG_WRN("\t-Private Key");
+			}
+
+			print = false;
+
+#if defined(CONFIG_NRF_PROVISIONING)
+		LOG_INF("Waiting for credentials to be remotely provisioned...");
+		await_prov_ready(K_FOREVER);
+#endif
+		}
+
+#if !defined(CONFIG_NRF_PROVISIONING)
+		LOG_ERR("Cannot continue without required credentials");
+		LOG_INF("Install credentials on the device and then " \
+			"provision the device or register its public key with nRF Cloud.");
+		LOG_INF("Reboot device when complete");
+		(void)lte_lc_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE);
+		k_sleep(K_FOREVER);
+#endif
+	} else {
+		LOG_INF("nRF Cloud credentials detected");
+	}
+}
+
 void cloud_connection_thread_fn(void)
 {
+	bool prov_init = false;
 	long_led_pattern(LED_WAITING);
 
 	LOG_INF("Setting up nRF Cloud library...");
@@ -523,9 +712,30 @@ void cloud_connection_thread_fn(void)
 			long_led_pattern(LED_WAITING);
 		}
 
+#if defined(CONFIG_NRF_PROVISIONING)
+		if (await_network_ready(K_NO_WAIT) == false) {
+			/* Auto-connect is disabled, so connect here */
+			/* Non-blocking, conn manager has a handler registered... */
+			int ret = lte_lc_connect_async(NULL);
+
+			if (ret) {
+				LOG_ERR("lte_lc_connect_async() failed, error: %d", ret);
+			}
+		}
+#endif
+
 		(void)await_network_ready(K_FOREVER);
 
+		k_sleep(K_SECONDS(2));
+
 		LOG_INF("Network is ready");
+
+		if (!prov_init) {
+			init_provisioning();
+			prov_init = true;
+		}
+
+		await_credentials();
 
 		/* Attempt to connect to nRF Cloud. */
 		if (connect_cloud()) {
