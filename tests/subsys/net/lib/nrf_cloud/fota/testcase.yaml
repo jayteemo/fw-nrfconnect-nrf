@@ -1,0 +1,8 @@
+common:
+  platform_allow: nrf9160dk/nrf9160/ns
+  integration_platforms:
+    - nrf9160dk/nrf9160/ns
+  tags: ci_build nrf_cloud_test nrf_cloud_lib
+tests:
+  net.lib.nrf_cloud.fota:
+    timeout: 60
