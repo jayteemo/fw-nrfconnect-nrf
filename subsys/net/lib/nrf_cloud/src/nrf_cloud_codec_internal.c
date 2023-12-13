@@ -671,7 +671,8 @@ int json_send_to_cloud(cJSON *const request)
 		return -ENOMEM;
 	}
 
-	struct nct_dc_data msg = {
+	struct nct_pub_data msg = {
+		.pub_type = NCT_PUB_TYPE_DC_TX,
 		.data.ptr = msg_string,
 		.data.len = strlen(msg_string)
 	};

@@ -40,25 +40,49 @@ enum nct_cc_opcode {
 	NCT_CC_OPCODE_UPDATE_DELTA,
 };
 
-struct nct_dc_data {
-	struct nrf_cloud_data data;
-	struct nrf_cloud_topic topic;
-	uint16_t message_id;
+enum nct_pub_type {
+	/* Data to be published/transmitted on a data channel */
+	NCT_PUB_TYPE_DC_TX,
+	/* Data to be published/transmitted on a control channel */
+	NCT_PUB_TYPE_CC_TX,
+	/* Received publish event on a data channel */
+	NCT_PUB_TYPE_DC_RX,
+	/* Received publish event on a control channel */
+	NCT_PUB_TYPE_CC_RX
 };
 
-struct nct_cc_data {
+/* Topics for NCT_PUB_RX_TYPE_DC publish types */
+enum nrf_cloud_rcv_topic {
+	NRF_CLOUD_RCV_TOPIC_GENERAL,
+	NRF_CLOUD_RCV_TOPIC_AGPS,
+	NRF_CLOUD_RCV_TOPIC_PGPS,
+	NRF_CLOUD_RCV_TOPIC_LOCATION,
+	/* Unknown/unhandled topic */
+	NRF_CLOUD_RCV_TOPIC_UNKNOWN
+};
+
+struct nct_pub_data {
+	enum nct_pub_type pub_type;
+	union {
+		/* Valid for NCT_PUB_RX_TYPE_CC and NCT_PUB_TYPE_CC_TX pub_type */
+		enum nct_cc_opcode cc_opcode;
+		/* Valid for NCT_PUB_RX_TYPE_DC pub_type */
+		enum nrf_cloud_rcv_topic dc_topic;
+	};
+
 	struct nrf_cloud_data data;
 	struct nrf_cloud_topic topic;
 	uint16_t message_id;
-	enum nct_cc_opcode opcode;
 };
 
 struct nct_evt {
 	int32_t status;
 	union {
-		struct nct_cc_data *cc;
-		struct nct_dc_data *dc;
+		/* Valid for NCT_EVT_CC_RX_DATA and NCT_EVT_DC_RX_DATA events */
+		struct nct_pub_data *rx_pub;
+		/* Valid for NCT_EVT_CC_TX_DATA_ACK events */
 		uint16_t message_id;
+		/* Valid for MQTT_EVT_CONNACK events */
 		uint8_t flag;
 	} param;
 	enum nct_evt_type type;
@@ -83,17 +107,17 @@ int nct_cc_connect(void);
 int nct_dc_connect(void);
 
 /** @brief Sends data on the control channel. */
-int nct_cc_send(const struct nct_cc_data *cc);
+int nct_cc_send(const struct nct_pub_data *cc);
 
 /** @brief Sends data on the data channel. Reliable, should expect a @ref
  * NCT_EVT_DC_TX_DATA_ACK event.
  */
-int nct_dc_send(const struct nct_dc_data *dc);
+int nct_dc_send(const struct nct_pub_data *dc);
 
 /** @brief Stream data on the data channel. Unreliable, no @ref
  * NCT_EVT_DC_TX_DATA_ACK event is generated.
  */
-int nct_dc_stream(const struct nct_dc_data *dc);
+int nct_dc_stream(const struct nct_pub_data *dc);
 
 /** @brief Publish data on the bulk endpoint topic.
  *
@@ -103,7 +127,7 @@ int nct_dc_stream(const struct nct_dc_data *dc);
  *  @return 0 If successful. Otherwise, a negative error code is returned.
  *  @retval -EINVAL if one or several of the passed in arguments are invalid.
  */
-int nct_dc_bulk_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos);
+int nct_dc_bulk_send(const struct nct_pub_data *dc_data, enum mqtt_qos qos);
 
 /** @brief Publish data on the binary endpoint topic.
  *
@@ -113,7 +137,7 @@ int nct_dc_bulk_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos);
  *  @return 0 If successful. Otherwise, a negative error code is returned.
  *  @retval -EINVAL if one or several of the passed in arguments are invalid.
  */
-int nct_dc_bin_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos);
+int nct_dc_bin_send(const struct nct_pub_data *dc_data, enum mqtt_qos qos);
 
 /** @brief Disconnects the logical control channel. */
 int nct_cc_disconnect(void);

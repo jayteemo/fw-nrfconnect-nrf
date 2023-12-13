@@ -10,6 +10,7 @@
 #if defined(CONFIG_NRF_CLOUD_FOTA)
 #include "nrf_cloud_fota.h"
 #endif
+#include "nrf_cloud_codec_internal.h"
 
 #include <zephyr/kernel.h>
 #include <stdio.h>
@@ -119,19 +120,29 @@ static struct nct {
 } nct;
 
 #define CC_RX_LIST_CNT 3
+/* Maps the opcode to the RX topic list */
 static uint32_t const nct_cc_rx_opcode_map[CC_RX_LIST_CNT] = {
 	NCT_CC_OPCODE_UPDATE_ACCEPTED,
 	NCT_CC_OPCODE_UPDATE_REJECTED,
 	NCT_CC_OPCODE_UPDATE_DELTA
 };
+/* List of RX topics */
 static struct mqtt_topic nct_cc_rx_list[CC_RX_LIST_CNT];
 
 BUILD_ASSERT(ARRAY_SIZE(nct_cc_rx_opcode_map) == ARRAY_SIZE(nct_cc_rx_list),
 	"nct_cc_rx_opcode_map should be the same size as nct_cc_rx_list");
 
 #define CC_TX_LIST_CNT 2
+/* Maps the opcode to the TX topic list */
+static uint32_t const nct_cc_tx_opcode_map[CC_TX_LIST_CNT] = {
+	NCT_CC_OPCODE_GET_REQ,
+	NCT_CC_OPCODE_UPDATE_ACCEPTED
+};
+/* List of TX topics */
 static struct mqtt_topic nct_cc_tx_list[CC_TX_LIST_CNT];
 
+BUILD_ASSERT(ARRAY_SIZE(nct_cc_tx_opcode_map) == ARRAY_SIZE(nct_cc_tx_list),
+	"nct_cc_tx_opcode_map should be the same size as nct_cc_tx_list");
 
 /* Internal routine to reset data endpoint information. */
 static void dc_endpoint_reset(void)
@@ -195,12 +206,11 @@ static void dc_endpoint_free(void)
 #endif
 }
 
-static int endp_send(const struct nct_dc_data *dc_data, struct mqtt_utf8 *endp, enum mqtt_qos qos)
+static int endp_send(const struct nct_pub_data *dc_data, struct mqtt_utf8 *endp, enum mqtt_qos qos)
 {
-	if (dc_data == NULL) {
-		LOG_DBG("Passed in structure cannot be NULL");
-		return -EINVAL;
-	}
+	__ASSERT_NO_MSG(dc_data != NULL);
+	__ASSERT_NO_MSG(dc_data->pub_type != NCT_PUB_TYPE_DC_TX);
+	__ASSERT_NO_MSG(endp != NULL);
 
 	if ((qos != MQTT_QOS_0_AT_MOST_ONCE) && (qos != MQTT_QOS_1_AT_LEAST_ONCE)) {
 		LOG_DBG("Unsupported MQTT QoS level");
@@ -421,22 +431,23 @@ static void nct_topic_lists_populate(void)
 {
 	/* Add RX topics, aligning with opcode list */
 	for (int idx = 0; idx < CC_RX_LIST_CNT; ++idx) {
+
+		/* Use the same QoS value for all RX topics */
+		nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+
 		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_ACCEPTED) {
-			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
 			nct_cc_rx_list[idx].topic.utf8 = accepted_topic;
 			nct_cc_rx_list[idx].topic.size = strlen(accepted_topic);
 			continue;
 		}
 
 		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_REJECTED) {
-			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
 			nct_cc_rx_list[idx].topic.utf8 = rejected_topic;
 			nct_cc_rx_list[idx].topic.size = strlen(rejected_topic);
 			continue;
 		}
 
 		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_DELTA) {
-			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
 			nct_cc_rx_list[idx].topic.utf8 = update_delta_topic;
 			nct_cc_rx_list[idx].topic.size = strlen(update_delta_topic);
 			continue;
@@ -445,14 +456,41 @@ static void nct_topic_lists_populate(void)
 		__ASSERT(false, "Op code not added to RX list");
 	}
 
-	/* Add TX topics */
-	nct_cc_tx_list[0].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_tx_list[0].topic.utf8 = shadow_get_topic;
-	nct_cc_tx_list[0].topic.size = strlen(shadow_get_topic);
+	/* Add TX topics, aligning with opcode list */
+	for (int idx = 0; idx < CC_TX_LIST_CNT; ++idx) {
 
-	nct_cc_tx_list[1].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_tx_list[1].topic.utf8 = update_topic;
-	nct_cc_tx_list[1].topic.size = strlen(update_topic);
+		/* Use the same QoS value for all RX topics */
+		nct_cc_tx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+
+		if (nct_cc_tx_opcode_map[idx] == NCT_CC_OPCODE_UPDATE_ACCEPTED) {
+			nct_cc_tx_list[idx].topic.utf8 = update_topic;
+			nct_cc_tx_list[idx].topic.size = strlen(update_topic);
+			continue;
+		}
+
+		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_GET_REQ) {
+			nct_cc_tx_list[idx].topic.utf8 = shadow_get_topic;
+			nct_cc_tx_list[idx].topic.size = strlen(shadow_get_topic);
+			continue;
+		}
+
+		__ASSERT(false, "Op code not added to TX list");
+	}
+}
+
+static struct mqtt_topic *get_topic_from_opcode(const enum nct_cc_opcode op)
+{
+	for (int idx = 0; idx < CC_TX_LIST_CNT; ++idx) {
+
+		/* Use the same QoS value for all RX topics */
+		nct_cc_tx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+
+		if (nct_cc_tx_opcode_map[idx] == op) {
+			return &nct_cc_tx_list[idx];
+		}
+	}
+
+	return NULL;
 }
 
 static int nct_topics_populate(void)
@@ -832,6 +870,11 @@ static int publish_get_payload(struct mqtt_client *client, size_t length)
 	return ret;
 }
 
+static char *publish_get_payload_buffer(void)
+{
+	return nct.payload_buf;
+}
+
 static int translate_mqtt_connack_result(const int mqtt_result)
 {
 	switch (mqtt_result) {
@@ -871,8 +914,6 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 {
 	int err;
 	struct nct_evt evt = { .status = _mqtt_evt->result };
-	struct nct_cc_data cc;
-	struct nct_dc_data dc;
 	bool event_notify = false;
 
 #if defined(CONFIG_NRF_CLOUD_FOTA)
@@ -906,6 +947,8 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	}
 	case MQTT_EVT_PUBLISH: {
 		const struct mqtt_publish_param *p = &_mqtt_evt->param.publish;
+		enum nct_cc_opcode cc_opcode;
+		struct nct_pub_data pub;
 
 		LOG_DBG("MQTT_EVT_PUBLISH: id = %d len = %d, topic = %.*s",
 			p->message_id,
@@ -923,29 +966,35 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 			break;
 		}
 
+		/* Set msg id */
+		pub.message_id = p->message_id;
+		/* Set published data */
+		pub.data.ptr = (const void *)publish_get_payload_buffer();
+		pub.data.len = p->message.payload.len;
+		/* Set topic info */
+		pub.topic.len = p->message.topic.topic.size;
+		pub.topic.ptr = p->message.topic.topic.utf8;
+
 		/* Determine if this is a control channel or data channel topic event */
-		if (nrf_cloud_cc_rx_topic_decode(&p->message.topic, &cc.opcode)) {
-			cc.message_id = p->message_id;
-			cc.data.ptr = nct.payload_buf;
-			cc.data.len = p->message.payload.len;
-			cc.topic.len = p->message.topic.topic.size;
-			cc.topic.ptr = p->message.topic.topic.utf8;
+		if (control_channel_topic_match(&p->message.topic, &cc_opcode)) {
+			/* Control channel topic */
+			pub.pub_type = NCT_PUB_TYPE_CC_RX;
+			pub.cc_opcode = cc_opcode;
 
 			evt.type = NCT_EVT_CC_RX_DATA;
-			evt.param.cc = &cc;
-			event_notify = true;
 		} else {
-			/* Try to match it with one of the data topics. */
-			dc.message_id = p->message_id;
-			dc.data.ptr = nct.payload_buf;
-			dc.data.len = p->message.payload.len;
-			dc.topic.len = p->message.topic.topic.size;
-			dc.topic.ptr = p->message.topic.topic.utf8;
+			/* Data channel topic */
+			pub.pub_type = NCT_PUB_TYPE_DC_RX;
+			/* Decode the DC topic */
+			pub.dc_topic = nrf_cloud_dc_rx_topic_decode(p->message.topic.topic.utf8);
 
 			evt.type = NCT_EVT_DC_RX_DATA;
-			evt.param.dc = &dc;
-			event_notify = true;
 		}
+
+		/* Add the published data struct to the event */
+		evt.param.rx_pub = &pub;
+
+		event_notify = true;
 
 		if (p->message.topic.qos == MQTT_QOS_1_AT_LEAST_ONCE) {
 			const struct mqtt_puback_param ack = {
@@ -1187,25 +1236,22 @@ int nct_cc_connect(void)
 	return mqtt_subscribe(&nct.client, &subscription_list);
 }
 
-int nct_cc_send(const struct nct_cc_data *cc_data)
+int nct_cc_send(const struct nct_pub_data *cc_data)
 {
 	if (cc_data == NULL) {
 		LOG_ERR("cc_data == NULL");
 		return -EINVAL;
 	}
 
-	if (cc_data->opcode >= ARRAY_SIZE(nct_cc_tx_list)) {
-		LOG_ERR("opcode = %d", cc_data->opcode);
+	struct mqtt_publish_param publish;
+	struct mqtt_topic *topic = get_topic_from_opcode(cc_data->cc_opcode);
+
+	if (topic == NULL) {
+		LOG_ERR("Unhandled opcode = %d", cc_data->cc_opcode);
 		return -ENOTSUP;
 	}
 
-	struct mqtt_publish_param publish = {
-		.message.topic.qos = nct_cc_tx_list[cc_data->opcode].qos,
-		.message.topic.topic.size =
-			nct_cc_tx_list[cc_data->opcode].topic.size,
-		.message.topic.topic.utf8 =
-			nct_cc_tx_list[cc_data->opcode].topic.utf8,
-	};
+	publish.message.topic = *topic;
 
 	/* Populate payload. */
 	if ((cc_data->data.len != 0) && (cc_data->data.ptr != NULL)) {
@@ -1216,7 +1262,7 @@ int nct_cc_send(const struct nct_cc_data *cc_data)
 	publish.message_id = get_message_id(cc_data->message_id);
 
 	LOG_DBG("mqtt_publish: id = %d opcode = %d len = %d, topic: %*s", publish.message_id,
-		cc_data->opcode, cc_data->data.len,
+		cc_data->cc_opcode, cc_data->data.len,
 		publish.message.topic.topic.size,
 		publish.message.topic.topic.utf8);
 
@@ -1334,22 +1380,22 @@ int nct_dc_connect(void)
 	return mqtt_subscribe(&nct.client, &subscription_list);
 }
 
-int nct_dc_send(const struct nct_dc_data *dc_data)
+int nct_dc_send(const struct nct_pub_data *dc_data)
 {
 	return endp_send(dc_data, &nct.dc_tx_endp, MQTT_QOS_1_AT_LEAST_ONCE);
 }
 
-int nct_dc_stream(const struct nct_dc_data *dc_data)
+int nct_dc_stream(const struct nct_pub_data *dc_data)
 {
 	return endp_send(dc_data, &nct.dc_tx_endp, MQTT_QOS_0_AT_MOST_ONCE);
 }
 
-int nct_dc_bulk_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos)
+int nct_dc_bulk_send(const struct nct_pub_data *dc_data, enum mqtt_qos qos)
 {
 	return endp_send(dc_data, &nct.dc_bulk_endp, qos);
 }
 
-int nct_dc_bin_send(const struct nct_dc_data *dc_data, enum mqtt_qos qos)
+int nct_dc_bin_send(const struct nct_pub_data *dc_data, enum mqtt_qos qos)
 {
 	return endp_send(dc_data, &nct.dc_bin_endp, qos);
 }

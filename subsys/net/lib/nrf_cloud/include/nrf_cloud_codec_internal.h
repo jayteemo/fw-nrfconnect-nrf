@@ -36,15 +36,6 @@
 extern "C" {
 #endif
 
-enum nrf_cloud_rcv_topic {
-	NRF_CLOUD_RCV_TOPIC_GENERAL,
-	NRF_CLOUD_RCV_TOPIC_AGPS,
-	NRF_CLOUD_RCV_TOPIC_PGPS,
-	NRF_CLOUD_RCV_TOPIC_LOCATION,
-	/* Unknown/unhandled topic */
-	NRF_CLOUD_RCV_TOPIC_UNKNOWN
-};
-
 /** Special value indicating this is an nRF Cloud binary format */
 #define NRF_CLOUD_BINARY_MAGIC 0x4346526e /* 'nRFC' in little-endian order */
 

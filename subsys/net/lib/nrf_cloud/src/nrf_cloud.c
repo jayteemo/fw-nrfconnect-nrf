@@ -295,7 +295,7 @@ int nrf_cloud_shadow_device_status_update(const struct nrf_cloud_device_status *
 int nrf_cloud_sensor_data_send(const struct nrf_cloud_sensor_data *param)
 {
 	int err;
-	struct nct_dc_data sensor_data;
+	struct nct_pub_data sensor_data = { .pub_type = NCT_PUB_TYPE_DC_TX };
 
 	if (current_state != STATE_DC_CONNECTED) {
 		return -EACCES;
@@ -325,7 +325,7 @@ int nrf_cloud_sensor_data_send(const struct nrf_cloud_sensor_data *param)
 int nrf_cloud_sensor_data_stream(const struct nrf_cloud_sensor_data *param)
 {
 	int err;
-	struct nct_dc_data sensor_data;
+	struct nct_pub_data sensor_data = { .pub_type = NCT_PUB_TYPE_DC_TX };
 
 	if (current_state != STATE_DC_CONNECTED) {
 		return -EACCES;
@@ -390,8 +390,9 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			err = -EACCES;
 			break;
 		}
-		const struct nct_cc_data shadow_data = {
-			.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
+		const struct nct_pub_data shadow_data = {
+			.pub_type = NCT_PUB_TYPE_CC_TX,
+			.cc_opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
 			.data.ptr = send_data.ptr,
 			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
@@ -409,7 +410,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			err = -EACCES;
 			break;
 		}
-		const struct nct_dc_data buf = {
+		const struct nct_pub_data buf = {
+			.pub_type = NCT_PUB_TYPE_DC_TX,
 			.data.ptr = send_data.ptr,
 			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
@@ -437,7 +439,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			err = -EACCES;
 			break;
 		}
-		const struct nct_dc_data buf = {
+		const struct nct_pub_data buf = {
+			.pub_type = NCT_PUB_TYPE_DC_TX,
 			.data.ptr = msg->data.ptr,
 			.data.len = msg->data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
@@ -455,7 +458,8 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 			err = -EACCES;
 			break;
 		}
-		const struct nct_dc_data buf = {
+		const struct nct_pub_data buf = {
+			.pub_type = NCT_PUB_TYPE_DC_TX,
 			.data.ptr = msg->data.ptr,
 			.data.len = msg->data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT

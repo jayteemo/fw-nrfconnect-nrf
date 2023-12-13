@@ -161,8 +161,9 @@ int nfsm_handle_incoming_event(const struct nct_evt *nct_evt,
 static int state_ua_pin_wait(void)
 {
 	int err;
-	struct nct_cc_data msg = {
-		.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
+	struct nct_pub_data msg = {
+		.pub_type = NCT_PUB_TYPE_CC_TX,
+		.cc_opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
 		.message_id = NCT_MSG_ID_STATE_REPORT,
 	};
 
@@ -194,9 +195,10 @@ static int state_ua_pin_wait(void)
 static int state_ua_pin_complete(void)
 {
 	int err;
-	struct nct_cc_data msg = {
-		.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
-		.message_id = NCT_MSG_ID_PAIR_STATUS_REPORT,
+	struct nct_pub_data msg = {
+		.pub_type = NCT_PUB_TYPE_CC_TX,
+		.cc_opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
+		.message_id = NCT_MSG_ID_PAIR_STATUS_REPORT
 	};
 
 	err = nrf_cloud_state_encode(STATE_UA_PIN_COMPLETE, c2d_topic_modified,
@@ -302,8 +304,9 @@ static int cc_connection_handler(const struct nct_evt *nct_evt)
 	/* Set the state according to the status of the event.
 	 * If status the connection, request state synchronization.
 	 */
-	const struct nct_cc_data get_request = {
-		.opcode = NCT_CC_OPCODE_GET_REQ,
+	const struct nct_pub_data get_request = {
+		.pub_type = NCT_PUB_TYPE_CC_TX,
+		.cc_opcode = NCT_CC_OPCODE_GET_REQ,
 		.message_id = NCT_MSG_ID_STATE_REQUEST,
 	};
 	int err;
@@ -368,8 +371,9 @@ static int set_endpoint_data(const struct nrf_cloud_obj_shadow_data *const input
 
 static void shadow_control_process(struct nrf_cloud_obj_shadow_data *const input)
 {
-	struct nct_cc_data msg = {
-		.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
+	struct nct_pub_data msg = {
+		.pub_type = NCT_PUB_TYPE_CC_TX,
+		.cc_opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
 		.message_id = NCT_MSG_ID_STATE_REPORT
 	};
 	int err = nrf_cloud_shadow_control_process(input, &msg.data);
@@ -430,7 +434,7 @@ static void accept_associated_or_wait_state(enum nfsm_state cur_state, enum nfsm
 static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 {
 	__ASSERT_NO_MSG(nct_evt != NULL);
-	__ASSERT_NO_MSG(nct_evt->param.cc != NULL);
+	__ASSERT_NO_MSG(nct_evt->param.rx_pub != NULL);
 
 	int err = 0;
 	bool accept = false;
@@ -444,32 +448,32 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 	NRF_CLOUD_OBJ_JSON_DEFINE(shadow_obj);
 
 	LOG_DBG("CC RX on topic [%d] %*s: %s",
-		nct_evt->param.cc->opcode,
-		nct_evt->param.cc->topic.len,
-		(const char *)nct_evt->param.cc->topic.ptr,
-		(const char *)nct_evt->param.cc->data.ptr);
+		nct_evt->param.rx_pub->cc_opcode,
+		nct_evt->param.rx_pub->topic.len,
+		(const char *)nct_evt->param.rx_pub->topic.ptr,
+		(const char *)nct_evt->param.rx_pub->data.ptr);
 
-	if ((nct_evt->param.cc->opcode != NCT_CC_OPCODE_UPDATE_ACCEPTED) &&
-	    (nct_evt->param.cc->opcode != NCT_CC_OPCODE_UPDATE_DELTA)) {
+	if ((nct_evt->param.rx_pub->cc_opcode != NCT_CC_OPCODE_UPDATE_ACCEPTED) &&
+	    (nct_evt->param.rx_pub->cc_opcode != NCT_CC_OPCODE_UPDATE_DELTA)) {
 		return 0;
 	}
 
 	/* Decode input data */
-	err = nrf_cloud_obj_input_decode(&shadow_obj, &nct_evt->param.cc->data);
+	err = nrf_cloud_obj_input_decode(&shadow_obj, &nct_evt->param.rx_pub->data);
 	if (err) {
 		LOG_ERR("Error decoding shadow data, error: %d", err);
 		return -ENOMSG;
 	}
 
 	/* Decode data based on the topic */
-	if (nct_evt->param.cc->opcode == NCT_CC_OPCODE_UPDATE_ACCEPTED) {
+	if (nct_evt->param.rx_pub->cc_opcode == NCT_CC_OPCODE_UPDATE_ACCEPTED) {
 		err = nrf_cloud_obj_shadow_accepted_decode(&shadow_obj, &shadow_accepted);
 		if (!err) {
 			shadow_data.type = NRF_CLOUD_OBJ_SHADOW_TYPE_ACCEPTED;
 			shadow_data.accepted = &shadow_accepted;
 			LOG_DBG("Accepted shadow decoded");
 		}
-	} else if (nct_evt->param.cc->opcode == NCT_CC_OPCODE_UPDATE_DELTA) {
+	} else if (nct_evt->param.rx_pub->cc_opcode == NCT_CC_OPCODE_UPDATE_DELTA) {
 		err = nrf_cloud_obj_shadow_delta_decode(&shadow_obj, &shadow_delta);
 		if (!err) {
 			shadow_data.type = NRF_CLOUD_OBJ_SHADOW_TYPE_DELTA;
@@ -504,8 +508,8 @@ static int cc_rx_data_handler(const struct nct_evt *nct_evt)
 		/* Include the decoded shadow_data along with the original data */
 		struct nrf_cloud_evt cloud_evt = {
 			.type = NRF_CLOUD_EVT_RX_DATA_SHADOW,
-			.data = nct_evt->param.cc->data,
-			.topic = nct_evt->param.cc->topic,
+			.data = nct_evt->param.rx_pub->data,
+			.topic = nct_evt->param.rx_pub->topic,
 			.shadow = &shadow_data
 		};
 
@@ -690,16 +694,16 @@ static int location_process(const char * const buf)
 static int dc_rx_data_handler(const struct nct_evt *nct_evt)
 {
 	__ASSERT_NO_MSG(nct_evt != NULL);
-	__ASSERT_NO_MSG(nct_evt->param.dc != NULL);
+	__ASSERT_NO_MSG(nct_evt->param.rx_pub != NULL);
 
 	bool discon_req = false;
 
 	struct nrf_cloud_evt cloud_evt = {
-		.data = nct_evt->param.dc->data,
-		.topic = nct_evt->param.dc->topic,
+		.data = nct_evt->param.rx_pub->data,
+		.topic = nct_evt->param.rx_pub->topic,
 	};
 
-	switch (nrf_cloud_dc_rx_topic_decode(cloud_evt.topic.ptr)) {
+	switch (nct_evt->param.rx_pub->dc_topic) {
 	case NRF_CLOUD_RCV_TOPIC_AGPS:
 		agnss_process(cloud_evt.data.ptr, cloud_evt.data.len);
 		return 0;
