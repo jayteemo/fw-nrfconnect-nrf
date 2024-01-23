@@ -37,6 +37,10 @@
 #include "nrf_cloud_coap_transport.h"
 #include "nrf_cloud_mem.h"
 
+#if defined(CONFIG_NRF_CLOUD_COAP_WIFI_ADD_CREDS_FROM_FILE)
+#include CONFIG_NRF_CLOUD_CERTIFICATES_FILE
+#endif
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(nrf_cloud_coap_transport, CONFIG_NRF_CLOUD_COAP_LOG_LEVEL);
 
@@ -147,6 +151,32 @@ static int server_resolve(struct sockaddr_in *server4)
 	return 0;
 }
 
+static int add_creds(void)
+{
+	int err = 0;
+
+#if defined(CONFIG_NRF_CLOUD_COAP_WIFI_ADD_CREDS_FROM_FILE)
+	err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+				TLS_CREDENTIAL_CA_CERTIFICATE,
+				ca_certificate,
+				sizeof(ca_certificate));
+	if (err < 0) {
+		LOG_ERR("Failed to add CA certificate: %d", err);
+
+	}
+
+	err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+				TLS_CREDENTIAL_PRIVATE_KEY,
+				private_key,
+				sizeof(private_key));
+	if (err < 0) {
+		LOG_ERR("Failed to add private key: %d", err);
+	}
+
+#endif
+	return err;
+}
+
 /**@brief Initialize the CoAP client */
 int nrf_cloud_coap_init(void)
 {
@@ -156,6 +186,12 @@ int nrf_cloud_coap_init(void)
 	authenticated = false;
 
 	if (!initialized) {
+
+		err = add_creds();
+		if (err) {
+			return err;
+		}
+
 		/* Only initialize one time; not idempotent. */
 		LOG_DBG("Initializing async CoAP client");
 		err = coap_client_init(&coap_client, NULL);
