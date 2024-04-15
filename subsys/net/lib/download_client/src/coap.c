@@ -284,3 +284,25 @@ int coap_request_send(struct download_client *client)
 
 	return 0;
 }
+
+
+
+static void coap_client_callabck(int16_t result_code, size_t offset, const uint8_t *payload,
+				 size_t len, bool last_block, void *user_data);
+{
+	if (offset == 0) {
+		/* First block */
+	}
+
+	if (result_code == COAP_RESPONSE_CODE_CONTENT) {
+		// process data
+		// payload
+		// len
+	} else {
+		// error code
+	}
+
+	if (last_block) {
+		// done
+	}
+}

@@ -23,6 +23,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/types.h>
 #include <zephyr/net/coap.h>
+#include <zephyr/net/coap_client.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -144,6 +145,17 @@ struct download_client_cfg {
 typedef int (*download_client_callback_t)(
 	const struct download_client_evt *event);
 
+struct download_client_coap_options {
+	struct coap_client_option *opts;
+	size_t opt_cnt;
+};
+
+struct download_client_coap_client {
+	struct coap_client *cc;
+	struct coap_client_option *opts;
+	size_t opt_cnt;
+};
+
 /**
  * @brief Download client instance.
  */
@@ -193,11 +205,16 @@ struct download_client {
 	} http;
 
 	struct {
+
+#if defined(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)
+		struct download_client_coap_client dlc_cc;
+#else
 		/** CoAP block context. */
 		struct coap_block_context block_ctx;
 
 		/** CoAP pending object. */
 		struct coap_pending pending;
+#endif
 	} coap;
 
 	/** Internal thread ID. */

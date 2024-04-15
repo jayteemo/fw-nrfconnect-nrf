@@ -260,6 +260,8 @@ int fota_download_target(void);
  */
 int fota_download_s0_active_get(bool *const s0_active);
 
+int fota_download_set_coap_client(struct download_client_coap_client *const dlc_cc);
+
 #ifdef __cplusplus
 }
 #endif
