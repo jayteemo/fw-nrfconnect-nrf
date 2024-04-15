@@ -24,6 +24,11 @@
 #include <zephyr/logging/log.h>
 #include "download_client_internal.h"
 
+#if defined(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)
+#include <zephyr/net/coap.h>
+#include <zephyr/net/coap_client.h>
+#endif
+
 LOG_MODULE_REGISTER(download_client, CONFIG_DOWNLOAD_CLIENT_LOG_LEVEL);
 
 #define SIN6(A) ((struct sockaddr_in6 *)(A))
@@ -372,6 +377,13 @@ static int client_connect(struct download_client *dl)
 	int ns_err;
 	int type;
 	uint16_t port;
+
+#if defined(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)
+	if (dl->coap.dlc_cc.cc->fd >= 0) {
+		/* Already connected */
+		return 0;
+	}
+#endif
 
 	err = url_parse_proto(dl->host, &dl->proto, &type);
 	if (err == -EINVAL) {
@@ -791,6 +803,172 @@ static int handle_disconnect(struct download_client *client)
 	return err;
 }
 
+#if defined(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)
+static void coap_cb(int16_t result_code, size_t offset, const uint8_t *payload, size_t len,
+			    bool last_block, void *user_data)
+{
+	int ret;
+	struct download_client *dl = (struct download_client *)user_data;
+	struct download_client_evt evt = {0};
+
+	LOG_DBG("CoAP client:%d, offset:0x%X, len:0x%X, last_block:%d",
+			result_code, offset, len, last_block);
+
+	dl->coap.dlc_cc.xfer_res = result_code;
+
+	if ((result_code != COAP_RESPONSE_CODE_OK) && (result_code != COAP_RESPONSE_CODE_CONTENT)) {
+		LOG_ERR("Unexpected response: %*s", len, payload);
+		evt.id = DOWNLOAD_CLIENT_EVT_FRAGMENT;
+		evt.error = result_code;
+	} else {
+		dl->progress += len;
+		LOG_INF("Downloaded %u bytes", dl->progress);
+
+		evt.id = DOWNLOAD_CLIENT_EVT_FRAGMENT;
+		evt.fragment.buf = payload;
+		evt.fragment.len = len;
+	}
+
+	ret = dl->callback(&evt);
+	if (ret) {
+		// todo
+	}
+
+	if (last_block) {
+		LOG_INF("Download complete");
+
+		memset(&evt, 0, sizeof(evt));
+		evt.id = DOWNLOAD_CLIENT_EVT_DONE;
+
+		ret = dl->callback(&evt);
+		if (ret) {
+			// todo
+		}
+	}
+
+	if (last_block || (result_code >= COAP_RESPONSE_CODE_BAD_REQUEST)) {
+		k_sem_give(dl->coap.dlc_cc.xfer_sem);
+	}
+}
+
+#define MAX_RETRIES 5
+int do_coap_client_transfer(struct download_client *const dl)
+{
+	int err;
+	int retry = 0;
+	struct coap_client *cc = dl->coap.dlc_cc.cc;
+
+	struct coap_client_request request = {
+		.method = COAP_METHOD_GET,
+		.confirmable = true, // todo ?
+		.path = dl->file,
+		.fmt = COAP_CONTENT_FORMAT_APP_OCTET_STREAM,
+		.payload = NULL,
+		.len = CONFIG_DOWNLOAD_CLIENT_BUF_SIZE,
+		.cb = coap_cb,
+		.user_data = dl,
+		.options = dl->coap.dlc_cc.opts,
+		.num_options = dl->coap.dlc_cc.opt_cnt,
+	};
+
+	k_sem_reset(dl->coap.dlc_cc.xfer_sem);
+	while ((err = coap_client_req(cc, cc->fd, NULL, &request, NULL)) == -EAGAIN) {
+		if (retry++ > MAX_RETRIES) {
+			LOG_ERR("Timeout waiting for CoAP client to be available");
+			return -ETIMEDOUT;
+		}
+		LOG_DBG("CoAP client busy");
+		k_sleep(K_MSEC(500));
+	}
+
+	if (err == 0) {
+		LOG_DBG("Sent CoAP download request");
+	} else {
+		LOG_ERR("Error sending CoAP request: %d", err);
+	}
+
+	return err;
+}
+#endif /* CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT */
+
+void download_thread_cc(void *client, void *a, void *b)
+{
+#if defined(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)
+	int rc;
+	ssize_t len;
+	struct download_client *const dl = client;
+	bool send_request = false;
+	struct k_sem xfer_sem;
+
+	k_sem_init(&xfer_sem, 0, 1);
+	dl->coap.dlc_cc.xfer_sem = &xfer_sem;
+
+	while (true) {
+		rc = 0;
+
+		/* Wait for action */
+		k_sem_take(&dl->wait_for_download, K_FOREVER);
+
+		/* Connect to the target host */
+		if (is_connecting(dl)) {
+
+			if (client_connect(dl)) {
+				continue;
+			}
+
+			len = 0;
+			send_request = true;
+
+			set_state(dl, DOWNLOAD_CLIENT_DOWNLOADING);
+		}
+
+		/* Request loop */
+		while (is_downloading(dl)) {
+			if (send_request) {
+				/* Request next fragment */
+				dl->offset = 0;
+				dl->file_size = 0;
+				dl->progress = 0;
+
+				rc = do_coap_client_transfer(dl);
+
+				send_request = false;
+
+				if (rc) {
+					rc = error_evt_send(dl, ECONNRESET);
+					if (rc) {
+						/* Restart and suspend */
+						break;
+					}
+				}
+			}
+
+			/* Wait for coap_client to finish*/
+			k_sem_take(&xfer_sem, K_FOREVER);
+
+			// todo, check dl->coap.dlc_cc.xfer_res for error, otherwise success/done
+
+			break;
+		}
+
+		if (is_downloading(dl)) {
+			if (dl->close_when_done) {
+				set_state(dl, DOWNLOAD_CLIENT_CLOSING);
+			} else {
+				set_state(dl, DOWNLOAD_CLIENT_FINISHED);
+			}
+		}
+
+		if (is_closing(dl)) {
+			handle_disconnect(dl);
+			LOG_DBG("Connection closed");
+		}
+
+		/* Do not let the thread return, since it can't be restarted */
+	}
+#endif /* CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT */
+}
+
 void download_thread(void *client, void *a, void *b)
 {
 	int rc;
@@ -813,8 +991,8 @@ void download_thread(void *client, void *a, void *b)
 			}
 
 			/* Initialize CoAP */
-			if (IS_ENABLED(CONFIG_COAP) &&
-				(dl->proto == IPPROTO_UDP || dl->proto == IPPROTO_DTLS_1_2)) {
+			if ((dl->proto == IPPROTO_UDP || dl->proto == IPPROTO_DTLS_1_2) &&
+				IS_ENABLED(CONFIG_COAP)) {
 				coap_block_init(client, dl->progress);
 			}
 
@@ -899,8 +1077,8 @@ void download_thread(void *client, void *a, void *b)
 	}
 }
 
-int download_client_init(struct download_client *const client,
-			 download_client_callback_t callback)
+static int client_init(struct download_client *const client, download_client_callback_t callback,
+			char const *const thread_name, k_thread_entry_t thread_fn)
 {
 	if (client == NULL || callback == NULL) {
 		return -EINVAL;
@@ -920,14 +1098,29 @@ int download_client_init(struct download_client *const client,
 	client->tid =
 		k_thread_create(&client->thread, client->thread_stack,
 				K_THREAD_STACK_SIZEOF(client->thread_stack),
-				download_thread, client, NULL, NULL,
+				thread_fn, client, NULL, NULL,
 				K_LOWEST_APPLICATION_THREAD_PRIO, 0, K_NO_WAIT);
 
-	k_thread_name_set(client->tid, "download_client");
+	k_thread_name_set(client->tid, thread_name);
 
 	k_mutex_unlock(&client->mutex);
 
 	return 0;
+}
+
+int download_client_init(struct download_client *const client,
+			 download_client_callback_t callback)
+{
+	return client_init(client, callback, "download_client", download_thread);
+}
+
+int download_client_init_coap(struct download_client *const client,
+			      download_client_callback_t callback)
+{
+	if (!IS_ENABLED(CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT)) {
+		__ASSERT(false, "CONFIG_DOWNLOAD_CLIENT_COAP_CLIENT is not enabled");
+	}
+	return client_init(client, callback, "download_client_cc", download_thread_cc);
 }
 
 int download_client_set_host(struct download_client *client, const char *host,

@@ -141,6 +141,9 @@ config DOWNLOAD_CLIENT_CID
 	  Use DTLS Connection-ID option when downloading from CoAPS resources.
 	  This requires modem firmware 1.3.5 or newer.
 
+config DOWNLOAD_CLIENT_COAP_CLIENT
+	bool "Use CoAP Client library to perform CoAP downloads"
+
 config DOWNLOAD_CLIENT_SHELL
 	bool "Enable shell"
 	depends on SHELL
