@@ -30,6 +30,8 @@ LOG_MODULE_DECLARE(nrf_cloud_pgps, CONFIG_NRF_CLOUD_GPS_LOG_LEVEL);
 #define SETTINGS_KEY_LEAP_SEC			"g2u_leap_sec"
 #define SETTINGS_FULL_LEAP_SEC			SETTINGS_NAME "/" SETTINGS_KEY_LEAP_SEC
 
+#define PROXY_URI_TEST	"https://pgps.nrfcloud.com/public/16173-64800_16180-50400.bin"
+#define COAP_HOST_TEST  "coaps://" CONFIG_NRF_CLOUD_COAP_SERVER_HOSTNAME
 struct block_pool {
 	int first_free;
 	uint32_t last_alloc;
@@ -48,6 +50,7 @@ static struct nrf_cloud_pgps_header saved_header;
 static K_SEM_DEFINE(dl_active, 1, 1);
 
 static struct download_client dlc;
+
 static int sec_tag_list[1];
 static int socket_retries_left;
 static npgps_buffer_handler_t buffer_handler;
@@ -486,18 +489,22 @@ int npgps_download_start(const char *host, const char *file, int sec_tag,
 	int err;
 	struct nrf_cloud_download_data dl = {
 		.type = NRF_CLOUD_DL_TYPE_DL_CLIENT,
-		.host = host,
-		.path = file,
+		.host = COAP_HOST_TEST,
+		.path = "/proxy",
 		.dl_cfg = {
 			.sec_tag_count = 0,
 			.sec_tag_list = NULL,
 			.pdn_id = pdn_id,
-			.frag_size_override = fragment_size,
+			.frag_size_override = 0,//fragment_size,
 			.set_tls_hostname = false,
 			.family = AF_INET
 		},
 		.dlc = &dlc
 	};
+
+	dlc.proto = IPPROTO_DTLS_1_2;
+
+	dlc.coap.proxy_uri = PROXY_URI_TEST;
 
 	if (sec_tag != -1) {
 		sec_tag_list[0] = sec_tag;

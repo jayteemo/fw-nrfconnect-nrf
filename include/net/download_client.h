@@ -198,6 +198,8 @@ struct download_client {
 
 		/** CoAP pending object. */
 		struct coap_pending pending;
+
+		const char *proxy_uri;
 	} coap;
 
 	/** Internal thread ID. */

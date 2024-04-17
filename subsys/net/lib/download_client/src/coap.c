@@ -234,8 +234,11 @@ int coap_request_send(struct download_client *client)
 		return err;
 	}
 
+	LOG_INF("File: %s", file);
+
 	path_elem = strtok_r(file, COAP_PATH_ELEM_DELIM, &path_elem_saveptr);
 	do {
+		LOG_INF("appending option: %s", path_elem);
 		err = coap_packet_append_option(&request, COAP_OPTION_URI_PATH,
 			path_elem, strlen(path_elem));
 		if (err) {
@@ -244,6 +247,12 @@ int coap_request_send(struct download_client *client)
 		}
 	} while ((path_elem = strtok_r(NULL, COAP_PATH_ELEM_DELIM, &path_elem_saveptr)));
 
+	err = coap_append_option_int(&request, COAP_OPTION_ACCEPT, COAP_CONTENT_FORMAT_TEXT_PLAIN);
+	if (err) {
+		LOG_ERR("Unable to add COAP_OPTION_ACCEPT");
+		return err;
+	}
+/*
 	err = coap_append_block2_option(&request, &client->coap.block_ctx);
 	if (err) {
 		LOG_ERR("Unable to add block2 option");
@@ -254,6 +263,17 @@ int coap_request_send(struct download_client *client)
 	if (err) {
 		LOG_ERR("Unable to add size2 option");
 		return err;
+	}
+*/
+	if (client->coap.proxy_uri) {
+		LOG_INF("Adding proxy URI...");
+		err = coap_packet_append_option(&request, COAP_OPTION_PROXY_URI,
+			client->coap.proxy_uri, strlen(client->coap.proxy_uri));
+
+		if (err) {
+			LOG_ERR("Unable add COAP_OPTION_PROXY_URI to request");
+			return err;
+		}
 	}
 
 	if (!has_pending(client)) {
