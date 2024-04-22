@@ -32,10 +32,28 @@ enum coap_content_format {
 };
 #endif
 
+struct nrf_cloud_coap_client {
+	struct coap_client cc;
+	bool initialized;
+	bool authenticated;
+	bool cid_saved;
+};
+
 /**
  * @defgroup nrf_cloud_coap_transport nRF CoAP API
  * @{
  */
+
+int nrf_cloud_coap_transport_init	 (struct nrf_cloud_coap_client *const client);
+int nrf_cloud_coap_transport_connect	 (struct nrf_cloud_coap_client *const client);
+int nrf_cloud_coap_transport_disconnect	 (struct nrf_cloud_coap_client *const client);
+int nrf_cloud_coap_transport_authenticate(struct nrf_cloud_coap_client *const client);
+int nrf_cloud_coap_transport_pause	 (struct nrf_cloud_coap_client *const client);
+int nrf_cloud_coap_transport_resume	 (struct nrf_cloud_coap_client *const client);
+
+int nrf_cloud_coap_auth_post(struct nrf_cloud_coap_client *const client,
+			     char const *const ver_string,
+			     const uint8_t *jwt, size_t jwt_len);
 
 /**@brief Check if device is connected and authorized to use nRF Cloud CoAP.
  *
