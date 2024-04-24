@@ -82,6 +82,12 @@ static struct wifi_scan_info nrfcloud_wifi_data;
 
 #endif /* CONFIG_NRF_CLOUD_LOCATION */
 
+#if defined(CONFIG_SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS)
+#define ANCHOR_BUF_SZ	(CONFIG_SLM_NRF_CLOUD_WIFI_LOCATION_ANCHOR_COUNT * \
+			 NRF_CLOUD_ANCHOR_LIST_BUF_MIN_SZ)
+static char anchors[ANCHOR_BUF_SZ];
+#endif /* CONFIG_SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS */
+
 static char nrfcloud_device_id[NRF_CLOUD_CLIENT_ID_MAX_LEN];
 
 bool slm_nrf_cloud_ready;
@@ -315,12 +321,26 @@ static void on_cloud_evt_location_data_received(const struct nrf_cloud_data *con
 {
 #if defined(CONFIG_NRF_CLOUD_LOCATION)
 	int err;
-	struct nrf_cloud_location_result result;
+	struct nrf_cloud_location_result result = {0};
+
+#if CONFIG_SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS
+	result.anchor_buf	= anchors;
+	result.anchor_buf_sz	= sizeof(anchors);
+#endif
 
 	err = nrf_cloud_location_process(data->ptr, &result);
 	if (err == 0) {
-		rsp_send("\r\n#XNRFCLOUDPOS: %d,%lf,%lf,%d\r\n",
-			result.type, result.lat, result.lon, result.unc);
+		rsp_send("\r\n#XNRFCLOUDPOS: %d,%lf,%lf,%d%s",
+			result.type, result.lat, result.lon, result.unc,
+			result.anchor_cnt ? "," : "/r/n");
+
+#if CONFIG_SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS
+	struct nrf_cloud_anchor_list_node *cur, *nxt = NULL;
+
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&result.anchor_list, cur, nxt, node) {
+		rsp_send("\"%s\"%s", cur->name, nxt ? "," : "\r\n");
+	};
+#endif
 	} else {
 		if (err == 1) {
 			err = -ENOMSG;

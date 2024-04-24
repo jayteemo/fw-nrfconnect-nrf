@@ -154,6 +154,21 @@ config SLM_NRF_CLOUD
 	bool "nRF Cloud support in SLM"
 	default y
 
+config SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS
+	bool "Enable nRF Cloud Wi-FI anchor name processing"
+	depends on SLM_NRF_CLOUD
+	depends on CONFIG_NRF_CLOUD_LOCATION
+	select NRF_CLOUD_LOCATION_PARSE_ANCHORS
+	default y
+
+config SLM_NRF_CLOUD_WIFI_LOCATION_ANCHOR_COUNT
+	int "The number of Wi-Fi anchor names that can be processed"
+	range 1 10
+	default 5
+	depends on SLM_NRF_CLOUD_WIFI_LOCATION_ANCHORS
+	help
+	  This value determines the size of the buffer reserved for processing the anchor names.
+
 config SLM_FULL_FOTA
 	bool "Full modem FOTA support in SLM"
 	default n
