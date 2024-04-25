@@ -9,11 +9,48 @@
 #if defined(CONFIG_FOTA_DOWNLOAD)
 #include <net/fota_download.h>
 #endif
+#if defined(CONFIG_NRF_CLOUD_COAP)
+#include "../coap/include/nrf_cloud_coap_transport.h"
+#endif
+
 #include "nrf_cloud_download.h"
 LOG_MODULE_REGISTER(nrf_cloud_download, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 static K_MUTEX_DEFINE(active_dl_mutex);
 static struct nrf_cloud_download_data active_dl = { .type = NRF_CLOUD_DL_TYPE_NONE };
+
+#if defined(CONFIG_NRF_CLOUD_COAP)
+static struct nrf_cloud_coap_client coap_client;
+#endif
+
+static int coap_dl_init(void)
+{
+#if defined(CONFIG_NRF_CLOUD_COAP)
+	return nrf_cloud_coap_transport_init(&coap_client);
+#else
+	return 0;
+#endif
+}
+
+static int coap_connect_and_auth(struct nrf_cloud_download_data *const dl)
+{
+#if defined(CONFIG_NRF_CLOUD_COAP)
+	nrf_cloud_coap_transport_connect(&coap_client);
+	nrf_cloud_coap_transport_authenticate(&coap_client);
+	return 0;
+#else
+	return 0;
+#endif
+}
+
+static int coap_dl_disconnect(void)
+{
+#if defined(CONFIG_NRF_CLOUD_COAP)
+	return nrf_cloud_coap_transport_disconnect(&coap_client);
+#else
+	return 0;
+#endif
+}
 
 void nrf_cloud_download_end(void)
 {
@@ -21,6 +58,35 @@ void nrf_cloud_download_end(void)
 	memset(&active_dl, 0, sizeof(active_dl));
 	active_dl.type = NRF_CLOUD_DL_TYPE_NONE;
 	k_mutex_unlock(&active_dl_mutex);
+}
+
+static int dlc_start(struct nrf_cloud_download_data *const dl)
+{
+	int ret;
+
+	if (IS_ENABLED(CONFIG_NRF_CLOUD_COAP)) {
+		ret = coap_connect_and_auth(dl);
+
+		if (ret) {
+			/* ERROR TODO */
+			return ret;
+		}
+
+		/* TODO: set client and start DL*/
+
+		return 0;
+	}
+
+	ret = download_client_get(dl->dlc, dl->host, &dl->dl_cfg, dl->path, 0);
+}
+
+static int dlc_disconnect(struct nrf_cloud_download_data *const dl)
+{
+	if (IS_ENABLED(CONFIG_NRF_CLOUD_COAP)) {
+		return coap_dl_disconnect();
+	}
+
+	return download_client_disconnect(dl->dlc);
 }
 
 int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl)
@@ -35,6 +101,9 @@ int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl)
 	}
 
 	int ret = 0;
+
+	/* TODO */
+	(void)coap_dl_init();
 
 	k_mutex_lock(&active_dl_mutex, K_FOREVER);
 
@@ -52,7 +121,7 @@ int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl)
 	 */
 	if (active_dl.type == NRF_CLOUD_DL_TYPE_DL_CLIENT) {
 		LOG_INF("Stopping active download, incoming FOTA update download has priority");
-		ret = download_client_disconnect(active_dl.dlc);
+		ret = dlc_disconnect(&active_dl);
 
 		if (ret) {
 			LOG_ERR("download_client_disconnect() failed, error %d", ret);
@@ -66,10 +135,9 @@ int nrf_cloud_download_start(struct nrf_cloud_download_data *const dl)
 			dl->dl_cfg.pdn_id, dl->dl_cfg.frag_size_override, dl->fota.expected_type);
 #endif
 	} else if (dl->type == NRF_CLOUD_DL_TYPE_DL_CLIENT) {
-		ret = download_client_get(dl->dlc, dl->host, &dl->dl_cfg,
-					  dl->path, 0);
+		ret = dlc_start(dl);
 		if (ret) {
-			(void)download_client_disconnect(dl->dlc);
+			(void)dlc_disconnect(dl);
 		}
 	} else {
 		LOG_WRN("Unhandled download type: %d", dl->type);
