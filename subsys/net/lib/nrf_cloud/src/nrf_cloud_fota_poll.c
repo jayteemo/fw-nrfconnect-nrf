@@ -156,6 +156,10 @@ static void http_fota_dl_handler(const struct fota_download_evt *evt)
 	case FOTA_DOWNLOAD_EVT_PROGRESS:
 		LOG_DBG("FOTA download percent: %d%%", evt->progress);
 		break;
+	case FOTA_DOWNLOAD_EVT_RESUME_OFFSET:
+		LOG_DBG("Resume at offset: %d", evt->progress);
+		/* TODO: resume at offset */
+		break;
 	default:
 		break;
 	}
@@ -360,7 +364,10 @@ static int start_download(void)
 			.pdn_id = 0,
 			.frag_size_override = FOTA_DL_FRAGMENT_SZ,
 		},
-		.fota = { .expected_type = img_type }
+		.fota = {
+			.expected_type = img_type,
+			.img_sz = job.file_size
+		}
 	};
 
 	ret = nrf_cloud_download_start(&dl);
