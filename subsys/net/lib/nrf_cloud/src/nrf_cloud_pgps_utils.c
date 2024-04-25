@@ -473,6 +473,10 @@ int npgps_download_init(npgps_buffer_handler_t buf_handler, npgps_eot_handler_t 
 	buffer_handler = buf_handler;
 	eot_handler = end_handler;
 
+	if (IS_ENABLED(CONFIG_NRF_CLOUD_COAP)) {
+		return download_client_init_coap(&dlc, download_client_callback);
+	}
+
 	return download_client_init(&dlc, download_client_callback);
 }
 
