@@ -273,7 +273,9 @@ enum nrf_cloud_topic_type {
 	 *  nrf_cloud_codec.h - struct nrf_cloud_bin_hdr.  A unique format value
 	 *  should be included to distinguish this data from binary logging.
 	 */
-	NRF_CLOUD_TOPIC_BIN
+	NRF_CLOUD_TOPIC_BIN,
+	/** Endpoint used to request device shadow data using a transform (JSONata expression). */
+	NRF_CLOUD_TOPIC_STATE_TF,
 };
 
 /** @brief FOTA status reported to nRF Cloud. */
@@ -781,6 +783,17 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg);
  * @return A negative value indicates an error.
  */
 int nrf_cloud_obj_shadow_update(struct nrf_cloud_obj *const shadow_obj);
+
+/**
+ * @brief Request shadow data using a JSONata expression.
+ *
+ * @param transform The JSONata expression.
+ *
+ * @retval 0       If successful.
+ * @retval -EINVAL Error; invalid parameter.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_shadow_transform_request(char const *const transform);
 
 /**
  * @brief Disconnect from the cloud.

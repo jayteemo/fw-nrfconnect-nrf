@@ -80,6 +80,17 @@ BUILD_ASSERT((sizeof(CONFIG_NRF_CLOUD_CLIENT_ID) - 1) <= NRF_CLOUD_CLIENT_ID_MAX
  */
 #define NCT_SHDW_TPC_DELTA_TRIM "%s/shadow/update/delta/trim"
 
+/* nRF Cloud's custom shadow transform (JSONata expression) request topic (device PUB).
+ * Request shadow data according to the provided transform.
+ */
+#define NCT_SHDW_TPC_GET_TRANSFORM "%s/shadow/get/tf"
+
+/* nRF Cloud's custom shadow topic (device SUB).
+ * Receives the shadow data from a requested transform.
+ */
+#define NCT_SHDW_TPC_GET_ACCEPT_TRANSFORM "%s/shadow/get/accepted/tf"
+
+
 /* Buffers to hold stage and tenant strings. */
 static char stage[NRF_CLOUD_STAGE_ID_MAX_LEN];
 static char tenant[NRF_CLOUD_TENANT_ID_MAX_LEN];
@@ -119,18 +130,19 @@ static struct nct {
 	uint8_t payload_buf[CONFIG_NRF_CLOUD_MQTT_PAYLOAD_BUFFER_LEN + 1];
 } nct;
 
-#define CC_RX_LIST_CNT 3
+#define CC_RX_LIST_CNT 4
 static uint32_t const nct_cc_rx_opcode_map[CC_RX_LIST_CNT] = {
 	NCT_CC_OPCODE_UPDATE_ACCEPTED,
 	NCT_CC_OPCODE_UPDATE_REJECTED,
-	NCT_CC_OPCODE_UPDATE_DELTA
+	NCT_CC_OPCODE_UPDATE_DELTA,
+	NCT_CC_OPCODE_TRANSFORM
 };
 static struct mqtt_topic nct_cc_rx_list[CC_RX_LIST_CNT];
 
 BUILD_ASSERT(ARRAY_SIZE(nct_cc_rx_opcode_map) == ARRAY_SIZE(nct_cc_rx_list),
 	"nct_cc_rx_opcode_map should be the same size as nct_cc_rx_list");
 
-#define CC_TX_LIST_CNT 2
+#define CC_TX_LIST_CNT 3
 static struct mqtt_topic nct_cc_tx_list[CC_TX_LIST_CNT];
 
 /* Internal routine to reset data endpoint information. */
@@ -402,8 +414,10 @@ static void nct_reset_topics(void)
 	nrf_cloud_free((void *)nct.cc_eps.accepted.utf8);
 	nrf_cloud_free((void *)nct.cc_eps.rejected.utf8);
 	nrf_cloud_free((void *)nct.cc_eps.delta.utf8);
+	nrf_cloud_free((void *)nct.cc_eps.accepted_tf.utf8);
 	nrf_cloud_free((void *)nct.cc_eps.update.utf8);
 	nrf_cloud_free((void *)nct.cc_eps.get.utf8);
+	nrf_cloud_free((void *)nct.cc_eps.get_tf.utf8);
 	memset(&nct.cc_eps, 0, sizeof(nct.cc_eps));
 
 	/* Reset the lists */
@@ -433,15 +447,24 @@ static void nct_topic_lists_populate(void)
 			continue;
 		}
 
+		if (nct_cc_rx_opcode_map[idx] == NCT_CC_OPCODE_TRANSFORM) {
+			nct_cc_rx_list[idx].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+			nct_cc_rx_list[idx].topic = nct.cc_eps.accepted_tf;
+			continue;
+		}
+
 		__ASSERT(false, "Op code not added to RX list");
 	}
 
 	/* Add TX topics */
-	nct_cc_tx_list[0].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_tx_list[0].topic = nct.cc_eps.get;
+	nct_cc_tx_list[NCT_CC_OPCODE_GET_REQ].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+	nct_cc_tx_list[NCT_CC_OPCODE_GET_REQ].topic = nct.cc_eps.get;
 
-	nct_cc_tx_list[1].qos = MQTT_QOS_1_AT_LEAST_ONCE;
-	nct_cc_tx_list[1].topic = nct.cc_eps.update;
+	nct_cc_tx_list[NCT_CC_OPCODE_UPDATE_ACCEPTED].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+	nct_cc_tx_list[NCT_CC_OPCODE_UPDATE_ACCEPTED].topic = nct.cc_eps.update;
+
+	nct_cc_tx_list[NCT_CC_OPCODE_TRANSFORM].qos = MQTT_QOS_1_AT_LEAST_ONCE;
+	nct_cc_tx_list[NCT_CC_OPCODE_TRANSFORM].topic = nct.cc_eps.get_tf;
 }
 
 static int nct_topics_populate(void)
@@ -466,6 +489,10 @@ static int nct_topics_populate(void)
 	if (ret) {
 		goto err_cleanup;
 	}
+	ret = allocate_and_format_topic(&nct.cc_eps.accepted_tf, NCT_SHDW_TPC_GET_ACCEPT_TRANSFORM);
+	if (ret) {
+		goto err_cleanup;
+	}
 	ret = allocate_and_format_topic(&nct.cc_eps.update, NCT_UPDATE_TOPIC);
 	if (ret) {
 		goto err_cleanup;
@@ -474,12 +501,18 @@ static int nct_topics_populate(void)
 	if (ret) {
 		goto err_cleanup;
 	}
+	ret = allocate_and_format_topic(&nct.cc_eps.get_tf, NCT_SHDW_TPC_GET_TRANSFORM);
+	if (ret) {
+		goto err_cleanup;
+	}
 
 	LOG_DBG("Accepted: %s",	(char *)nct.cc_eps.accepted.utf8);
 	LOG_DBG("Rejected: %s",	(char *)nct.cc_eps.rejected.utf8);
 	LOG_DBG("Delta: %s",	(char *)nct.cc_eps.delta.utf8);
+	LOG_DBG("Accept TF: %s",(char *)nct.cc_eps.accepted_tf.utf8);
 	LOG_DBG("Update: %s",	(char *)nct.cc_eps.update.utf8);
 	LOG_DBG("Get: %s",	(char *)nct.cc_eps.get.utf8);
+	LOG_DBG("Get TF: %s",	(char *)nct.cc_eps.get_tf.utf8);
 
 	/* Populate RX and TX topic lists */
 	nct_topic_lists_populate();

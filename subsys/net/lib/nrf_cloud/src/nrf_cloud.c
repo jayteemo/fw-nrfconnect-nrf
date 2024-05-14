@@ -385,13 +385,15 @@ int nrf_cloud_send(const struct nrf_cloud_tx_data *msg)
 	}
 
 	switch (msg->topic_type) {
-	case NRF_CLOUD_TOPIC_STATE: {
+	case NRF_CLOUD_TOPIC_STATE:
+	case NRF_CLOUD_TOPIC_STATE_TF: {
 		if (current_state < STATE_CC_CONNECTED) {
 			err = -EACCES;
 			break;
 		}
 		const struct nct_cc_data shadow_data = {
-			.opcode = NCT_CC_OPCODE_UPDATE_ACCEPTED,
+			.opcode = (msg->topic_type == NRF_CLOUD_TOPIC_STATE_TF) ?
+				   NCT_CC_OPCODE_TRANSFORM : NCT_CC_OPCODE_UPDATE_ACCEPTED,
 			.data.ptr = send_data.ptr,
 			.data.len = send_data.len,
 			.message_id = (msg->id > 0) ? msg->id : NCT_MSG_ID_USE_NEXT_INCREMENT
@@ -490,6 +492,22 @@ int nrf_cloud_obj_shadow_update(struct nrf_cloud_obj *const shadow_obj)
 		.obj = shadow_obj,
 		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
 		.topic_type = NRF_CLOUD_TOPIC_STATE,
+	};
+
+	return nrf_cloud_send(&msg);
+}
+
+int nrf_cloud_shadow_transform_request(char const *const transform)
+{
+	if (!transform) {
+		return -EINVAL;
+	}
+
+	struct nrf_cloud_tx_data msg = {
+		.obj = NULL,
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.topic_type = NRF_CLOUD_TOPIC_STATE_TF,
+		.data = { .ptr = transform, .len = strlen(transform) }
 	};
 
 	return nrf_cloud_send(&msg);
