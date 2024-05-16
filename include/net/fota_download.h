@@ -62,7 +62,10 @@ enum fota_download_evt_id {
 	FOTA_DOWNLOAD_EVT_ERROR,
 
 	/** FOTA download abandoned due to a cancellation request. */
-	FOTA_DOWNLOAD_EVT_CANCELLED
+	FOTA_DOWNLOAD_EVT_CANCELLED,
+
+	/** CONFIG_FOTA_DOWNLOAD_EXTERNAL_DL: resume at offset */
+	FOTA_DOWNLOAD_EVT_RESUME_OFFSET,
 };
 
 /**
@@ -261,6 +264,11 @@ int fota_download_target(void);
 int fota_download_s0_active_get(bool *const s0_active);
 
 int fota_download_set_coap_client(struct download_client_coap_client *const dlc_cc);
+
+int fota_download_external_start(const char *host, const char *file,
+				 const enum dfu_target_image_type expected_type,
+				 const size_t image_size);
+int fota_download_external_evt_handle(struct download_client_evt const *const evt);
 
 #ifdef __cplusplus
 }

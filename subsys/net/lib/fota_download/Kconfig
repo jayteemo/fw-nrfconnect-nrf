@@ -66,6 +66,10 @@ config FOTA_DOWNLOAD_COAP_OPTIONS
 	bool "Enable setting CoAP options for CoAP client download"
 	depends on DOWNLOAD_CLIENT_COAP_CLIENT
 
+config FOTA_DOWNLOAD_EXTERNAL_DL
+	bool "Use external download events to perform FOTA updates"
+	default y
+
 module=FOTA_DOWNLOAD
 module-dep=LOG
 module-str=Firmware Over the Air Download
