@@ -473,10 +473,6 @@ int npgps_download_init(npgps_buffer_handler_t buf_handler, npgps_eot_handler_t 
 	buffer_handler = buf_handler;
 	eot_handler = end_handler;
 
-	if (IS_ENABLED(CONFIG_NRF_CLOUD_COAP)) {
-		return download_client_init_coap(&dlc, download_client_callback);
-	}
-
 	return download_client_init(&dlc, download_client_callback);
 }
 
@@ -560,11 +556,14 @@ static int download_client_callback(const struct download_client_evt *event)
 		return 0;
 	}
 
+	/* CoAP downloads do not need to disconnect since they don't directly use download_client */
+#if !defined(CONFIG_NRF_CLOUD_COAP)
 	int ret = download_client_disconnect(&dlc);
 
 	if (ret) {
 		LOG_ERR("Error disconnecting from download client:%d", ret);
 	}
+#endif
 
 	nrf_cloud_download_end();
 
