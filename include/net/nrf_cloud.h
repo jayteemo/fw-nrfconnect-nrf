@@ -823,7 +823,7 @@ int nrf_cloud_modem_fota_completed(const bool fota_success);
  * @brief Retrieve the current device ID.
  *
  * @param[in,out] id_buf Buffer to receive the device ID.
- * @param[in] id_len     Size of buffer (NRF_CLOUD_CLIENT_ID_MAX_LEN).
+ * @param[in] id_len     Size of buffer (NRF_CLOUD_CLIENT_ID_MAX_LEN + 1).
  *
  * @retval 0 If successful.
  * @return A negative value indicates an error.
