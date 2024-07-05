@@ -90,7 +90,8 @@ LOG_MODULE_REGISTER(nrf_cloud_rest, CONFIG_NRF_CLOUD_REST_LOG_LEVEL);
 /* Generate an authorization header value string in the form:
  * "Authorization: Bearer JWT \r\n"
  */
-static int generate_auth_header(const char *const tok, char **auth_hdr_out)
+static int generate_auth_header(const char *const tok, char **auth_hdr_out,
+				const char *const device_id)
 {
 	if ((!tok && !IS_ENABLED(CONFIG_NRF_CLOUD_REST_AUTOGEN_JWT))) {
 		LOG_ERR("Cannot generate auth header, no token was given, "
@@ -107,11 +108,30 @@ static int generate_auth_header(const char *const tok, char **auth_hdr_out)
 	int prefix_len = sizeof(AUTH_HDR_BEARER_PREFIX) - 1;
 	int postfix_len = sizeof(CRLF) - 1;
 
-
 #ifdef CONFIG_NRF_CLOUD_REST_AUTOGEN_JWT
+	/* Confirm that the provided device ID matches what will be used in the JWT */
+	if (device_id) {
+		int err;
+		const char *id;
+
+		err = nrf_cloud_client_id_ptr_get(&id);
+		if (err) {
+			LOG_ERR("Failed to obtain device ID");
+			return -ENOENT;
+		}
+
+		err = strncmp(id, device_id, NRF_CLOUD_CLIENT_ID_MAX_LEN);
+		if (err != 0) {
+			LOG_ERR("Failed to obtain device ID");
+			return -EBADF;
+		}
+	}
+
 	if (!tok) {
 		tok_len = CONFIG_MODEM_JWT_MAX_LEN;
 	}
+#else
+	ARG_UNUSED(device_id);
 #endif /* CONFIG_NRF_CLOUD_REST_AUTOGEN_JWT */
 
 	if (tok_len <= 0) {
@@ -284,7 +304,7 @@ int nrf_cloud_rest_shadow_state_update(struct nrf_cloud_rest_context *const rest
 	req.url = url;
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
@@ -375,7 +395,7 @@ int nrf_cloud_rest_fota_job_update(struct nrf_cloud_rest_context *const rest_ctx
 	init_rest_client_request(rest_ctx, &req, HTTP_PATCH);
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
@@ -445,7 +465,7 @@ int nrf_cloud_rest_fota_job_get(struct nrf_cloud_rest_context *const rest_ctx,
 	}
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
@@ -529,7 +549,7 @@ int nrf_cloud_rest_location_get(struct nrf_cloud_rest_context *const rest_ctx,
 	req.url = url;
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, NULL);
 
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header, err: %d", ret);
@@ -781,7 +801,7 @@ int nrf_cloud_rest_agnss_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	req.url = API_GET_AGNSS_BASE;
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
@@ -946,7 +966,7 @@ int nrf_cloud_rest_pgps_data_get(struct nrf_cloud_rest_context *const rest_ctx,
 	LOG_DBG("URL: %s", url);
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
@@ -1168,7 +1188,7 @@ int nrf_cloud_rest_send_device_message(struct nrf_cloud_rest_context *const rest
 	}
 
 	/* Format auth header */
-	ret = generate_auth_header(rest_ctx->auth, &auth_hdr);
+	ret = generate_auth_header(rest_ctx->auth, &auth_hdr, device_id);
 	if (ret) {
 		LOG_ERR("Could not format HTTP auth header");
 		goto clean_up;
