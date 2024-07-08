@@ -82,7 +82,7 @@ static struct wifi_scan_info nrfcloud_wifi_data;
 
 #endif /* CONFIG_NRF_CLOUD_LOCATION */
 
-static char nrfcloud_device_id[NRF_CLOUD_CLIENT_ID_MAX_LEN];
+static char nrfcloud_device_id[NRF_CLOUD_CLIENT_ID_MAX_LEN + 1];
 
 bool slm_nrf_cloud_ready;
 bool slm_nrf_cloud_send_location;
