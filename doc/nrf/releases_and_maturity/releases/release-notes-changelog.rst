@@ -350,6 +350,8 @@ Cellular samples
     * Wi-Fi overlays from newlibc to picolib.
     * Handling of JITP association to improve speed and reliability.
 
+  * Fixed an issue where the accepted shadow was not marked as received because the config section did not yet exist in the shadow.
+
 * :ref:`nrf_cloud_rest_device_message` sample:
 
   * Added support for dictionary logs using REST.
