@@ -17,6 +17,96 @@ LOG_MODULE_REGISTER(nrf_mcumgr_smp_client, CONFIG_NRF_MCUMGR_SMP_CLIENT_LOG_LEVE
 
 static dfu_target_reset_cb_t reset_cb;
 
+static size_t local_dl_size;
+static size_t local_dl_bytes_written;
+
+static void dfu_target_cb(enum dfu_target_evt_id evt)
+{
+	switch (evt) {
+	case DFU_TARGET_EVT_ERASE_PENDING:
+		LOG_DBG("DFU_TARGET_EVT_ERASE_PENDING");
+		break;
+	case DFU_TARGET_EVT_TIMEOUT:
+		LOG_DBG("DFU_TARGET_EVT_TIMEOUT");
+		break;
+	case DFU_TARGET_EVT_ERASE_DONE:
+		LOG_DBG("DFU_TARGET_EVT_ERASE_DONE");
+		break;
+	default:
+		break;
+	}
+}
+
+int mcumgr_smp_client_local_download_start(const size_t size)
+{
+	int err;
+
+	err = dfu_target_init(DFU_TARGET_IMAGE_TYPE_SMP, 0, size, dfu_target_cb);
+	if (!err) {
+		local_dl_size = size;
+		local_dl_bytes_written = 0;
+	}
+
+	return err;
+}
+
+int mcumgr_smp_client_local_download_write(const uint8_t *buf, const size_t len)
+{
+	if (local_dl_bytes_written == 0) {
+		/* Validate SMP target type */
+		enum dfu_target_image_type img_type = dfu_target_smp_img_type_check(buf, len);
+
+		if (img_type != DFU_TARGET_IMAGE_TYPE_SMP) {
+			return -EFTYPE;
+		}
+	}
+
+	LOG_INF("SMP client: writing %u bytes", len);
+	int err = dfu_target_write((const void *)buf, len);
+
+	if (err) {
+		(void)dfu_target_done(false);
+		return err;
+	}
+
+	local_dl_bytes_written += len;
+
+	if (local_dl_bytes_written < local_dl_size) {
+		return 0;
+	}
+
+	LOG_INF("SMP client: all bytes written");
+	err = dfu_target_done(true);
+	if (!err) {
+		/* Return 1 to indicate complete */
+		err = 1;
+	}
+
+	return err;
+}
+
+int mcumgr_smp_client_local_download_apply(void)
+{
+	int err = dfu_target_schedule_update(1);
+
+	if (err != 0 && reset_cb) {
+		(void)reset_cb();
+	}
+
+	return err;
+}
+
+int mcumgr_smp_client_local_download_reboot(void)
+{
+	return dfu_target_smp_reboot();
+}
+
+int mcumgr_smp_client_local_download_read_list(struct mcumgr_image_state *image_list)
+{
+	return dfu_target_smp_image_list_get(image_list);
+}
+
+
 int mcumgr_smp_client_init(dfu_target_reset_cb_t cb)
 {
 	int ret;

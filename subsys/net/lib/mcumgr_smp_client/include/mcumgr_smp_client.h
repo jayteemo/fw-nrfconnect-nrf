@@ -24,6 +24,12 @@
 extern "C" {
 #endif
 
+int mcumgr_smp_client_local_download_start(const size_t size);
+int mcumgr_smp_client_local_download_write(const uint8_t *buf, const size_t len);
+int mcumgr_smp_client_local_download_apply(void);
+int mcumgr_smp_client_local_download_reboot(void);
+int mcumgr_smp_client_local_download_read_list(struct mcumgr_image_state *image_list);
+
 /**@brief Initialize DFU target SMP, MCUmgr client, and SMP client.
  *
  * @param cb Callback for resetting the device to enter MCUboot recovery mode.
