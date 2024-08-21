@@ -14,8 +14,14 @@
 #include <stdio.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <mcumgr_smp_client.h>
+#if defined(CONFIG_BOARD_THINGY91X)
+#include "smp_svr_fw_t91x.h"
+#else
 #include "smp_svr_fw.h"
+#endif
 
 LOG_MODULE_REGISTER(nrf_cloud_rest_fota, CONFIG_NRF_CLOUD_REST_FOTA_SAMPLE_LOG_LEVEL);
 
@@ -24,14 +30,21 @@ LOG_MODULE_REGISTER(nrf_cloud_rest_fota, CONFIG_NRF_CLOUD_REST_FOTA_SAMPLE_LOG_L
 /* Semaphore to indicate a button has been pressed */
 static K_SEM_DEFINE(button_press_sem, 0, 1);
 
-#define RESET_NODE DT_NODELABEL(nrf52840_reset)
-#define HAS_RECOVERY_MODE (DT_NODE_HAS_STATUS(RESET_NODE, okay))
+#if defined(CONFIG_BOARD_THINGY91X)
+#define HAS_RECOVERY_MODE	1
+#define ZEPHYR_USER_NODE	DT_PATH(zephyr_user)
+#define RESET_PIN_SPEC		GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, nrf5340_reset_gpios);
+#else
+#define RESET_NODE		DT_NODELABEL(nrf52840_reset)
+#define HAS_RECOVERY_MODE	(DT_NODE_HAS_STATUS(RESET_NODE, okay))
+#define RESET_PIN_SPEC		GPIO_DT_SPEC_GET(RESET_NODE, gpios)
+#endif
 
 #if HAS_RECOVERY_MODE
-static int nrf52840_reset_api(void)
+static int reset_api(void)
 {
 	int err;
-	const struct gpio_dt_spec reset_pin_spec = GPIO_DT_SPEC_GET(RESET_NODE, gpios);
+	const struct gpio_dt_spec reset_pin_spec = RESET_PIN_SPEC;
 
 	if (!device_is_ready(reset_pin_spec.port)) {
 		LOG_ERR("Reset device not ready");
@@ -45,7 +58,7 @@ static int nrf52840_reset_api(void)
 		return err;
 	}
 
-	/* Reset the nRF52840 and let it wait until the pin is inactive again
+	/* Reset the device and let it wait until the pin is inactive again
 	 * before running to main to ensure that it won't send any data until
 	 * the H4 device is setup and ready to receive.
 	 */
@@ -55,14 +68,14 @@ static int nrf52840_reset_api(void)
 		return err;
 	}
 
-	/* Wait for the nRF52840 peripheral to stop sending data.
+	/* Wait for the peripheral to stop sending data.
 	 *
 	 * It is critical (!) to wait here, so that all bytes
 	 * on the lines are received and drained correctly.
 	 */
 	k_sleep(K_MSEC(10));
 
-	/* We are ready, let the nRF52840 run to main */
+	/* We are ready, let the device run to main */
 	err = gpio_pin_set_dt(&reset_pin_spec, 0);
 	if (err) {
 		LOG_ERR("GPIO Pin set to 0 err:%d", err);
@@ -95,7 +108,7 @@ int init(void)
 
 #if HAS_RECOVERY_MODE
 	LOG_INF("Init external FOTA for use with MCUBoot recovery mode");
-	err = mcumgr_smp_client_init(nrf52840_reset_api);
+	err = mcumgr_smp_client_init(reset_api);
 #else
 	LOG_INF("Init external FOTA, no recovery mode");
 	err = mcumgr_smp_client_init(NULL);
@@ -182,6 +195,9 @@ int main(void)
 		return 0;
 	}
 
+	LOG_INF("Press button 1 to read image list");
+	(void)k_sem_take(&button_press_sem, K_FOREVER);
+
 	update_pending = is_update_pending();
 
 	if (!update_pending) {
@@ -195,10 +211,12 @@ int main(void)
 		LOG_INF("mcumgr_smp_client_local_download_write: %d", err);
 		if (err != 1) {
 			LOG_ERR("Failed to transfer update");
-			goto sleep;
+			goto reboot;
 		}
 
 		LOG_INF("Update transfer complete");
+
+		/* Print the list again to show the new image */
 		(void)is_update_pending();
 	}
 
@@ -213,15 +231,18 @@ int main(void)
 	err = mcumgr_smp_client_local_download_reboot();
 	LOG_INF("mcumgr_smp_client_local_download_reboot: %d", err);
 
-	k_sleep(K_SECONDS(1));
-
 #if !HAS_RECOVERY_MODE
+	k_sleep(K_SECONDS(1));
 	err = mcumgr_smp_client_confirm_image();
 	LOG_INF("mcumgr_smp_client_confirm_image: %d", err);
 #endif
 
-	(void)is_update_pending();
+	LOG_INF("Press button 1 to reboot");
+	(void)k_sem_take(&button_press_sem, K_FOREVER);
 
-sleep:
-	k_sleep(K_FOREVER);
+reboot:
+	LOG_INF("Rebooting...");
+	k_sleep(K_MSEC(500));
+	LOG_PANIC();
+	sys_reboot(SYS_REBOOT_COLD);
 }
