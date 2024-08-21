@@ -19,7 +19,7 @@ LOG_MODULE_REGISTER(MODULE, CONFIG_BRIDGE_CDC_LOG_LEVEL);
 
 static const struct device *devices[] = {
 	DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart0)),
-	DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart1)),
+	//DEVICE_DT_GET(DT_NODELABEL(cdc_acm_uart1)),
 };
 
 #define CDC_DEVICE_COUNT ARRAY_SIZE(devices)

@@ -15,7 +15,12 @@
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
 #include <mcumgr_smp_client.h>
+#if defined(CONFIG_BOARD_THINGY91X)
+#include "conn_bridge_fw.h"
+#else
 #include "smp_svr_fw.h"
+#endif
+
 
 LOG_MODULE_REGISTER(nrf_cloud_rest_fota, CONFIG_NRF_CLOUD_REST_FOTA_SAMPLE_LOG_LEVEL);
 
@@ -24,14 +29,21 @@ LOG_MODULE_REGISTER(nrf_cloud_rest_fota, CONFIG_NRF_CLOUD_REST_FOTA_SAMPLE_LOG_L
 /* Semaphore to indicate a button has been pressed */
 static K_SEM_DEFINE(button_press_sem, 0, 1);
 
-#define RESET_NODE DT_NODELABEL(nrf52840_reset)
-#define HAS_RECOVERY_MODE (DT_NODE_HAS_STATUS(RESET_NODE, okay))
+#if defined(CONFIG_BOARD_THINGY91X)
+#define HAS_RECOVERY_MODE	1
+#define ZEPHYR_USER_NODE	DT_PATH(zephyr_user)
+#define RESET_PIN_SPEC		GPIO_DT_SPEC_GET(ZEPHYR_USER_NODE, nrf5340_reset_gpios);
+#else
+#define RESET_NODE		DT_NODELABEL(nrf52840_reset)
+#define HAS_RECOVERY_MODE	(DT_NODE_HAS_STATUS(RESET_NODE, okay))
+#define RESET_PIN_SPEC		GPIO_DT_SPEC_GET(RESET_NODE, gpios)
+#endif
 
 #if HAS_RECOVERY_MODE
 static int nrf52840_reset_api(void)
 {
 	int err;
-	const struct gpio_dt_spec reset_pin_spec = GPIO_DT_SPEC_GET(RESET_NODE, gpios);
+	const struct gpio_dt_spec reset_pin_spec = RESET_PIN_SPEC;
 
 	if (!device_is_ready(reset_pin_spec.port)) {
 		LOG_ERR("Reset device not ready");
@@ -60,7 +72,7 @@ static int nrf52840_reset_api(void)
 	 * It is critical (!) to wait here, so that all bytes
 	 * on the lines are received and drained correctly.
 	 */
-	k_sleep(K_MSEC(10));
+	k_sleep(K_MSEC(100));
 
 	/* We are ready, let the nRF52840 run to main */
 	err = gpio_pin_set_dt(&reset_pin_spec, 0);
@@ -182,6 +194,9 @@ int main(void)
 		return 0;
 	}
 
+	k_sleep(K_SECONDS(10));
+	LOG_INF("Press button 1 to read image list");
+	(void)k_sem_take(&button_press_sem, K_FOREVER);
 	update_pending = is_update_pending();
 
 	if (!update_pending) {
@@ -199,6 +214,7 @@ int main(void)
 		}
 
 		LOG_INF("Update transfer complete");
+		/* Print the list again to show the new image */
 		(void)is_update_pending();
 	}
 
@@ -208,20 +224,22 @@ int main(void)
 	err = mcumgr_smp_client_local_download_apply();
 	LOG_INF("mcumgr_smp_client_local_download_apply: %d", err);
 
-	k_sleep(K_SECONDS(1));
+	k_sleep(K_SECONDS(5));
 
 	err = mcumgr_smp_client_local_download_reboot();
 	LOG_INF("mcumgr_smp_client_local_download_reboot: %d", err);
 
-	k_sleep(K_SECONDS(1));
-
 #if !HAS_RECOVERY_MODE
+	k_sleep(K_SECONDS(1));
 	err = mcumgr_smp_client_confirm_image();
 	LOG_INF("mcumgr_smp_client_confirm_image: %d", err);
 #endif
 
-	(void)is_update_pending();
 
 sleep:
-	k_sleep(K_FOREVER);
+	while (1) {
+		LOG_INF("Press button 1 to read image list");
+		(void)k_sem_take(&button_press_sem, K_FOREVER);
+		update_pending = is_update_pending();
+	}
 }

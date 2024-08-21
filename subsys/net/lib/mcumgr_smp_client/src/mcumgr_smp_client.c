@@ -87,13 +87,7 @@ int mcumgr_smp_client_local_download_write(const uint8_t *buf, const size_t len)
 
 int mcumgr_smp_client_local_download_apply(void)
 {
-	int err = dfu_target_schedule_update(1);
-
-	if (err != 0 && reset_cb) {
-		(void)reset_cb();
-	}
-
-	return err;
+	return fota_download_util_image_schedule(DFU_TARGET_IMAGE_TYPE_SMP);
 }
 
 int mcumgr_smp_client_local_download_reboot(void)
