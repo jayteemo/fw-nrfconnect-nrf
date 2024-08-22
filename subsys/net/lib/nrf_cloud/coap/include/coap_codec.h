@@ -16,12 +16,14 @@
 #define RC_FMT "%u.%02u"
 #define RC_PARAM(rc) (rc) / 32u, (rc) & 0x1f
 
-#define LOCATION_GET_CBOR_MAX_SIZE 1024
-#define LOCATION_SEND_CBOR_MAX_SIZE 96
-#define AGNSS_GET_CBOR_MAX_SIZE 64
-#define PGPS_URL_GET_CBOR_MAX_SIZE 64
-#define SENSOR_SEND_CBOR_MAX_SIZE 32
-#define MESSAGE_SEND_CBOR_MAX_SIZE 256
+#define SENSOR_SEND_CBOR_MAX_SIZE	32
+#define AGNSS_GET_CBOR_MAX_SIZE		64
+#define PGPS_URL_GET_CBOR_MAX_SIZE	64
+#define LOCATION_SEND_CBOR_MAX_SIZE	96
+#define MESSAGE_SEND_CBOR_MAX_SIZE 	256
+#define LOCATION_GET_CBOR_MAX_SIZE	1024
+/* Note: maintain max value if sizes above change */
+#define NRF_CLOUD_COAP_CODEC_REQ_MAX_SZ		LOCATION_GET_CBOR_MAX_SIZE
 
 #define LOG_CB_DBG(result_code, offset, len, last_block) { \
 		LOG_DBG("result_code:" RC_FMT ", offset:0x%X, len:0x%X, last_block:%d", \

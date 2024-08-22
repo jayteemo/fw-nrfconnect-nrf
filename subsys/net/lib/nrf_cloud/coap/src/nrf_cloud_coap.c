@@ -44,11 +44,14 @@ LOG_MODULE_REGISTER(nrf_cloud_coap, CONFIG_NRF_CLOUD_COAP_LOG_LEVEL);
 #define MAX_COAP_PAYLOAD_SIZE (CONFIG_COAP_CLIENT_BLOCK_SIZE - \
 			       CONFIG_COAP_CLIENT_MESSAGE_HEADER_SIZE)
 
-/* Semaphore to guard CoAP client callback data/error codes for GET and FETCH operations.
+/* Semaphore to guard shared transfer buffer and CoAP client callback data/error codes for
+ * GET and FETCH operations.
  * A single semaphore is sufficient for all public functions since nrf_cloud_coap_transport
  * only allows one transfer at a time.
  */
 static K_SEM_DEFINE(coap_transfer_sem, 1, 1);
+/* Transfer buffer for CoAP requests */
+static uint8_t xfer_buf[NRF_CLOUD_COAP_CODEC_REQ_MAX_SZ];
 
 static int64_t get_ts(void)
 {
@@ -103,14 +106,13 @@ int nrf_cloud_coap_agnss_data_get(struct nrf_cloud_rest_agnss_request const *con
 		return -EACCES;
 	}
 
-	static uint8_t buffer[AGNSS_GET_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
+	size_t len = sizeof(xfer_buf);
 	int err;
 
-	/* Take the semaphore before modifying the static buffer */
+	/* Take the semaphore before modifying xfer_buf */
 	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
 
-	err = coap_codec_agnss_encode(request, buffer, &len,
+	err = coap_codec_agnss_encode(request, xfer_buf, &len,
 				     COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode A-GNSS request: %d", err);
@@ -122,7 +124,7 @@ int nrf_cloud_coap_agnss_data_get(struct nrf_cloud_rest_agnss_request const *con
 	agnss_err = 0;
 
 	err = nrf_cloud_coap_fetch(COAP_AGNSS_RSC, NULL,
-				   buffer, len, COAP_CONTENT_FORMAT_APP_CBOR,
+				   xfer_buf, len, COAP_CONTENT_FORMAT_APP_CBOR,
 				   COAP_CONTENT_FORMAT_APP_CBOR, true, get_agnss_callback,
 				   result);
 
@@ -181,14 +183,13 @@ int nrf_cloud_coap_pgps_url_get(struct nrf_cloud_rest_pgps_request const *const 
 		return -EACCES;
 	}
 
-	static uint8_t buffer[PGPS_URL_GET_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
+	size_t len = sizeof(xfer_buf);
 	int err;
 
-	/* Take the semaphore before modifying the static buffer */
+	/* Take the semaphore before modifying xfer_buf */
 	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
 
-	err = coap_codec_pgps_encode(request, buffer, &len,
+	err = coap_codec_pgps_encode(request, xfer_buf, &len,
 				     COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode P-GPS request: %d", err);
@@ -198,7 +199,7 @@ int nrf_cloud_coap_pgps_url_get(struct nrf_cloud_rest_pgps_request const *const 
 	pgps_err = 0;
 
 	err = nrf_cloud_coap_fetch(COAP_PGPS_RSC, NULL,
-				   buffer, len, COAP_CONTENT_FORMAT_APP_CBOR,
+				   xfer_buf, len, COAP_CONTENT_FORMAT_APP_CBOR,
 				   COAP_CONTENT_FORMAT_APP_CBOR, true, get_pgps_callback,
 				   file_location);
 
@@ -308,24 +309,30 @@ int nrf_cloud_coap_sensor_send(const char *app_id, double value, int64_t ts_ms, 
 	if (!nrf_cloud_coap_is_connected()) {
 		return -EACCES;
 	}
+
+	/* Take the semaphore before modifying xfer_buf */
+	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
+
 	int64_t ts = (ts_ms == NRF_CLOUD_NO_TIMESTAMP) ? get_ts() : ts_ms;
-	static uint8_t buffer[SENSOR_SEND_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
+	size_t len = sizeof(xfer_buf);
 	int err;
 
-	err = coap_codec_sensor_encode(app_id, value, ts, buffer, &len,
+	err = coap_codec_sensor_encode(app_id, value, ts, xfer_buf, &len,
 				       COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode sensor data: %d", err);
-		return err;
+		goto give_and_return;
 	}
-	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, buffer, len,
+	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, xfer_buf, len,
 				  COAP_CONTENT_FORMAT_APP_CBOR, confirmable, NULL, NULL);
 	if (err < 0) {
 		LOG_ERR("Failed to send POST request: %d", err);
 	} else if (err > 0) {
 		LOG_RESULT_CODE_ERR("Error from server:", err);
 	}
+
+give_and_return:
+	k_sem_give(&coap_transfer_sem);
 	return err;
 }
 
@@ -335,9 +342,12 @@ int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool js
 	if (!nrf_cloud_coap_is_connected()) {
 		return -EACCES;
 	}
+
+	/* Take the semaphore before modifying xfer_buf */
+	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
+
 	int64_t ts = (ts_ms == NRF_CLOUD_NO_TIMESTAMP) ? get_ts() : ts_ms;
-	uint8_t buffer[MESSAGE_SEND_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
+	size_t len = sizeof(xfer_buf);
 	int err;
 	struct nrf_cloud_obj_coap_cbor msg = {
 		.app_id		= (char *)app_id,
@@ -346,14 +356,14 @@ int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool js
 		.ts		= ts
 	};
 
-	err = coap_codec_message_encode(&msg, buffer, &len,
+	err = coap_codec_message_encode(&msg, xfer_buf, &len,
 					json ? COAP_CONTENT_FORMAT_APP_JSON :
 					       COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode sensor data: %d", err);
-		return err;
+		goto give_and_return;
 	}
-	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, buffer, len,
+	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, xfer_buf, len,
 				  json ? COAP_CONTENT_FORMAT_APP_JSON :
 					 COAP_CONTENT_FORMAT_APP_CBOR,
 				  confirmable, NULL, NULL);
@@ -362,6 +372,9 @@ int nrf_cloud_coap_message_send(const char *app_id, const char *message, bool js
 	} else if (err > 0) {
 		LOG_RESULT_CODE_ERR("Error from server:", err);
 	}
+
+give_and_return:
+	k_sem_give(&coap_transfer_sem);
 	return err;
 }
 
@@ -395,28 +408,35 @@ int nrf_cloud_coap_location_send(const struct nrf_cloud_gnss_data *gnss, bool co
 	if (!nrf_cloud_coap_is_connected()) {
 		return -EACCES;
 	}
-	int64_t ts = (gnss->ts_ms == NRF_CLOUD_NO_TIMESTAMP) ? get_ts() : gnss->ts_ms;
-	static uint8_t buffer[LOCATION_SEND_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
-	int err;
 
 	if (gnss->type != NRF_CLOUD_GNSS_TYPE_PVT) {
 		LOG_ERR("Only PVT format is supported");
 		return -ENOTSUP;
 	}
-	err = coap_codec_pvt_encode("GNSS", &gnss->pvt, ts, buffer, &len,
+
+	/* Take the semaphore before modifying xfer_buf */
+	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
+
+	int64_t ts = (gnss->ts_ms == NRF_CLOUD_NO_TIMESTAMP) ? get_ts() : gnss->ts_ms;
+	size_t len = sizeof(xfer_buf);
+	int err;
+
+	err = coap_codec_pvt_encode("GNSS", &gnss->pvt, ts, xfer_buf, &len,
 				    COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode GNSS PVT data: %d", err);
-		return err;
+		goto give_and_return;
 	}
-	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, buffer, len,
+	err = nrf_cloud_coap_post(COAP_D2C_RSC, NULL, xfer_buf, len,
 				  COAP_CONTENT_FORMAT_APP_CBOR, confirmable, NULL, NULL);
 	if (err < 0) {
 		LOG_ERR("Failed to send POST request: %d", err);
 	} else if (err > 0) {
 		LOG_RESULT_CODE_ERR("Error from server:", err);
 	}
+
+give_and_return:
+	k_sem_give(&coap_transfer_sem);
 	return err;
 }
 
@@ -453,8 +473,7 @@ int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *co
 	if (!nrf_cloud_coap_is_connected()) {
 		return -EACCES;
 	}
-	static uint8_t buffer[LOCATION_GET_CBOR_MAX_SIZE];
-	size_t len = sizeof(buffer);
+	size_t len = sizeof(xfer_buf);
 	int err;
 	const struct nrf_cloud_location_config *conf = request->config;
 	size_t url_size = nrf_cloud_ground_fix_url_encode(NULL, 0, COAP_GND_FIX_RSC, conf);
@@ -464,21 +483,21 @@ int nrf_cloud_coap_location_get(struct nrf_cloud_rest_location_request const *co
 
 	(void)nrf_cloud_ground_fix_url_encode(url, url_size, COAP_GND_FIX_RSC, conf);
 
-	/* Take the semaphore before modifying the static buffer */
+	/* Take the semaphore before modifying xfer_buf */
 	(void)k_sem_take(&coap_transfer_sem, K_FOREVER);
 
 	loc_err = 0;
 
 	err = coap_codec_ground_fix_req_encode(request->cell_info,
 					       request->wifi_info,
-					       buffer, &len,
+					       xfer_buf, &len,
 					       COAP_CONTENT_FORMAT_APP_CBOR);
 	if (err) {
 		LOG_ERR("Unable to encode location data: %d", err);
 		goto give_and_return;
 	}
 
-	err = nrf_cloud_coap_fetch(url, NULL, buffer, len,
+	err = nrf_cloud_coap_fetch(url, NULL, xfer_buf, len,
 				   COAP_CONTENT_FORMAT_APP_CBOR,
 				   COAP_CONTENT_FORMAT_APP_CBOR, true,
 				   get_location_callback, result);
