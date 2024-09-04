@@ -42,6 +42,7 @@ int main(void)
 	image_validation();
 
 	while (1) {
+		LOG_INF("Version: %s", CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION);
 		k_sleep(K_MSEC(10000));
 	}
 	return 0;
