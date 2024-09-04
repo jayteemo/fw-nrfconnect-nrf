@@ -14,9 +14,11 @@
 #include <stdio.h>
 #include <zephyr/device.h>
 #include <zephyr/devicetree.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/logging/log_ctrl.h>
 #include <mcumgr_smp_client.h>
 #if defined(CONFIG_BOARD_THINGY91X)
-#include "conn_bridge_fw.h"
+#include "smp_svr_fw_t91x.h"
 #else
 #include "smp_svr_fw.h"
 #endif
@@ -72,7 +74,7 @@ static int nrf52840_reset_api(void)
 	 * It is critical (!) to wait here, so that all bytes
 	 * on the lines are received and drained correctly.
 	 */
-	k_sleep(K_MSEC(100));
+	k_sleep(K_MSEC(10));
 
 	/* We are ready, let the nRF52840 run to main */
 	err = gpio_pin_set_dt(&reset_pin_spec, 0);
@@ -210,7 +212,7 @@ int main(void)
 		LOG_INF("mcumgr_smp_client_local_download_write: %d", err);
 		if (err != 1) {
 			LOG_ERR("Failed to transfer update");
-			goto sleep;
+			goto reboot;
 		}
 
 		LOG_INF("Update transfer complete");
@@ -235,11 +237,12 @@ int main(void)
 	LOG_INF("mcumgr_smp_client_confirm_image: %d", err);
 #endif
 
+	LOG_INF("Press button 1 to reboot");
+	(void)k_sem_take(&button_press_sem, K_FOREVER);
 
-sleep:
-	while (1) {
-		LOG_INF("Press button 1 to read image list");
-		(void)k_sem_take(&button_press_sem, K_FOREVER);
-		update_pending = is_update_pending();
-	}
+reboot:
+	LOG_INF("Rebooting...");
+	k_sleep(K_MSEC(100));
+	LOG_PANIC();
+	sys_reboot(SYS_REBOOT_COLD);
 }
