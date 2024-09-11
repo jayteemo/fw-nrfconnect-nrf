@@ -49,6 +49,10 @@ LOG_MODULE_REGISTER(nrf_cloud_fota_common, CONFIG_NRF_CLOUD_FOTA_LOG_LEVEL);
 #define FOTA_SETTINGS_FULL		FOTA_SETTINGS_NAME "/" FOTA_SETTINGS_KEY_PENDING_JOB
 #endif
 
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+static char smp_ver[IMG_MGMT_VER_MAX_STR_LEN + 1];
+#endif
+
 /* Pending job info used with the settings library */
 static struct nrf_cloud_settings_fota_job *pending_job;
 static K_MUTEX_DEFINE(pending_job_mutex);
@@ -372,6 +376,35 @@ static enum nrf_cloud_fota_validate_status modem_full_fota_validate_get(void)
 		      NRF_CLOUD_FOTA_VALIDATE_PASS);
 }
 
+static enum nrf_cloud_fota_validate_status smp_fota_validate_get(void)
+{
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	return nrf_cloud_fota_smp_install() ?
+		NRF_CLOUD_FOTA_VALIDATE_FAIL : NRF_CLOUD_FOTA_VALIDATE_PASS;
+#endif
+	return NRF_CLOUD_FOTA_VALIDATE_UNKNOWN;
+}
+
+int nrf_cloud_fota_smp_install(void)
+{
+	int err = -ENOTSUP;
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	err = mcumgr_smp_client_update();
+	if (err) {
+		LOG_ERR("Failed to install SMP update, error: %d", err);
+		return -EIO;
+	}
+
+	err = mcumgr_smp_client_reset();
+	if (err) {
+		LOG_WRN("mcumgr_smp_client_reset error: %d", err);
+		return -EPROTO;
+	}
+#endif
+	return err;
+}
+
 bool nrf_cloud_fota_is_type_modem(const enum nrf_cloud_fota_type type)
 {
 	return ((type == NRF_CLOUD_FOTA_MODEM_DELTA) ||
@@ -460,7 +493,14 @@ int nrf_cloud_pending_fota_job_process(struct nrf_cloud_settings_fota_job * cons
 		}
 
 		job->validate = boot_fota_validate_get(job->bl_flags);
-	} else {
+	} else if (job->type == NRF_CLOUD_FOTA_SMP) {
+		job->validate = smp_fota_validate_get();
+		*reboot_required = false;
+	} else if (job->type == NRF_CLOUD_FOTA_CUSTOM) {
+		/* Custom jobs must be validated by the application */
+		job->validate = NRF_CLOUD_FOTA_VALIDATE_UNKNOWN;
+		*reboot_required = false;
+	}else {
 		LOG_ERR("Unknown FOTA job type: %d", job->type);
 		return -ENOENT;
 	}
@@ -479,8 +519,67 @@ bool nrf_cloud_fota_is_type_enabled(const enum nrf_cloud_fota_type type)
 		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_MODEM_DELTA_SUPPORTED);
 	case NRF_CLOUD_FOTA_MODEM_FULL:
 		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_MODEM_FULL_SUPPORTED);
+	case NRF_CLOUD_FOTA_SMP:
+		return IS_ENABLED(CONFIG_NRF_CLOUD_FOTA_TYPE_SMP_SUPPORTED);
 	default:
 		LOG_WRN("Unhandled FOTA type: %d", type);
 		return false;
 	}
+}
+
+int nrf_cloud_fota_smp_version_read(void)
+{
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	struct mcumgr_image_state image_list = {0};
+	struct mcumgr_image_data *list;
+	size_t ver_len;
+	int err = dfu_target_smp_image_list_get(&image_list);
+
+	if (err) {
+		LOG_WRN("Failed to read SMP image list, error: %d", err);
+		return -ENODATA;
+	}
+
+	list = image_list.image_list;
+	for (int i = 0; i < image_list.image_list_length; ++i) {
+		LOG_DBG("%s Image(%d) slot(%d)",
+			list->flags.active ? "Primary" : "Secondary",
+			list->img_num,
+			list->slot_num);
+		LOG_DBG("  Version: %s", list->version);
+		LOG_DBG("  Bootable(%d) Pending(%d) Confirmed(%d)",
+			list->flags.bootable, list->flags.pending, list->flags.confirmed);
+
+		if (!list->flags.active) {
+			++list;
+			continue;
+		}
+
+		ver_len = strlen(list->version);
+		if (ver_len >= sizeof(smp_ver)) {
+			return -ENOBUFS;
+		}
+
+		memcpy(smp_ver, list->version, ver_len + 1);
+
+		return 0;
+	}
+
+	return -ENODEV;
+#endif
+	return -ENOTSUP;
+}
+
+int nrf_cloud_fota_smp_version_get(char **smp_ver_out)
+{
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	if (!smp_ver_out) {
+		return -EINVAL;
+	}
+
+	*smp_ver_out = smp_ver;
+
+	return 0;
+#endif
+	return -ENOTSUP;
 }

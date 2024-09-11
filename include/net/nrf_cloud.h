@@ -19,6 +19,10 @@
 #include <nrf_modem_gnss.h>
 #endif
 #include <net/nrf_cloud_os.h>
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+#include <mcumgr_smp_client.h>
+#include <dfu/dfu_target_smp.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -311,6 +315,11 @@ enum nrf_cloud_fota_type {
 	/** Full modem update */
 	NRF_CLOUD_FOTA_MODEM_FULL = 5,
 
+	/** Auxillary device updated using SMP */
+	NRF_CLOUD_FOTA_SMP = 6,
+	/** Custom FOTA type to be handled by the application */
+	NRF_CLOUD_FOTA_CUSTOM = 7,
+
 	NRF_CLOUD_FOTA_TYPE__INVALID
 };
 
@@ -438,9 +447,11 @@ struct nrf_cloud_svc_info_fota {
 	uint8_t application:1;
 	/** Flag to indicate if full modem image updates are supported */
 	uint8_t modem_full:1;
+	/** Flag to indicate if smp updates are supported */
+	uint8_t smp:1;
 
 	/** Reserved for future use */
-	uint8_t _rsvd:4;
+	uint8_t _rsvd:3;
 };
 
 /** @brief DEPRECATED - No longer used by nRF Cloud */
@@ -664,6 +675,10 @@ struct nrf_cloud_init_param {
 	 * @kconfig{CONFIG_NRF_CLOUD_SEND_DEVICE_STATUS} is enabled.
 	 */
 	const char *application_version;
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	dfu_target_reset_cb_t smp_reset_cb;
+#endif
 };
 
 /**
@@ -1077,6 +1092,38 @@ bool nrf_cloud_fota_is_type_enabled(const enum nrf_cloud_fota_type type);
  * @return A negative value indicates an error starting the job.
  */
 int nrf_cloud_fota_job_start(void);
+
+/**
+ * @brief Install a downloaded SMP FOTA job.
+ *        Called automatically if @kconfig{CONFIG_NRF_CLOUD_FOTA} is enabled (MQTT FOTA).
+ *
+ * @retval 0        SMP update installed successfully.
+ * @retval -ENOTSUP Error; @kconfig{CONFIG_NRF_CLOUD_FOTA_SMP} is not enabled.
+ * @retval -EIO     Error; failed to schedule image installation.
+ * @retval -EPROTO  Error; failed to reset SMP device.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_fota_smp_install(void);
+
+/**
+ * @brief Read the image info from the SMP device to obtain the current version.
+ *
+ * @retval 0        Success; call @ref nrf_cloud_fota_smp_version_get to get the version string.
+ * @retval -ENOBUFS Error; internal buffer is too small to hold version string.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_fota_smp_version_read(void);
+
+/**
+ * @brief Get the current version string of the SMP device.
+ *        An empty string will be returned if @ref nrf_cloud_fota_smp_version_read has
+ *        not been successfully called.
+ *
+ * @retval 0        Success.
+ * @retval -ENOBUFS Error; internal buffer is too small to hold version string.
+ * @return A negative value indicates an error.
+ */
+int nrf_cloud_fota_smp_version_get(char **smp_ver_out);
 
 /**
  * @brief Check if credentials exist in the configured location.

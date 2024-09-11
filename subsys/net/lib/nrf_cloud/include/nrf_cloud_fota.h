@@ -10,6 +10,10 @@
 #include <zephyr/net/mqtt.h>
 #include <net/nrf_cloud.h>
 #include <zephyr/bluetooth/bluetooth.h>
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+#include <mcumgr_smp_client.h>
+#include <dfu/dfu_target_smp.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -102,19 +106,26 @@ typedef void (*nrf_cloud_fota_callback_t)
 typedef void (*nrf_cloud_fota_ble_callback_t)
 	(const struct nrf_cloud_fota_ble_job * const ble_job);
 
+struct nrf_cloud_fota_init_param {
+	nrf_cloud_fota_callback_t evt_cb;
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	dfu_target_reset_cb_t smp_reset_cb;
+#endif
+};
+
 /**
  * @brief Initialize the nRF Cloud FOTA module.
  *
  * @note This API must be called prior to using nRF Cloud FOTA and it must
  * return successfully.
  *
- * @param[in] cb FOTA event handler.
+ * @param[in] init Initialization parameters.
  *
  * @retval 0 If successful.
  *         1 If successful and a prior FOTA event has been completed.
  *           Otherwise, a (negative) error code is returned.
  */
-int nrf_cloud_fota_init(nrf_cloud_fota_callback_t cb);
+int nrf_cloud_fota_init(struct nrf_cloud_fota_init_param const *const init);
 
 /**
  * @brief Uninitialize nRF Cloud FOTA; cleans up allocated memory. If a FOTA

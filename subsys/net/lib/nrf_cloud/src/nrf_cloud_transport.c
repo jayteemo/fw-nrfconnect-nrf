@@ -820,9 +820,10 @@ static void nct_mqtt_evt_handler(struct mqtt_client *const mqtt_client,
 	}
 }
 
-int nct_initialize(const char * const client_id)
+int nct_initialize(const struct nrf_cloud_init_param *param)
 {
 	int err;
+	struct nrf_cloud_fota_init_param fota_init = { .evt_cb = nrf_cloud_fota_cb_handler };
 
 	/* Perform settings and FOTA init first so that pending updates
 	 * can be completed
@@ -833,7 +834,12 @@ int nct_initialize(const char * const client_id)
 	}
 
 #if defined(CONFIG_NRF_CLOUD_FOTA)
-	err = nrf_cloud_fota_init(nrf_cloud_fota_cb_handler);
+
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+	fota_init.smp_reset_cb = param->smp_reset_cb;
+#endif
+
+	err = nrf_cloud_fota_init(&fota_init);
 	if (err < 0) {
 		return err;
 	} else if (err && persistent_session) {
@@ -841,7 +847,7 @@ int nct_initialize(const char * const client_id)
 		nct_save_session_state(0);
 	}
 #endif
-	err = nct_client_id_set(client_id);
+	err = nct_client_id_set(param->client_id);
 	if (err) {
 		return err;
 	}
