@@ -17,6 +17,10 @@
 #include "fota_support_coap.h"
 #endif
 
+#include <zephyr/drivers/gpio.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+
 #include "cloud_connection.h"
 #include "provisioning_support.h"
 #include "fota_support.h"
@@ -40,6 +44,57 @@ static K_EVENT_DEFINE(cloud_events);
 static atomic_t initial_association;
 static bool device_deleted;
 static int reconnect_seconds = CONFIG_CLOUD_CONNECTION_RETRY_TIMEOUT_SECONDS;
+
+#define RESET_NODE DT_NODELABEL(nrf52840_reset)
+#define HAS_RECOVERY_MODE (DT_NODE_HAS_STATUS(RESET_NODE, okay))
+
+#if HAS_RECOVERY_MODE
+static int nrf52840_reset_api(void)
+{
+	int err;
+	const struct gpio_dt_spec reset_pin_spec = GPIO_DT_SPEC_GET(RESET_NODE, gpios);
+
+	if (!device_is_ready(reset_pin_spec.port)) {
+		LOG_ERR("Reset device not ready");
+		return -EIO;
+	}
+
+	/* Configure pin as output and initialize it to inactive state. */
+	err = gpio_pin_configure_dt(&reset_pin_spec, GPIO_OUTPUT_INACTIVE);
+	if (err) {
+		LOG_ERR("Pin configure err:%d", err);
+		return err;
+	}
+
+	/* Reset the nRF52840 and let it wait until the pin is inactive again
+	 * before running to main to ensure that it won't send any data until
+	 * the H4 device is setup and ready to receive.
+	 */
+	err = gpio_pin_set_dt(&reset_pin_spec, 1);
+	if (err) {
+		LOG_ERR("GPIO Pin set to 1 err:%d", err);
+		return err;
+	}
+
+	/* Wait for the nRF52840 peripheral to stop sending data.
+	 *
+	 * It is critical (!) to wait here, so that all bytes
+	 * on the lines are received and drained correctly.
+	 */
+	k_sleep(K_MSEC(10));
+
+	/* We are ready, let the nRF52840 run to main */
+	err = gpio_pin_set_dt(&reset_pin_spec, 0);
+	if (err) {
+		LOG_ERR("GPIO Pin set to 0 err:%d", err);
+		return err;
+	}
+
+	LOG_DBG("Reset Pin %d", reset_pin_spec.pin);
+
+	return 0;
+}
+#endif /* HAS_RECOVERY_MODE */
 
 /* Helper functions for pending on pendable events. */
 bool await_network_ready(k_timeout_t timeout)
@@ -524,6 +579,7 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 			fota_type == NRF_CLOUD_FOTA_MODEM_DELTA	  ?		"Modem (delta)"	:
 			fota_type == NRF_CLOUD_FOTA_MODEM_FULL	  ?		"Modem (full)"	:
 			fota_type == NRF_CLOUD_FOTA_BOOTLOADER	  ?		"Bootloader"	:
+			fota_type == NRF_CLOUD_FOTA_SMP		  ?		"SMP"		:
 										"Invalid");
 
 		/* Notify fota_support of the completed download. */
@@ -577,7 +633,10 @@ static int setup_cloud(void)
 	struct nrf_cloud_init_param params = {
 		.event_handler = cloud_event_handler,
 		.fmfu_dev_inf = get_full_modem_fota_fdev(),
-		.application_version = CONFIG_APP_VERSION
+		.application_version = CONFIG_APP_VERSION,
+#if defined(CONFIG_NRF_CLOUD_FOTA_SMP)
+		.smp_reset_cb = nrf52840_reset_api
+#endif
 	};
 
 	err = nrf_cloud_init(&params);
