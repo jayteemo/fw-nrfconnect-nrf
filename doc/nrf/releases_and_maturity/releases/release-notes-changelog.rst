@@ -874,6 +874,7 @@ Libraries for networking
     * The :kconfig:option:`CONFIG_NRF_CLOUD_VERBOSE_DETAILS` Kconfig option to print all details instead of only the device ID.
     * Experimental support for shadow transform requests over MQTT using the :c:func:`nrf_cloud_shadow_transform_request` function.
       This functionality is enabled by the :kconfig:option:`CONFIG_NRF_CLOUD_MQTT_SHADOW_TRANSFORMS` Kconfig option.
+    * The functions :c:func:`nrf_cloud_sec_tag_coap_jwt_set` and :c:func:`nrf_cloud_sec_tag_coap_jwt_get` to set and get the sec tag used for nRF Cloud CoAP JWT signing.
 
   * Updated:
 
@@ -909,6 +910,8 @@ Libraries for networking
 
     * To use a shorter resource string for the ``d2c/bulk`` resource.
     * The function :c:func:`nrf_cloud_coap_shadow_get` to return ``-E2BIG`` if the received shadow data was truncated because the provided buffer was not big enough.
+
+  * Added the :kconfig:option:`CONFIG_NRF_CLOUD_COAP_JWT_SEC_TAG` Kconfig option to allow for a separate sec tag to be used for nRF Cloud CoAP JWT signing.
 
 * :ref:`lib_lwm2m_client_utils` library:
 

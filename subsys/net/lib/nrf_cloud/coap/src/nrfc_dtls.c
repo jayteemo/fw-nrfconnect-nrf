@@ -26,7 +26,7 @@
 #include <nrf_socket.h>
 #include <nrf_modem_at.h>
 #endif
-
+#include <net/nrf_cloud.h>
 #include "nrfc_dtls.h"
 
 #include <zephyr/logging/log.h>
