@@ -528,6 +528,7 @@ static void cloud_event_handler(const struct nrf_cloud_evt *nrf_cloud_evt)
 			fota_type == NRF_CLOUD_FOTA_MODEM_DELTA	  ?		"Modem (delta)"	:
 			fota_type == NRF_CLOUD_FOTA_MODEM_FULL	  ?		"Modem (full)"	:
 			fota_type == NRF_CLOUD_FOTA_BOOTLOADER	  ?		"Bootloader"	:
+			fota_type == NRF_CLOUD_FOTA_SMP		  ?		"SMP"		:
 										"Invalid");
 
 		/* Notify fota_support of the completed download. */
